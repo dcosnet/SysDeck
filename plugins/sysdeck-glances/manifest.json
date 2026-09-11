@@ -1,0 +1,31 @@
+{
+    "version": 0,
+    "name": "sysdeck-glances",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Glances",
+            "order": 34,
+            "keywords": [
+                {
+                    "matches": [
+                        "glances",
+                        "monitoring",
+                        "cpu",
+                        "memory",
+                        "disk",
+                        "network",
+                        "webui",
+                        "web ui",
+                        "embed",
+                        "iframe",
+                        "real-time"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-src 'self' http://127.0.0.1:61208 http://localhost:61208"
+}

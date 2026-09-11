@@ -1,0 +1,167 @@
+/*
+ * SysDeck — shared sysdeck.css
+ *
+ * Base styles for every SysDeck Cockpit plugin. Loaded via
+ * <link rel="stylesheet" href="../sysdeck-common/sysdeck.css"> from each
+ * plugin's index.html.
+ *
+ * The class names below (.sysdeck-card, .sysdeck-table, etc.) are the
+ * canonical v0.0.20 names. For backward compatibility with the v0.0.19
+ * module JS (which still uses .suite-* class names), we alias every
+ * .suite-* name to its .sysdeck-* equivalent at the bottom of this file.
+ * v0.0.21 can rename the classes inside the module JS and drop the aliases.
+ */
+
+:root {
+    --sysdeck-bg: #1e1e1e;
+    --sysdeck-fg: #e0e0e0;
+    --sysdeck-muted: #888;
+    --sysdeck-accent: #06c;
+    --sysdeck-accent-success: #3c9;
+    --sysdeck-accent-warn: #f0ad4e;
+    --sysdeck-accent-danger: #d9534f;
+    --sysdeck-border: #444;
+    --sysdeck-card-bg: #2a2a2a;
+}
+
+body {
+    background: var(--sysdeck-bg);
+    color: var(--sysdeck-fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    margin: 0;
+}
+
+.sysdeck-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.sysdeck-loading { color: var(--sysdeck-muted); padding: 2rem; text-align: center; }
+
+.sysdeck-card { background: var(--sysdeck-card-bg); border: 1px solid var(--sysdeck-border); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+.sysdeck-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.sysdeck-card-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.sysdeck-card-body { color: var(--sysdeck-fg); line-height: 1.5; }
+.sysdeck-panel-title { margin: 0 0 0.25rem 0; font-size: 1.4rem; font-weight: 600; }
+.sysdeck-panel-subtitle { margin: 0 0 1rem 0; color: var(--sysdeck-muted); font-size: 0.9rem; }
+.sysdeck-muted { color: var(--sysdeck-muted); }
+.sysdeck-mono, .sysdeck-table-mono { font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Cascadia Code", monospace; font-size: 0.85rem; }
+
+.sysdeck-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.sysdeck-table th, .sysdeck-table td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--sysdeck-border); }
+.sysdeck-table th { color: var(--sysdeck-muted); font-weight: 500; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+.sysdeck-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+.sysdeck-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 500; background: rgba(255, 255, 255, 0.1); }
+.sysdeck-badge.success { background: var(--sysdeck-accent-success); color: #000; }
+.sysdeck-badge.warn { background: var(--sysdeck-accent-warn); color: #000; }
+.sysdeck-badge.danger { background: var(--sysdeck-accent-danger); color: #fff; }
+
+.sysdeck-btn { display: inline-block; padding: 0.35rem 0.75rem; border: 1px solid var(--sysdeck-border); background: transparent; color: var(--sysdeck-fg); border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-family: inherit; }
+.sysdeck-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+.sysdeck-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sysdeck-btn-ghost { background: transparent; border-color: transparent; color: var(--sysdeck-muted); }
+.sysdeck-btn-ghost:hover:not(:disabled) { color: var(--sysdeck-fg); background: rgba(255, 255, 255, 0.05); }
+
+.sysdeck-skeleton { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
+.sysdeck-skeleton-line { height: 0.85rem; background: linear-gradient(90deg, var(--sysdeck-border) 0%, rgba(255,255,255,0.05) 50%, var(--sysdeck-border) 100%); background-size: 200% 100%; animation: sysdeck-skeleton-pulse 1.5s ease-in-out infinite; border-radius: 3px; }
+.sysdeck-skeleton-line.w-1\/3 { width: 33%; }
+.sysdeck-skeleton-line.w-1\/2 { width: 50%; }
+.sysdeck-skeleton-line.w-2\/3 { width: 66%; }
+.sysdeck-skeleton-line.w-3\/4 { width: 75%; }
+
+@keyframes sysdeck-skeleton-pulse {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: -200% 50%; }
+}
+
+/* ── v0.0.19 backward-compatibility aliases ──────────────────────────
+ * Each .suite-* selector below aliases to its .sysdeck-* counterpart
+ * above. This lets the v0.0.19 module JS (which still references
+ * .suite-card, .suite-table, etc.) render correctly without code changes.
+ */
+
+.suite-card           { background: var(--sysdeck-card-bg); border: 1px solid var(--sysdeck-border); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+.suite-card-header    { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.suite-card-title      { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.suite-card-body       { color: var(--sysdeck-fg); line-height: 1.5; }
+.suite-panel-title     { margin: 0 0 0.25rem 0; font-size: 1.4rem; font-weight: 600; }
+.suite-panel-subtitle  { margin: 0 0 1rem 0; color: var(--sysdeck-muted); font-size: 0.9rem; }
+.suite-muted           { color: var(--sysdeck-muted); }
+.suite-mono, .suite-table-mono { font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Cascadia Code", monospace; font-size: 0.85rem; }
+.suite-table           { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.suite-table th, .suite-table td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--sysdeck-border); }
+.suite-table th        { color: var(--sysdeck-muted); font-weight: 500; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+.suite-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+.suite-badge           { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 500; background: rgba(255, 255, 255, 0.1); }
+.suite-badge.success   { background: var(--sysdeck-accent-success); color: #000; }
+.suite-badge.warn      { background: var(--sysdeck-accent-warn); color: #000; }
+.suite-badge.danger    { background: var(--sysdeck-accent-danger); color: #fff; }
+.suite-btn             { display: inline-block; padding: 0.35rem 0.75rem; border: 1px solid var(--sysdeck-border); background: transparent; color: var(--sysdeck-fg); border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-family: inherit; }
+.suite-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+.suite-btn:disabled    { opacity: 0.5; cursor: not-allowed; }
+.suite-btn-ghost       { background: transparent; border-color: transparent; color: var(--sysdeck-muted); }
+.suite-btn-ghost:hover:not(:disabled) { color: var(--sysdeck-fg); background: rgba(255, 255, 255, 0.05); }
+.suite-skeleton        { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
+.suite-skeleton-line   { height: 0.85rem; background: linear-gradient(90deg, var(--sysdeck-border) 0%, rgba(255,255,255,0.05) 50%, var(--sysdeck-border) 100%); background-size: 200% 100%; animation: sysdeck-skeleton-pulse 1.5s ease-in-out infinite; border-radius: 3px; }
+.suite-skeleton-line.w-1\/3 { width: 33%; }
+.suite-skeleton-line.w-1\/2 { width: 50%; }
+.suite-skeleton-line.w-2\/3 { width: 66%; }
+.suite-skeleton-line.w-3\/4 { width: 75%; }
+
+/* ── v0.0.28 added classes (were missing in v0.0.20-v0.0.27) ───────────
+ * These were referenced by the v0.0.19-era module JS but never made it
+ * into the shared CSS. Without them:
+ *   - .suite-progress / .suite-progress-bar / .suite-progress-fill →
+ *       progress bars in glances, fleet, netsec render as 0-height divs
+ *   - .suite-stat-value / .suite-stat-label → big numbers in glances and
+ *       packages panels render as unstyled text, no size hierarchy
+ *   - .suite-row / .suite-row-between → horizontal layouts in auth,
+ *       benchmark, glances, integrity, packages collapse to stacked
+ *   - .suite-grid / .cols-2 / .cols-3 → multi-column layouts in fleet,
+ *       integrity, mining, packages collapse to a single column
+ *   - .suite-col-2 / .suite-col-3 → legacy column-width helpers used
+ *       alongside .suite-row in glances, packages
+ *   - .suite-btn-primary → primary call-to-action buttons in benchmark,
+ *       integrity, packages were rendered as plain ghost buttons
+ *   - .suite-badge.info → informational badges in benchmark, firewall,
+ *       kata, mesh, netsec, integrity were unstyled (no background)
+ *   - .suite-input → search box in packages had no border / padding
+ *   - .suite-warn → warning modifier on package-update-count numbers
+ *       had no color override
+ */
+
+/* Layout primitives */
+.suite-row          { display: flex; flex-direction: row; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.suite-row-between  { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 0.5rem; }
+
+.suite-grid         { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.suite-grid.cols-2  { grid-template-columns: repeat(2, 1fr); }
+.suite-grid.cols-3  { grid-template-columns: repeat(3, 1fr); }
+/* Legacy column-width helpers (used by glances + packages alongside .suite-row) */
+.suite-col-2        { flex: 1 1 calc(50% - 0.5rem); min-width: 0; }
+.suite-col-3        { flex: 1 1 calc(33.333% - 0.667rem); min-width: 0; }
+
+/* Buttons */
+.suite-btn-primary  { background: var(--sysdeck-accent); color: #fff; border-color: var(--sysdeck-accent); }
+.suite-btn-primary:hover:not(:disabled) { background: #0872d4; border-color: #0872d4; color: #fff; }
+
+/* Badges */
+.suite-badge.info   { background: var(--sysdeck-accent); color: #fff; }
+
+/* Stat blocks */
+.suite-stat-value   { font-size: 1.8rem; font-weight: 600; line-height: 1.1; margin: 0.25rem 0; }
+.suite-stat-value.suite-warn { color: var(--sysdeck-accent-warn); }
+.suite-stat-label   { font-size: 0.8rem; color: var(--sysdeck-muted); margin-bottom: 0.5rem; }
+
+/* Progress bars — three classes work together:
+ *   .suite-progress        outer track (the greyed-out background)
+ *   .suite-progress-bar    inline-fill bar (sets width:% via style attr)
+ *   .suite-progress-fill   alt fill variant used by fleet/netsec live bars
+ * Plugins use a mix of the two fill patterns; both render the same.
+ */
+.suite-progress         { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-top: 0.5rem; }
+.suite-progress-bar     { height: 100%; background: var(--sysdeck-accent); border-radius: 3px; transition: width 0.3s ease; }
+.suite-progress-fill     { height: 100%; background: var(--sysdeck-accent-success); border-radius: 3px; transition: width 0.3s ease; }
+
+/* Form inputs */
+.suite-input            { background: rgba(255,255,255,0.04); border: 1px solid var(--sysdeck-border); color: var(--sysdeck-fg); padding: 0.4rem 0.6rem; border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
+.suite-input:focus       { outline: none; border-color: var(--sysdeck-accent); }
+.suite-input::placeholder { color: var(--sysdeck-muted); }

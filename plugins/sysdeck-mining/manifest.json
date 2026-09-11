@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-mining",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Mining",
+            "order": 31,
+            "keywords": [
+                {
+                    "matches": [
+                        "mining",
+                        "xmrig",
+                        "monero",
+                        "hashrate",
+                        "worker"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

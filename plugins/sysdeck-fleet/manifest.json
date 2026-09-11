@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-fleet",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Fleet",
+            "order": 26,
+            "keywords": [
+                {
+                    "matches": [
+                        "fleet",
+                        "uptime",
+                        "load",
+                        "hosts",
+                        "machines"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

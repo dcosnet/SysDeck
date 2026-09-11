@@ -1,0 +1,46 @@
+{
+    "version": 0,
+    "name": "sysdeck-policy",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Policy",
+            "order": 38,
+            "keywords": [
+                {
+                    "matches": [
+                        "policy",
+                        "acl",
+                        "getfacl",
+                        "setfacl",
+                        "cgroups",
+                        "cgroup",
+                        "vlan",
+                        "ebpf",
+                        "bpf",
+                        "namespace",
+                        "lsns",
+                        "apparmor",
+                        "permissions",
+                        "groups",
+                        "mac",
+                        "smack",
+                        "tomoyo",
+                        "yama",
+                        "loadpin",
+                        "lockdown",
+                        "landlock",
+                        "lsm",
+                        "setcap",
+                        "getcap",
+                        "capabilities",
+                        "ptrace"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

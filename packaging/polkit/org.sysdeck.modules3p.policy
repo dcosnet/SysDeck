@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SysDeck — 3rd-party Modules install/uninstall polkit action.
+
+  Authorizes the cockpit bridge to invoke, as root:
+    - /usr/bin/python3 /usr/lib/sysdeck/bridge/modules3p.py install <id>
+    - /usr/bin/python3 /usr/lib/sysdeck/bridge/modules3p.py uninstall <id>
+
+  The bridge internally invokes pacman / git / curl / bsdtar / tar /
+  rm as subprocesses — those inherit the root privilege granted here.
+
+  Install to: /usr/share/polkit-1/actions/org.sysdeck.modules3p.policy
+
+  The action id is org.sysdeck.modules3p.modify. The cockpit bridge
+  prompts the operator for this action when modules.js calls
+  cockpit.spawn(..., { superuser: 'try' }) on the bridge's install /
+  uninstall subcommands.
+
+  v0.0.46 design note: the front-end renders the license inline next
+  to the Install button, so this polkit prompt (which fires AFTER the
+  operator clicks Install) is the second of two acceptance gestures —
+  the first being the click itself, which accepted the inline license.
+-->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <vendor>SysDeck</vendor>
+  <vendor_url>https://dcos.net</vendor_url>
+
+  <action id="org.sysdeck.modules3p.modify">
+    <description>Install or remove third-party Cockpit modules</description>
+    <description xml:lang="en">Install or remove third-party Cockpit modules</description>
+    <message>Authentication is required to install or remove a third-party Cockpit module</message>
+    <message xml:lang="en">Authentication is required to install or remove a third-party Cockpit module</message>
+
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/python3</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">/usr/lib/sysdeck/bridge/modules3p.py</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

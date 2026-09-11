@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-sensors",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Sensors",
+            "order": 35,
+            "keywords": [
+                {
+                    "matches": [
+                        "sensors",
+                        "temperature",
+                        "fan",
+                        "voltage",
+                        "lm_sensors"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

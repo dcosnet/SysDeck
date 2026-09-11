@@ -1,0 +1,26 @@
+{
+    "version": 0,
+    "name": "sysdeck-auth",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Hardware Auth",
+            "order": 33,
+            "keywords": [
+                {
+                    "matches": [
+                        "auth",
+                        "smartcard",
+                        "pkcs11",
+                        "opensc",
+                        "kerberos",
+                        "ssh"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

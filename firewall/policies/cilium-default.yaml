@@ -1,0 +1,78 @@
+# Cilium default network policy — shipped with sysdeck-0.0.36.
+# Author: Jeremy Anderson <info@dcos.net>
+#
+# This policy is applied by firewall/templates/cilium.sh `start` action
+# when the operator selects the Cilium backend in the SysDeck Firewall
+# panel. It implements a sensible default:
+#
+#   - default-deny ingress + egress at the cluster level
+#   - allow DNS (UDP/TCP 53) to kube-dns / systemd-resolved
+#   - allow SSH (TCP 22) from anywhere
+#   - allow HTTP/HTTPS (TCP 80/443) from anywhere
+#
+# Operators can drop a custom policy at
+# /etc/sysdeck/firewall/cilium-policy.yaml to override.
+#
+# Reference: https://docs.cilium.io/en/stable/security/policy/
+
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sysdeck-default-deny
+  namespace: default
+  annotations:
+    sysdeck.io/managed-by: "sysdeck-firewall-cilium"
+    sysdeck.io/version: "0.0.36"
+spec:
+  description: "SysDeck default policy — deny all ingress + egress, then re-allow DNS/SSH/HTTP/HTTPS"
+  endpointSelector: {}
+  ingress:
+    # Allow all endpoints to receive traffic from anywhere on SSH/HTTP/HTTPS.
+    - toPorts:
+        - ports:
+            - port: "22"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+              - method: "POST"
+              - method: "HEAD"
+  egress:
+    # Allow DNS to kube-dns (K8s) or systemd-resolved (standalone).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Allow egress to anywhere on SSH/HTTP/HTTPS.
+    - toPorts:
+        - ports:
+            - port: "22"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    # Allow egress to anywhere on HTTPS (for system updates).
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

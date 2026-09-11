@@ -1,0 +1,30 @@
+{
+    "version": 0,
+    "name": "sysdeck-jellyfin",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Jellyfin",
+            "order": 40,
+            "keywords": [
+                {
+                    "matches": [
+                        "jellyfin",
+                        "media",
+                        "server",
+                        "movies",
+                        "tv",
+                        "music",
+                        "streaming",
+                        "transcoding",
+                        "subsonic",
+                        "emby"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' frame-src 'self' http://127.0.0.1:8096 http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:8096 http://127.0.0.1:*; img-src 'self' data: http://127.0.0.1:8096 http://127.0.0.1:*"
+}

@@ -1,0 +1,28 @@
+{
+    "version": 0,
+    "name": "sysdeck-builder",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Image Builder",
+            "order": 30,
+            "keywords": [
+                {
+                    "matches": [
+                        "builder",
+                        "mkosi",
+                        "vmdb2",
+                        "archiso",
+                        "live-build",
+                        "image",
+                        "compose",
+                        "blueprint"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

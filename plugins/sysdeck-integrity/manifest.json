@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-integrity",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Integrity",
+            "order": 22,
+            "keywords": [
+                {
+                    "matches": [
+                        "integrity",
+                        "lynis",
+                        "audit",
+                        "hardening",
+                        "trust"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

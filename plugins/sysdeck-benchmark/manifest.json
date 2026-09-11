@@ -1,0 +1,24 @@
+{
+    "version": 0,
+    "name": "sysdeck-benchmark",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Benchmark",
+            "order": 36,
+            "keywords": [
+                {
+                    "matches": [
+                        "benchmark",
+                        "sysbench",
+                        "stress",
+                        "performance"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

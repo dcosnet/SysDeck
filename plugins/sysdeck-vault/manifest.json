@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-vault",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Vault",
+            "order": 25,
+            "keywords": [
+                {
+                    "matches": [
+                        "vault",
+                        "luks",
+                        "cryptsetup",
+                        "encryption",
+                        "volumes"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

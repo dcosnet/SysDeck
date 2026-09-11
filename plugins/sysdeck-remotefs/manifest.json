@@ -1,0 +1,34 @@
+{
+    "version": 0,
+    "name": "sysdeck-remotefs",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Remote FS",
+            "order": 42,
+            "keywords": [
+                {
+                    "matches": [
+                        "remotefs",
+                        "remote",
+                        "filesystem",
+                        "distributed",
+                        "ceph",
+                        "cephfs",
+                        "gluster",
+                        "glusterfs",
+                        "moosefs",
+                        "beegfs",
+                        "orangefs",
+                        "cluster",
+                        "storage",
+                        "shared"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

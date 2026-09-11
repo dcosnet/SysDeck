@@ -1,0 +1,872 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SysDeck - AppStream Metainfo (umbrella component)
+
+  This file follows the pattern used by cockpit-project itself in
+  src/appstream/org.cockpit_project.cockpit_*.metainfo.xml.in — see
+  e.g. org.cockpit_project.cockpit_networkmanager.metainfo.xml.in.
+
+  Pattern verified from the cockpit source code:
+    pkg/apps/watch-appstream.py:237 — reads <launchable type="cockpit-manifest">NAME</launchable>
+    pkg/apps/utils.tsx:152         — matches launchable.type == "cockpit-manifest"
+    src/appstream/*.xml.in         — all use <launchable>, not <provides><cockpit-manifest>
+
+  Previous versions of this file (v0.0.17-v0.0.20) used
+  <provides><cockpit-manifest>NAME</cockpit-manifest></provides>, which is
+  NOT what the cockpit apps page reads. It is silently ignored — the plugin
+  would not appear in the Applications menu. v0.0.21 corrects this.
+
+  The <id> follows the reverse-DNS convention used by cockpit-project:
+    org.cockpit_project.cockpit_<name>     (cockpit's own plugins)
+    net.dcos.sysdeck                       (this umbrella component)
+
+  The <launchable> text must match the `name` field of the plugin's
+  manifest.json — NOT the directory name. For sysdeck-containers, the
+  manifest.json has `"name": "sysdeck-containers"`, so the launchable
+  text is "sysdeck-containers".
+
+  This umbrella metainfo covers the whole SysDeck suite. Each individual
+  plugin does not ship its own metainfo (to avoid 18 components in the
+  AppStream cache). The umbrella component is what appears in Cockpit's
+  Applications page; clicking it could open the first plugin's page.
+-->
+<component type="addon">
+  <id>net.dcos.sysdeck</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>SysDeck</name>
+  <summary>Unified operations surface for Linux infrastructure — 23 Cockpit plugins</summary>
+  <description>
+    <p>
+      SysDeck is a suite of 23 standalone Cockpit plugins — containers,
+      firewall, integrity auditing, network security, service mesh,
+      encryption vaults, fleet compute, Kata Containers, firmware, image
+      building, mining, theme engine, hardware authentication, DAG-driven
+      build orchestration, system monitoring, hardware sensors, system
+      benchmarking, package management, policy &amp; permissions, database
+      control, Jellyfin media server, photo manager (PhotoPrism/Piwigo/
+      Lychee/Nextcloud-Memories/LibrePhotos), and remote filesystem manager
+      (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS). Each plugin appears as its
+      own sidebar entry in the Cockpit web UI.
+    </p>
+    <p>
+      The plugins ship as static HTML+JS+CSS plus a Python bridge helper
+      package. They install under /usr/share/cockpit/sysdeck-&lt;name&gt;/ and
+      are discovered automatically by cockpit-bridge. No separate web
+      server, no Node.js runtime, no database — the plugins run inside
+      the cockpit web service.
+    </p>
+    <p>
+      Each backend tool (podman, nftables, fwupd, etc.) is invoked as a
+      separate subprocess via the bridge helper; no third-party code is
+      bundled. See THIRD_PARTY.md for the full attribution matrix.
+    </p>
+  </description>
+  <url type="homepage">https://dcos.net</url>
+  <url type="bugtracker">https://dcos.net/sysdeck/issues</url>
+  <url type="help">https://dcos.net/sysdeck/quickstart</url>
+
+  <!-- The 26 <launchable> entries below match the `name` field of each
+       plugin's manifest.json. The cockpit apps page (pkg/apps/utils.tsx:152)
+       reads launchable.type == "cockpit-manifest" and uses the text to
+       link the AppStream component to the corresponding Cockpit plugin.
+       v0.0.35: SysDeck Kata restored as its own sidebar entry; added
+       sysdeck-jellyfin, sysdeck-photos, sysdeck-remotefs.
+       v0.0.46: added sysdeck-modules (in-suite 3rd-party module installer).
+       v0.0.47: added sysdeck-services (service/port editor promoted to
+       its own sidebar entry). -->
+  <launchable type="cockpit-manifest">sysdeck-containers</launchable>
+  <launchable type="cockpit-manifest">sysdeck-firewall</launchable>
+  <launchable type="cockpit-manifest">sysdeck-integrity</launchable>
+  <launchable type="cockpit-manifest">sysdeck-netsec</launchable>
+  <launchable type="cockpit-manifest">sysdeck-mesh</launchable>
+  <launchable type="cockpit-manifest">sysdeck-vault</launchable>
+  <launchable type="cockpit-manifest">sysdeck-fleet</launchable>
+  <launchable type="cockpit-manifest">sysdeck-kata</launchable>
+  <launchable type="cockpit-manifest">sysdeck-fester</launchable>
+  <launchable type="cockpit-manifest">sysdeck-firmware</launchable>
+  <launchable type="cockpit-manifest">sysdeck-builder</launchable>
+  <launchable type="cockpit-manifest">sysdeck-mining</launchable>
+  <launchable type="cockpit-manifest">sysdeck-themes</launchable>
+  <launchable type="cockpit-manifest">sysdeck-auth</launchable>
+  <launchable type="cockpit-manifest">sysdeck-glances</launchable>
+  <launchable type="cockpit-manifest">sysdeck-sensors</launchable>
+  <launchable type="cockpit-manifest">sysdeck-benchmark</launchable>
+  <launchable type="cockpit-manifest">sysdeck-packages</launchable>
+  <launchable type="cockpit-manifest">sysdeck-policy</launchable>
+  <launchable type="cockpit-manifest">sysdeck-db</launchable>
+  <launchable type="cockpit-manifest">sysdeck-jellyfin</launchable>
+  <launchable type="cockpit-manifest">sysdeck-photos</launchable>
+  <launchable type="cockpit-manifest">sysdeck-remotefs</launchable>
+  <launchable type="cockpit-manifest">sysdeck-monitoring</launchable>
+  <launchable type="cockpit-manifest">sysdeck-modules</launchable>
+  <launchable type="cockpit-manifest">sysdeck-services</launchable>
+
+  <categories>
+    <category>System</category>
+  </categories>
+  <keywords>
+    <keyword>cockpit</keyword>
+    <keyword>operations</keyword>
+    <keyword>monitoring</keyword>
+    <keyword>firewall</keyword>
+    <keyword>containers</keyword>
+    <keyword>firmware</keyword>
+    <keyword>jellyfin</keyword>
+    <keyword>photos</keyword>
+    <keyword>ceph</keyword>
+    <keyword>remote-filesystem</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.2.0" date="2026-08-20">
+      <description>
+        <p>v0.2.0 MASTER EDITION: one tarball bundling the cockpit
+        edition, the new SysDeck Web Edition (web/), and Fester
+        pre-integrated (vendored at web/mini-services/fester, own
+        independent version 0.2.1). The fester bridge is a real REST
+        client now, the fester panel is fully built, and the Makefile
+        recipe indentation is fixed.</p>
+      </description>
+    </release>
+    <release version="0.1.3" date="2026-08-19">
+      <description>
+        <p>v0.1.3 — CRITICAL FIX: host package import was silently failing
+        + mkosi still wasn't reading the profile config. Two root causes
+        fixed, plus new download/manage UI for builds.</p>
+        <p>IMPORT BUG: _detect_host_packages() relied on `from __init__
+        import PKG_MANAGER` which silently failed in the cockpit
+        superuser channel context (different Python path). PKG_MANAGER
+        defaulted to "unknown", the host query returned an EMPTY list,
+        and the import wrote nothing. The operator saw "tries to build
+        only 2" because the build used the profile's original template
+        packages. FIX: now uses shutil.which() to find pacman/apt-mark/
+        dnf directly — no import dependency, works in any context.</p>
+        <p>BUILD BUG: v0.1.2's --include flag does NOT work as a config
+        loader. mkosi's --include includes a drop-in fragment ON TOP OF
+        the base mkosi.conf — it does NOT replace the base config. If
+        there's no mkosi.conf in the cwd, mkosi uses defaults and
+        ignores the --include file entirely. FIX: build() now creates a
+        temp directory, symlinks the profile file as `mkosi.conf`, and
+        sets work_dir to that temp dir. mkosi finds the symlink, follows
+        it, reads the actual profile. Works for ANY profile path.</p>
+        <p>NEW: artifact download + management UI. Each artifact has a
+        Download button (reads via cockpit.spawn cat + Blob), a per-file
+        Delete button, and a per-profile Clear all button. Profile card
+        header shows total artifact size.</p>
+        <p>NEW: build management. Each build has a Delete button with
+        two-step confirm (state+log only, or also artifacts). New
+        subcommand: build-delete.</p>
+        <p>REGRESSION TESTS: 11 new unit tests in
+        TestBuilderArtifactManagement (7) + TestBuilderMkosiTempWorkDir
+        (3). Total: 254 tests (was 243; +11). All pass.</p>
+      </description>
+    </release>
+    <release version="0.1.2" date="2026-08-19">
+      <description>
+        <p>v0.1.2 — CRITICAL FIX: mkosi was not reading the profile
+        config at all. Packages were silently ignored. Operator
+        reported: "the builder absolutely does not work yet. it has
+        zero awareness of packages we tell it to add."</p>
+        <p>ROOT CAUSE 1 (config not loaded):
+        _backend_build_command() for mkosi had no flag telling mkosi
+        WHERE the profile config file is. mkosi only reads a file
+        literally named `mkosi.conf` from the cwd. For v0.0.x profiles
+        at /etc/mkosi/mkosi.conf.d/&lt;name&gt;.conf, mkosi ran in that
+        dir, found no `mkosi.conf`, and used EMPTY defaults — zero
+        packages, default distro, default everything.</p>
+        <p>FIX 1: _backend_build_command() now ALWAYS passes
+        --include &lt;profile_path&gt; on the CLI. This tells mkosi to
+        explicitly load the profile config by path, regardless of its
+        filename or location.</p>
+        <p>ROOT CAUSE 2 (legacy Packages= syntax): profiles created by
+        v0.0.x used the old indented Packages= syntax
+        (Packages=\n    linux\n...). mkosi v22+ only understands
+        single-line (Packages=linux ...). The old form is silently
+        parsed as a single package name with embedded newlines, which
+        doesn't exist in any repo — so mkosi installs NOTHING.</p>
+        <p>FIX 2: new _migrate_legacy_mkosi_packages() function detects
+        the old indented syntax and rewrites it to single-line IN-PLACE
+        before the build command is constructed. build() calls this
+        automatically on every mkosi build. Migration is logged in
+        build state JSON and log file header. No-op on modern syntax.</p>
+        <p>REGRESSION TESTS: 4 new unit tests in TestBuilderBuildPath
+        cover migration (old syntax rewrite, modern no-op, no-section
+        no-op, end-to-end during build). Existing test_build_success_path
+        extended to verify --include is on the command line and points
+        at the profile file. Total unit tests now 243 (was 239 in
+        v0.1.1; +4). All build-time guards pass.</p>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-08-19">
+      <description>
+        <p>v0.1.1 — OUTPUT PATH SAFETY FIX. An operator reported:
+        "this is NOT a safe output path. fix this now." The v0.1.0
+        release relied on OutputDirectory= in the scaffolded
+        mkosi.conf to route build outputs to
+        /var/lib/sysdeck/builder/artifacts/&lt;name&gt;/. But when
+        the operator built an OLD v0.0.x profile (whose mkosi.conf
+        had no OutputDirectory= setting), mkosi defaulted to
+        writing image.raw into the cwd — which was
+        /etc/mkosi/mkosi.conf.d/, a system config directory owned
+        by root. mkosi then refused to overwrite the existing
+        image.raw, blocking every rebuild.</p>
+        <p>ROOT CAUSE: _backend_build_command() for mkosi was just
+        ["mkosi", "build"] with no CLI output flags. It trusted the
+        profile's mkosi.conf to set OutputDirectory=, which doesn't
+        exist on v0.0.x profiles, can be hand-edited to anything,
+        and is ignored by mkosi if the profile is a drop-in fragment
+        mkosi never reads.</p>
+        <p>FIX: _backend_build_command() now ALWAYS passes --output,
+        --output-dir, and --force on the CLI for mkosi builds. CLI
+        flags override mkosi.conf, so the output path is forced to
+        /var/lib/sysdeck/builder/artifacts/&lt;name&gt;/&lt;name&gt;.raw
+        regardless of what the profile says. --force overwrites any
+        existing image so rebuilds don't fail with "Output path
+        exists already."</p>
+        <p>SAFETY CHECK: build() now refuses to proceed if the
+        resolved output_dir is not under /var/lib/, /tmp/,
+        /var/tmp/, or the configured BUILDER_ARTIFACTS_DIR. Blocks
+        /etc/, /usr/, /boot/, /bin/, /sbin/, /lib/, /root/,
+        /home/, etc. Belt-and-suspenders: even if an operator
+        passes options.output_dir=/etc/something via the JS bridge,
+        the build is refused before subprocess.run is called.</p>
+        <p>LEGACY PROFILE WARNING: build() now detects profiles in
+        /etc/mkosi/mkosi.conf.d/ (the v0.0.x drop-in layout) and
+        records a warning in both the build state JSON and the log
+        file: "WARNING: profile is in /etc/mkosi/mkosi.conf.d/
+        (legacy v0.0.x layout). mkosi may silently ignore this
+        drop-in fragment. Migrate to /etc/mkosi/profiles/&lt;name&gt;/
+        mkosi.conf for a real profile."</p>
+        <p>LOG IMPROVEMENT: build log header now includes the
+        resolved output_dir so the operator can see exactly where
+        the image will land before mkosi starts.</p>
+        <p>REGRESSION TESTS: 2 new unit tests in TestBuilderBuildPath
+        cover the safety check (refuses /etc/) and the legacy-profile
+        warning. The existing test_build_success_path was extended to
+        verify the mkosi command line includes --output, --output-dir,
+        and --force, and that --output-dir points at the per-profile
+        artifacts dir. Total unit tests now 239 (was 237 in v0.1.0;
+        +2). All build-time guards pass.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-08-19">
+      <description>
+        <p>v0.1.0 — BUILDER PROFILE FIXUP + HOST PKG IMPORT. Three
+        compounding bugs in the v0.0.x mkosi build path were silently
+        producing empty 33M images with no kernel, no systemd, no
+        openssh — the operator clicked Build on a freshly-created
+        profile and got back a 33M image.raw containing only
+        iana-etc + filesystem. Plus a new operator feature requested
+        in the same release cycle: "import current os pkg list to
+        profile should be an option".</p>
+        <p>BUG 1 (scaffold location): profile-create wrote
+        /etc/mkosi/mkosi.conf.d/&lt;name&gt;.conf — a drop-in fragment
+        that mkosi only honors when a parent /etc/mkosi/mkosi.conf
+        exists to layer it onto. With no parent, mkosi ran with
+        empty defaults. Fix: each profile now lives in its own
+        directory /etc/mkosi/profiles/&lt;name&gt;/mkosi.conf (the
+        only filename mkosi reads automatically from the cwd).
+        MKOSI_DIRS updated to scan /etc/mkosi/profiles first.</p>
+        <p>BUG 2 (Packages= syntax): _MKOSI_TEMPLATE and
+        _write_packages_mkosi used the indented-continuation form
+        which was the old systemd-mkosi (&lt;=v15) syntax. mkosi v22+
+        (Arch ships 25.x) expects single-line space-separated:
+        Packages=linux linux-firmware systemd openssh. Fix: template
+        + writer now emit the modern single-line form. The reader
+        accepts both forms so v0.0.x profiles migrate cleanly on
+        first append/replace.</p>
+        <p>BUG 3 (output routing): mkosi wrote its output to the cwd
+        (/etc/mkosi/mkosi.conf.d/image.raw) but build() only scanned
+        /var/lib/sysdeck/builder/artifacts/&lt;profile&gt;/ for
+        artifacts — so every successful build looked like a failure
+        in the panel. Fix: _MKOSI_TEMPLATE now sets OutputDirectory=
+        to the per-profile artifacts dir so mkosi writes directly
+        there.</p>
+        <p>NEW FEATURE: profile-import-packages subcommand. Queries
+        the host's explicitly-installed package set (pacman -Qqe on
+        Arch, apt-mark showmanual on Debian, dnf repoquery
+        --userinstalled on Fedora) and writes it into a profile's
+        package list via the existing _write_packages dispatch.
+        Defaults to append mode so the profile's baseline (kernel,
+        systemd, openssh) is preserved. Supports --mode=replace,
+        --dry-run for preview, and --packages= for manual override.
+        New polkit exec paths for pacman/apt-mark/dnf added to
+        org.sysdeck.builder.modify.</p>
+        <p>PANEL UX: each profile row in the Builder panel now has
+        a "Import host pkgs" button. Click — dry-run preview —
+        window.confirm with package count, source distro, and first
+        200 packages — append write. Falls back to operator cancel
+        without writing.</p>
+        <p>REGRESSION TESTS: 7 new unit tests in
+        TestBuilderImportHostPackages cover _detect_host_packages
+        dispatch (pacman path + dedup), the --packages override
+        end-to-end, --dry-run no-write behavior, and the
+        unknown-profile / no-args / bad-mode / COMMANDS-registration
+        error paths. 4 existing tests in TestBuilderPackagesField
+        updated for the new single-line Packages= syntax; 1 new test
+        guards against a regression where the writer emits the new
+        form but the reader only understands the old one.</p>
+        <p>VERSION SYNC: bumped 0.0.50 → 0.1.0 across all 9 release
+        surfaces. Total unit tests now 237 (was 228 in v0.0.50; +8
+        TestBuilderImportHostPackages + 1 new
+        test_mkosi_modern_single_line_input_parsed). All build-time
+        guards pass.</p>
+      </description>
+    </release>
+    <release version="0.0.50" date="2026-08-19">
+      <description>
+        <p>v0.0.50 — BUILD PATH NameError FIX. An operator reported:
+        "NameError: name 're' is not defined. Did you forget to
+        import 're'? happens right away on build for a new profile i
+        created." The traceback pointed at _new_build_id() line 492:
+        safe_profile = re.sub(r"[^A-Za-z0-9_-]", "_", profile).</p>
+        <p>ROOT CAUSE: bridge/builder.py's module-level imports were
+        import json / os / shutil / subprocess / sys + from pathlib
+        import Path + from typing import Any. No `import re`.
+        _new_build_id has used re.sub since v0.0.31 (when the full-
+        featured build operations were added), but no test ever
+        exercised the build() code path. The bug went undetected for
+        18 releases (v0.0.31 through v0.0.49) until an operator
+        actually clicked Build on a freshly-created profile.</p>
+        <p>FIX: added `import re` to the module-level imports in
+        bridge/builder.py. Removed the now-redundant local `import
+        re` inside _write_packages_vmdb2 (it was a v0.0.49 workaround
+        that's no longer needed — the module-level import covers both
+        callers).</p>
+        <p>REGRESSION TESTS: 9 new unit tests in
+        tests/test_bridge_parsers.py TestBuilderBuildPath cover
+        _new_build_id (format, sanitization of unsafe chars,
+        preservation of safe chars, and an explicit assertion that
+        `re` is in the builder module's globals so the bug can't
+        recur if anyone refactors the imports). The class also
+        includes build() end-to-end tests with mocked
+        subprocess.run — success path (verifies state file + log
+        file written, response shape correct, subprocess actually
+        called), unknown profile, no args, backend-not-installed,
+        and non-zero returncode records state "failed". All tests
+        mock the module-level BUILDER_STATE_DIR / BUILDER_LOGS_DIR
+        / BUILDER_ARTIFACTS_DIR so they run hermetically.</p>
+        <p>AUDIT: ran an AST-based audit of bridge/builder.py to find
+        any other names used at module level but not imported. No
+        real undefined names found — every flagged item was a
+        comprehension local, tuple-unpacking target, except-clause
+        target, or __file__. The build path is now fully exercisable
+        by tests.</p>
+        <p>VERSION SYNC: bumped 0.0.49 → 0.0.50 across all 9 release
+        surfaces. This is a Python-only fix — no JS changes, no new
+        bridge subcommands, no new plugin/polkit/bridge-helper files.
+        All 228 unit tests pass (was 219 in v0.0.49; +9
+        TestBuilderBuildPath).</p>
+      </description>
+    </release>
+    <release version="0.0.49" date="2026-08-19">
+      <description>
+        <p>v0.0.49 — BUILDER INLINE PACKAGE LIST. Per user directive:
+        "we should allow adding a pacman -Sy applist.txt with a
+        literal list of baseline apps for the profile being generated."
+        Both the Create Profile and Copy shipped profile forms now
+        include a Baseline packages textarea, a file upload input
+        (applist.txt), and a merge-mode toggle (append | replace).
+        The package list is written to the backend-specific package
+        file in the same operation as the scaffold/copy.</p>
+        <p>BACKEND COVERAGE: all 4 backends supported (mkosi, vmdb2,
+        archiso, live-build). Each writes to its native package-list
+        location: mkosi → [Packages] section of &lt;name&gt;.conf,
+        vmdb2 → bootstrap.include list in &lt;name&gt;.yaml, archiso
+        → packages.x86_64 in the profile dir, live-build →
+        config/package-lists/sysdeck.list.</p>
+        <p>INPUT: textarea for inline paste (one package per line, #
+        comments allowed) AND file upload (applist.txt / .list / .conf
+        accepted). File upload populates the textarea via the
+        browser's FileReader API so the operator can review/edit
+        before submitting. 1 MB cap on uploaded files.</p>
+        <p>MERGE MODE: operator chooses per-operation via a toggle.
+        append (default for Copy) preserves the baseline's existing
+        packages, adds the operator's, deduplicates. replace (default
+        for Create) overwrites the baseline's package file with the
+        operator's list.</p>
+        <p>NEW BRIDGE HELPERS in bridge/builder.py: _extract_opts
+        (splits argv into positional + --key=value opts),
+        _parse_packages_text (parses multiline text into deduped
+        list), _write_packages_mkosi/vmdb2/archiso/live_build
+        (per-backend writers), _write_packages (dispatcher).
+        Extended profile_create() and profile_copy() to accept
+        --packages=&lt;json&gt; and --mode=append|replace.</p>
+        <p>UPDATED shared/bridge.js: profileCreate(name, backend, base,
+        packagesText, mode) and profileCopy(srcName, newName, backend,
+        packagesText, mode). packagesText is JSON-encoded so newlines
+        and quotes survive the argv boundary. When omitted, no package
+        file is written (back-compat with v0.0.48).</p>
+        <p>NEW TESTS: 28 unit tests in tests/test_bridge_parsers.py
+        TestBuilderPackagesField cover _parse_packages_text (6),
+        _extract_opts (4), per-backend writers (10), dispatcher (3),
+        and end-to-end profile_create/profile_copy with --packages
+        (5). All use tempdirs; none touch real /etc/ paths.</p>
+        <p>VERSION SYNC: bumped 0.0.48 → 0.0.49 across all 9 release
+        surfaces.</p>
+      </description>
+    </release>
+    <release version="0.0.48" date="2026-08-19">
+      <description>
+        <p>v0.0.48 — BUILDER PROFILE-CREATE BUGFIX. An operator on an
+        archiso-only Arch host (or a live-build-only Debian host)
+        reported hitting "Error: profile-create supports ('mkosi',
+        'vmdb2'); archiso profiles are not scaffolded (use the shipped
+        ones)" when trying to create a build profile.</p>
+        <p>ROOT CAUSE: the v0.0.31 Create Profile dropdown in
+        plugins/sysdeck-builder/builder.js filtered backends to
+        mkosi/vmdb2 — correct — but fell back to primary.id when the
+        filtered list was empty. On a host whose primary backend was
+        archiso or live-build, the dropdown offered that backend, the
+        operator selected it, clicked Create, and the bridge rejected
+        it because archiso/live-build use shipped directory-based
+        profile trees, not single-file specs that can be scaffolded
+        from scratch.</p>
+        <p>FIX 1: renderCreateProfile no longer falls back to
+        primary.id. When no mkosi/vmdb2 backend is installed, the form
+        renders an inline install hint with the exact pacman/apt
+        command instead of a dropdown that would have errored.</p>
+        <p>FIX 2: a new "Copy shipped profile" form
+        (renderCopyProfile) lists every shipped archiso and live-build
+        profile discovered via profiles() and offers a one-click copy
+        into /etc/ via the new bridge.builder.profileCopy() method.
+        This is the supported way to create profiles for the
+        directory-based backends — the panel-side answer to the
+        bridge's "use the shipped ones" hint that previously had no
+        affordance.</p>
+        <p>NEW BRIDGE COMMAND: bridge/builder.py profile_copy() —
+        copies /usr/share/archiso/configs/&lt;src&gt;/ →
+        /etc/archiso/configs/&lt;new&gt;/ (and the live-build
+        equivalent). Validates new-name (no slashes, no "."/".." to
+        prevent path traversal), resolves source via profiles(),
+        refuses non-directory-based backends with a clear "use
+        profile-create" hint, refuses if destination exists. Same
+        polkit action as profile-create (org.sysdeck.builder.modify)
+        — no new polkit file needed.</p>
+        <p>NEW BRIDGE.JS METHOD: bridge.builder.profileCopy(srcName,
+        newName, backend) runs with { superuser: 'try' }, same as
+        profileCreate / profileDelete.</p>
+        <p>DESTINATION ROOTS REFACTOR: ARCHISO_COPY_DEST and
+        LIVE_BUILD_COPY_DEST are now module-level constants in
+        bridge/builder.py (was: hardcoded inside profile_copy).
+        Mirrors the existing ARCHISO_DIRS / LIVE_BUILD_DIRS pattern
+        and lets unit tests patch them with tempdirs.</p>
+        <p>NEW TESTS: 15 unit tests in tests/test_bridge_parsers.py
+        TestBuilderProfileCopy cover arg validation, source
+        resolution (not-found, wrong-backend, mkosi/vmdb2 rejection),
+        success paths (archiso + live-build), and failure modes
+        (dest-exists, source-not-a-dir, permission-error-with-polkit-
+        hint). All use tempdirs and mock.patch; none touch real /etc/
+        or /usr/share/ paths.</p>
+        <p>VERSION SYNC: bumped 0.0.47 → 0.0.48 across all 9 release
+        surfaces (Makefile, bridge/__init__.py, packaging/setup.py,
+        PKGBUILD, RPM spec, debian/changelog, compat-manifest.json,
+        metainfo.xml, README.md).</p>
+      </description>
+    </release>
+    <release version="0.0.47" date="2026-08-18">
+      <description>
+        <p>v0.0.47 — LOGIC-FLAW FIXES. Per user directive: "we need to
+        fix a few logic flaws i do things a certain way on my servers
+        so ill correct the ports on a firewall script or two. the web
+        server template, and vps template i setup the webserver on
+        8080 and varnish on 80 for an automatic cache environment. we
+        should move the service/ports editor to its own module entry
+        for ease of access. the glances we should default to enabling
+        the built in webui and embedding that into our module instead
+        it visually looks stunning in comparison to ours."</p>
+        <p>FIREWALL: public-webserver.sh PORT-TOPOLOGY FIX. The v0.0.44
+        template had the cache topology backwards — it exposed Caddy on
+        :80 and Varnish on :8080. v0.0.47 flips it: Varnish is the
+        public cache front on :80, Caddy HTTP backend lives on :8080
+        (loopback only), Caddy HTTPS lives on :443 (public, terminates
+        TLS). The VARNISH_PUBLIC toggle is removed — :8080 is now
+        ALWAYS loopback-only (the previous default exposed the
+        cache-miss path to the internet, bypassing Varnish entirely).
+        Defense-in-depth drops added for :8080 alongside the existing
+        MariaDB + Caddy admin drops.</p>
+        <p>FIREWALL: vps-webserver.sh DEFAULT TOPOLOGY. When Varnish is
+        detected at all, the operator's documented setup is now the
+        explicit default — Varnish on :80, Caddy HTTP backend on :8080
+        (loopback only), Caddy HTTPS on :443. Previously this only
+        happened if Varnish was already listening on :80 at runtime;
+        now detecting Varnish is enough to flip Caddy HTTP to :8080
+        loopback.</p>
+        <p>NEW PLUGIN: sysdeck-services — first-class sidebar entry at
+        order 45. The Service/Port Editor card that lived at the bottom
+        of the Firewall panel since v0.0.44 has been lifted out into
+        its own module. Adds a filter box (search by name/id/port/
+        process), a show-only-editable toggle, and a Refresh button.
+        The bridge surface (bridge.firewall.services / service-info /
+        set-service-port / restart-service) is unchanged; a new
+        bridge.services proxy was added to bridge.js so the new panel
+        has a clean API.</p>
+        <p>GLANCES: DEFAULT-ON EMBEDDED WEBUI. The panel now auto-starts
+        the Glances built-in webserver (glances -w --bind 127.0.0.1
+        --port 61208) on mount — no click required. The iframe is now
+        the primary view, sized to fill the viewport (min-height:
+        calc(100vh - 200px)). The legacy SysDeck snapshot cards are
+        moved into a collapsed details element at the bottom of the
+        page so they don't push the iframe below the fold. Manifest
+        CSP updated to allow frame-src http://127.0.0.1:61208 +
+        http://localhost:61208.</p>
+        <p>VERSION SYNC: bumped 0.0.46 → 0.0.47 across all 9 release
+        surfaces. Also caught up bridge/__init__.py + packaging/setup.py
+        from 0.0.45 (the v0.0.46 release bumped PKGBUILD/spec/debian
+        but missed these two files).</p>
+      </description>
+    </release>
+    <release version="0.0.46" date="2026-08-18">
+      <description>
+        <p>v0.0.46 — IN-SUITE 3RD-PARTY MODULE INSTALLER. Per user
+        directive: "i wanted the in ui module to handle showing license,
+        developer, 3rd party model name and ability to visit homepage
+        and install the plugin 1 click with license agreement inline."</p>
+        <p>NEW PLUGIN: sysdeck-modules — a first-class sidebar entry at
+        order 44 that replaces the side-channel cockpit-module-pull.sh
+        shell script. Each catalog row shows the module name, a license
+        badge (MIT / LGPL-2.1 / GPL-3.0 etc.), the developer/author,
+        the source URL, and a clickable homepage link — all rendered
+        INLINE next to a 1-click Install button. Clicking Install is
+        the operator's acceptance of the inline-displayed license. No
+        modal, no separate confirmation step.</p>
+        <p>NEW BRIDGE: bridge/modules3p.py — a 10-entry catalog covering
+        cockpit-machines, cockpit-podman, cockpit-storaged,
+        cockpit-identities, cockpit-navigator, cockpit-file-sharing,
+        cockpit-zfs-manager, cockpit-pacman, cockpit-sensors, and
+        cockpit-benchmark. Four install kinds: pacman (native package),
+        git (depth-1 clone), deb-tar (extract data.tar.xz from a .deb),
+        tarball (curl + tar -x). The bridge refuses silent installs
+        (no --accept-license=1 ⇒ license-not-accepted) as a guard
+        against malicious callers.</p>
+        <p>NEW POLKIT ACTION: org.sysdeck.modules3p.modify authorizes
+        /usr/bin/python3 /usr/lib/sysdeck/bridge/modules3p.py install|
+        uninstall &lt;id&gt; with auth_admin_keep for active sessions.</p>
+        <p>AUDIT LOG: every install / uninstall appends a JSON record
+        to /etc/cockpit/MODULE_LICENSES.log (shared with the legacy
+        cockpit-module-pull.sh). Legacy plain-text lines are preserved
+        as {raw: ...} records.</p>
+        <p>SHARED bridge.js: added bridge.modules3p surface with
+        catalog / status / preflight / install / uninstall / audit
+        methods. install + uninstall use { superuser: 'try' }.</p>
+        <p>THIRD_PARTY.md: appended v0.0.46 section documenting the
+        in-suite installer + per-entry catalog table. Updated existing
+        "see cockpit-module-pull.sh" notes to point at the new panel.</p>
+      </description>
+    </release>
+    <release version="0.0.35" date="2026-08-18">
+      <description>
+        <p>v0.0.35 — KATA SPLIT + THREE NEW MODULES. Per user directive:
+        "kata containers should be called SysDeck Kata and moved out
+        of the tools area. and dont call it hidden thats akward. next
+        we will integrate a jellyfin management module where it starts,
+        stops, and loads the admin panel in the module as well as a
+        photo manager of equal quality. with its own module. then a
+        remote fs manager such as ceph, and others but not nfs or
+        amanada fs"</p>
+        <p>KATA RESTORED AS STANDALONE SIDEBAR ENTRY. The Kata Containers
+        plugin was demoted to a hidden "tools" entry inside the merged
+        Containers &amp; VMs panel in v0.0.34 — labeled "Kata Containers
+        (hidden helper)" with priority -1. v0.0.35 splits Kata back out:
+        renamed to <strong>SysDeck Kata</strong>, moved from
+        plugins/sysdeck-containers-kata/ to plugins/sysdeck-kata/,
+        converted from a "tools" manifest entry to a "menu" entry
+        (label "SysDeck Kata", order 27), removed the "hidden helper"
+        wording, dropped the priority -1, and restored a dedicated
+        keywords list. The Containers panel now manages Podman only —
+        the Kata tab and its iframe were removed. The pre-built
+        cockpit-kata React bundle (index.js + index.css) is shipped
+        unchanged.</p>
+        <p>JELLYFIN MODULE. New plugin plugins/sysdeck-jellyfin/
+        (manifest.json + index.html + jellyfin.js) + new bridge helper
+        bridge/jellyfin.py. Surfaces: summary, status, start, stop,
+        restart, web-status, libraries. The bridge runs
+        <code>systemctl start/stop/restart jellyfin.service</code>
+        via the cockpit superuser channel (polkit
+        org.sysdeck.jellyfin.modify); the panel iframes the running
+        Jellyfin admin UI at http://127.0.0.1:8096 — same pattern as
+        the v0.0.34 Glances integration. Library list is best-effort
+        via GET /Library/VirtualFolders on the local Jellyfin instance.</p>
+        <p>PHOTO MANAGER MODULE. New plugin plugins/sysdeck-photos/
+        + new bridge helper bridge/photos.py. Multi-backend design
+        (same shape as the DB Control module): PhotoPrism (port 2342,
+        MIT), Piwigo (port 80, GPL-2.0), Lychee (port 80, MIT),
+        Nextcloud-Memories (port 80, AGPL-3.0), LibrePhotos (port 3000,
+        MIT). Each backend is auto-detected via CLI tool / systemd unit
+        / config-dir presence; the bridge runs <code>systemctl
+        start/stop/restart &lt;service&gt;</code> for the chosen backend
+        and the panel iframes its admin UI when running. Polkit action:
+        org.sysdeck.photos.modify.</p>
+        <p>REMOTE FS MANAGER MODULE. New plugin plugins/sysdeck-remotefs/
+        + new bridge helper bridge/remotefs.py. Multi-backend: Ceph
+        (LGPL-2.1), GlusterFS (GPL-2.0), MooseFS (GPL-2.0), BeeGFS
+        (BeeGFS EULA — free), OrangeFS (BSD-3). Each backend is
+        auto-detected; the bridge runs <code>systemctl start/stop/
+        restart &lt;service&gt;</code> and the cluster-info subcommand
+        queries backend-specific cluster status (<code>ceph status
+        --format=json</code>, <code>gluster pool list</code>,
+        <code>moosefs-cli info</code>, <code>beegfs-ctl --listnodes</code>,
+        <code>pvfs2-server -m</code>). Polkit action:
+        org.sysdeck.remotefs.modify authorizes the systemctl binary plus
+        ceph/gluster/moosefs-cli/beegfs-ctl/pvfs2-server CLIs. NFS and
+        Amanda are explicitly EXCLUDED per directive — documented in
+        the panel footer and in bridge/remotefs.py:EXCLUDED.</p>
+        <p>PLUGIN COUNT: 20 → 23. The v0.0.34 hidden helper
+        (sysdeck-containers-kata) is renamed to sysdeck-kata and
+        promoted to a visible sidebar entry; three new visible modules
+        are added. tests/check_manifest_consistency.py expected count
+        updated to 23. scripts/generate-plugins.py updated to back
+        up + restore hand-maintained plugins (sysdeck-kata ships a
+        pre-built React bundle that can't be regenerated by the suite
+        generator).</p>
+        <p>VERSION SYNC. Makefile, bridge/__init__.py, packaging/setup.py,
+        packaging/PKGBUILD, packaging/sysdeck.spec, packaging/debian/
+        changelog, compat/compat-manifest.json all bumped to 0.0.35.</p>
+      </description>
+    </release>
+    <release version="0.0.30" date="2026-08-17">
+      <description>
+        <p>BUILDER MODULE REWRITE — target distros are now Arch Linux
+        and Debian. The previous bridge/builder.py was a thin
+        `systemctl is-active osbuild-composer.service` shim. osbuild-
+        composer is Fedora/RHEL-only and is not packaged for Arch or
+        Debian, so the Builder panel was permanently 'inactive' on
+        every distro this suite actually ships to.</p>
+        <p>Rewritten bridge/builder.py detects and surfaces the
+        canonical image-builder backends for the target distros:
+        Arch Linux uses mkosi (primary, systemd's image builder) plus
+        archiso (bootable Live ISOs); Debian uses vmdb2 (primary, the
+        Debian project's own image builder) plus live-build (Debian
+        Live ISOs). Detection is via shutil.which() — works on any
+        distro, and a Debian host with mkosi installed is still
+        surfaced correctly.</p>
+        <p>New Python subcommands: status, profiles, summary, backends,
+        install-hint. `summary` returns combined status + profiles in
+        one call so the panel renders from a single bridge spawn.
+        Profile discovery walks well-known config dirs per backend:
+        /etc/mkosi/mkosi.conf[.d/*.conf] + mkosi.profiles/*.profile for
+        mkosi; /usr/share/archiso/configs/* + /etc/archiso/configs/*
+        for archiso; /etc/vmdb2/*.yaml + /usr/share/vmdb2/specs/*.yaml
+        for vmdb2; any dir under /etc|/usr/share|~/.config/live-build
+        containing a `config/` subdir for live-build.</p>
+        <p>Rewrote plugins/sysdeck-builder/builder.js: replaces the
+        composer-cli blueprints list call with bridge.builder.summary().
+        Renders per-backend profile cards (grouped by backend) and
+        shows a distro-specific install hint when no backend is
+        installed (e.g. "sudo pacman -S --needed mkosi" on Arch,
+        "sudo apt install -y vmdb2" on Debian).</p>
+        <p>Updated shared/bridge.js builder surface — exposes
+        summary/profiles/status/backends/installHint. Updated
+        packaging/polkit/org.sysdeck.policy: org.sysdeck.builder.modify
+        action now authorizes /usr/bin/mkosi, /usr/bin/mkarchiso,
+        /usr/bin/vmdb2, /usr/bin/lb. osbuild + livemedia-creator
+        annotations removed (Fedora-only, no longer targeted).
+        Updated packaging/PKGBUILD optdepends: added mkosi and archiso.
+        Updated packaging/debian/control Suggests: added mkosi, vmdb2,
+        archiso, live-build. Updated compat/compat-manifest.json
+        builder entry: Arch and Debian distro_support upgraded from
+        'none' to 'full'; Fedora entry repointed from osbuild-composer
+        to mkosi (cross-distro). Updated plugins/sysdeck-builder/
+        manifest.json keywords and scripts/generate-plugins.py —
+        replaced 'osbuild' keyword with 'mkosi', 'vmdb2', 'archiso',
+        'live-build'. Synced docs (README.md, QUICKSTART.md, BLOG.md,
+        QA.md, docs/INSTALL.md, THIRD_PARTY.md).</p>
+      </description>
+    </release>
+    <release version="0.0.29" date="2026-08-17">
+      <description>
+        <p>EMAIL MIGRATION: author/maintainer contact address changed
+        from jeremy@dcos.net to info@dcos.net across every release
+        surface (debian/changelog, debian/control, setup.py, PKGBUILD,
+        sysdeck.spec). The author name "Jeremy Anderson" is preserved
+        everywhere; only the email address is replaced — the project
+        moved to a shared info@ inbox.</p>
+        <p>REMOVED DUPLICATE CONTAINER ENTRY: deleted
+        standalone-plugins/cockpit-podman/. Podman ships its own
+        native Cockpit module upstream, so bundling a second
+        cockpit-podman manifest here was duplicating upstream —
+        installing both would produce two competing sidebar entries
+        pointing at the same backend.</p>
+        <p>NEW standalone-plugins/cockpit-incus/manifest.json: sidebar
+        link (order 46, gated on /usr/bin/incus) for Incus system
+        container and VM management. Incus is the LXC/LXD successor
+        maintained by the Linux Containers project. This slot was the
+        original intent for the third standalone plugin slot, which
+        had been mis-assigned to podman.</p>
+        <p>UPDATED compat/compat-manifest.json: the
+        standalone_plugins.cockpit-podman entry is replaced with
+        standalone_plugins.cockpit-incus. Per-distro install commands:
+        pacman -S incus (Arch), dnf install incus (Fedora 40+),
+        apt install incus (Debian 13 trixie / bookworm backports).
+        Distro support: full on all three target distros.</p>
+        <p>UPDATED sysdeck-diagnose.sh: section 13 reference loop now
+        iterates over cockpit-incus / cockpit-machines / cockpit-ostree
+        (was cockpit-podman / cockpit-machines / cockpit-ostree).
+        Section 14 comparison text updated to refer to "the reference
+        plugins above" instead of "the cockpit-podman reference".</p>
+      </description>
+    </release>
+    <release version="0.0.28" date="2026-08-17">
+      <description>
+        <p>FIXED 2 BROKEN BRIDGE SUBCOMMANDS that slipped through v0.0.27's
+        "subcommand alignment" pass:</p>
+        <ul>
+          <li>firmware.py: bridge.js called `python3 firmware.py devices` but
+          the helper only implemented `summary`. Every visit to the Firmware
+          plugin page crashed with "Unknown subcommand: devices". Added a
+          real `devices` subcommand returning fwupdmgr's native
+          {Devices: [...]} shape (capital D, matches the panel's expected
+          access pattern).</li>
+          <li>benchmark.py: bridge.js called `python3 benchmark.py run-test
+          &lt;name&gt;` when the user clicked "Run" in the Available Tests
+          table, but the helper had no `run-test` subcommand. Added
+          `run-test` that runs `sysbench &lt;name&gt; run` and returns the
+          parsed result dict — same shape as run-cpu/run-memory/run-io.</li>
+        </ul>
+        <p>NEW BUILD-TIME GUARD: `check-bridge-subcommands` in `make check`.
+        Cross-checks every bridgeCmd() call in shared/bridge.js against the
+        COMMANDS dict declared in each bridge/&lt;module&gt;.py. Would have
+        caught both bugs above. Regression-tested: reverting firmware.py to
+        its v0.0.27 state causes the guard to fail with a clear message.</p>
+        <p>FIXED MISSING CSS CLASSES: shared/sysdeck.css was missing
+        .suite-progress, .suite-progress-bar, .suite-progress-fill,
+        .suite-stat-value, .suite-stat-label, .suite-row, .suite-row-between,
+        .suite-grid, .cols-2, .cols-3, .suite-col-2, .suite-col-3,
+        .suite-btn-primary, .suite-badge.info, .suite-input, .suite-warn.
+        Without them, progress bars in glances/fleet/netsec were invisible
+        and multi-column layouts collapsed to a single column. All added.</p>
+        <p>FIXED COCKPIT-SMOKE-TEST.SH: the embedded manifest used
+        "requires": { "cockpit": "&gt;=239" } — the broken pattern Cockpit
+        silently rejects. Smoke test would produce a false "Cockpit is
+        broken" diagnostic. Fixed to "cockpit": "239" (bare number).</p>
+        <p>IMPROVED DIAGNOSTIC: sysdeck-diagnose.sh now verifies
+        /usr/lib/sysdeck/bridge/*.py exists and is executable, and spot-
+        checks firmware.py `devices` and benchmark.py `run-test`
+        subcommands work end-to-end.</p>
+        <p>FIXED DOCS: bridge/__init__.py docstring still showed the broken
+        `python3 -m sysdeck.bridge.&lt;module&gt;` invocation pattern that
+        was fixed in v0.0.26. Updated to the absolute-path invocation.</p>
+      </description>
+    </release>
+    <release version="0.0.27" date="2026-08-17">
+      <description>
+        <p>FIXED 6 MISSING PYTHON HELPERS: mining.py, builder.py, fester.py,
+        kata.py, vault.py, mesh.py were never written — every plugin that
+        called one got "Module load failed: can't open file". Wrote minimal
+        stubs that return empty data so modules render with "no items".</p>
+        <p>FIXED 4 SUBCOMMAND MISMATCHES: bridge.js called subcommands the
+        Python helpers didn't have. Now aligned with the actual COMMANDS
+        dict in each helper: auth.smartcards→slots,
+        netsec.listeningPorts→sockets, integrity.trustScore→score,
+        integrity.runLynis→scan, firewall.listChains→chains,
+        firewall.listRules→ruleset, fleet.uptime/nodeCount derive from
+        summary, firmware.tpmInfo reads PCR0 directly via tpm2_pcrread.</p>
+      </description>
+    </release>
+    <release version="0.0.26" date="2026-08-17">
+      <description>
+        <p>ROOT CAUSE FOUND AND FIXED: every plugin that called a bridge
+        helper failed with ModuleNotFoundError: No module named
+        'sysdeck.bridge'. Cause: shared/bridge.js called
+        `python3 -m sysdeck.bridge.&lt;module&gt;`, which requires a Python
+        package layout (sysdeck/bridge/&lt;module&gt;.py) that doesn't exist
+        in the install. The actual layout is
+        /usr/lib/sysdeck/bridge/&lt;module&gt;.py (flat files, not a nested
+        package).</p>
+        <p>Fix: changed bridgeCmd() to call helpers by absolute path:
+        `python3 /usr/lib/sysdeck/bridge/&lt;module&gt;.py &lt;args&gt;`.
+        No package layout, no PYTHONPATH, no symlink needed.</p>
+        <p>Note: only firmware/fleet/themes 'worked' in v0.0.25 because they
+        use Promise.allSettled() (catches rejections silently) or
+        cockpit.file() (no Python helper needed) — they were showing
+        'unavailable' cards, not real data.</p>
+        <p>New guard: check-no-broken-python-module in `make check`.</p>
+      </description>
+    </release>
+    <release version="0.0.25" date="2026-08-17">
+      <description>
+        <p>ROOT CAUSE FOUND AND FIXED: every plugin page showed "Module load
+        failed: error loading dynamically imported module:
+        http://127.0.0.1:9090/cockpit/@localhost/sysdeck-common/bridge.js".</p>
+        <p>Cause: shared/sysdeck-common/ had bridge.js and sysdeck.css but NO
+        manifest.json. Cockpit only registers a directory as a package if it
+        contains manifest.json (packages.py:457 scans cockpit/*/manifest.json).
+        Without registration, every URL like
+        /cockpit/@localhost/sysdeck-common/bridge.js returned 404, and the
+        dynamic import("../sysdeck-common/bridge.js") failed.</p>
+        <p>Fix: added shared/manifest.json with name="sysdeck-common". Pattern
+        verified from cockpit's own pkg/static/manifest.json (just `{}`).</p>
+      </description>
+    </release>
+    <release version="0.0.24" date="2026-08-17">
+      <description>
+        <p>THOROUGH UNINSTALLER: previous `make uninstall` only removed
+        /usr/share/cockpit/sysdeck-* (with dash). v0.0.9-v0.0.19 installed
+        to /usr/share/cockpit/sysdeck/ (no dash) — that directory was NEVER
+        removed by uninstall, leaving stale manifests that Cockpit would
+        discover alongside the new ones. v0.0.24 uninstall now removes
+        every prior-version install path.</p>
+        <p>VISIBLE ERROR REPORTING: every plugin's index.html now installs
+        window error handlers that replace "Loading…" with the actual
+        error message on the page. No devtools required.</p>
+        <p>COCKPIT.JS PRESENCE CHECK: every plugin's index.html checks
+        `if (!window.cockpit)` before importing bridge.js, and shows a
+        clear error if cockpit.js failed to load.</p>
+      </description>
+    </release>
+    <release version="0.0.23" date="2026-08-17">
+      <description>
+        <p>ROOT CAUSE FOUND AND FIXED: every plugin page was stuck on "Loading…"
+        because shared/bridge.js did `import cockpit from "../base1/cockpit.js"`
+        — an ES module import. But pkg/base1/cockpit.js is NOT an ES module:
+        it's a UMD/IIFE that sets window.cockpit as a global. The import
+        returned undefined, so cockpit.spawn() threw when mount() ran, and
+        the plugin page never rendered.</p>
+        <p>Fix: replaced the broken import with `const cockpit = window.cockpit`
+        — exactly how cockpit's own esbuild plugin (build.js:71-83) accesses
+        it after rewriting `import cockpit from "cockpit"` to
+        `module.exports = cockpit`.</p>
+        <p>New guard: check-no-broken-cockpit-import in `make check` scans
+        every JS file for the broken pattern. Regression-tested.</p>
+      </description>
+    </release>
+    <release version="0.0.22" date="2026-08-17">
+      <description>
+        <p>ROOT CAUSE FOUND AND FIXED: the requires.cockpit field was set to
+        ">=239" in every manifest since v0.0.9. Cockpit's packages.py uses
+        sortify_version() (a 0-pad of numeric components) to compare versions,
+        NOT a semver parser. ">=239" becomes ">=00000239" which is GREATER than
+        any real cockpit version, causing packages.py:263 to raise JsonError
+        and silently reject every manifest at install time.</p>
+        <p>Fix: changed requires.cockpit from ">=239" to "239" (bare number) in
+        all 18 manifests. This matches the pattern in cockpit's own
+        pkg/systemd/manifest.json ("cockpit": "265").</p>
+        <p>Also renamed all 18 sidebar labels from "SD &lt;Name&gt;" to
+        "SysDeck &lt;Name&gt;" per user requirement: SysDeck should never be
+        abbreviated.</p>
+      </description>
+    </release>
+    <release version="0.0.21" date="2026-08-17">
+      <description>
+        <p>Fix AppStream metainfo: use &lt;launchable type="cockpit-manifest"&gt;
+        instead of &lt;provides&gt;&lt;cockpit-manifest&gt; — matching the pattern
+        used by cockpit-project's own plugins in src/appstream/.</p>
+        <p>Rewrite tests/check_manifest_consistency.py to validate against the
+        REAL Cockpit manifest contract from pkg/shell/manifests.ts and
+        src/cockpit/packages.py, not the invented contract used in v0.0.19-v0.0.20.</p>
+      </description>
+    </release>
+    <release version="0.0.20" date="2026-08-17">
+      <description>
+        <p>ARCHITECTURAL OVERHAUL: split the single SysDeck shell into 18
+        standalone Cockpit plugins.</p>
+      </description>
+    </release>
+    <release version="0.0.19" date="2026-08-17">
+      <description>
+        <p>Rewrote manifest to match cockpit-podman reference pattern.</p>
+      </description>
+    </release>
+  </releases>
+</component>

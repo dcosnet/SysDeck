@@ -1,0 +1,12 @@
+#!/bin/sh
+# postinst: restart cockpit.socket after install
+set -e
+
+if [ "$1" = "configure" ]; then
+    # Restart cockpit.socket so the new plugin appears in the menu.
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl try-restart cockpit.socket 2>/dev/null || true
+    fi
+fi
+
+#DEBHELPER#

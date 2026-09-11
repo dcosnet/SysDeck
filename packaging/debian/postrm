@@ -1,0 +1,11 @@
+#!/bin/sh
+# postrm: restart cockpit.socket after removal to flush the menu
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl try-restart cockpit.socket 2>/dev/null || true
+    fi
+fi
+
+#DEBHELPER#

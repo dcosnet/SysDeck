@@ -1,0 +1,47 @@
+{
+    "version": 0,
+    "name": "sysdeck-services",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Service / Ports",
+            "order": 45,
+            "keywords": [
+                {
+                    "matches": [
+                        "service",
+                        "services",
+                        "port",
+                        "ports",
+                        "editor",
+                        "listen",
+                        "listening",
+                        "tcp",
+                        "socket",
+                        "sshd",
+                        "ssh",
+                        "cockpit",
+                        "caddy",
+                        "varnish",
+                        "mariadb",
+                        "mysql",
+                        "ollama",
+                        "openwebui",
+                        "open-webui",
+                        "hermes",
+                        "odysseus",
+                        "forgejo",
+                        "config",
+                        "restart",
+                        "set port",
+                        "change port",
+                        "edit port"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

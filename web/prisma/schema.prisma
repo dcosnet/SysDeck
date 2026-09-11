@@ -1,0 +1,332 @@
+// SysDeck Web Edition v0.2.0 — state schema
+// Mirrors the cockpit edition's /var/lib/sysdeck state dirs + /etc/sysdeck config.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Global audit log (mirrors /etc/cockpit/MODULE_LICENSES.log pattern) ──
+model AuditLog {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  module    String
+  action    String
+  detail    String?
+  actor     String   @default("operator")
+}
+
+// ── Image Builder ──────────────────────────────────────────────────
+model SdProfile {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  backend   String // mkosi | vmdb2 | archiso | live-build
+  base      String? // shipped profile it was copied from
+  packages  String   @default("") // newline-separated package list
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SdBuild {
+  id         String   @id @default(cuid())
+  buildId    String   @unique // <profile>-<timestamp>
+  profile    String
+  backend    String
+  state      String   @default("queued") // queued | running | succeeded | failed
+  rc         Int?
+  durationMs Int?
+  log        String   @default("")
+  artifacts  SdArtifact[]
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+}
+
+model SdArtifact {
+  id        String   @id @default(cuid())
+  buildId   String
+  path      String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  build     SdBuild  @relation(fields: [buildId], references: [buildId])
+}
+
+// ── Firewall ───────────────────────────────────────────────────────
+model FwRuleset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  backend   String // nftables | iptables | firewalld | sysdeck-fw | cilium
+  template  String? // public-webserver | vps-webserver | ai-llm | remote-admin | no-services | cilium
+  active    Boolean  @default(false)
+  appliedAt DateTime?
+}
+
+model FwRule {
+  id       String  @id @default(cuid())
+  ruleset  String
+  chain    String  @default("INPUT")
+  action   String // accept | drop | reject | log
+  proto    String  @default("tcp")
+  port     String?
+  source   String?
+  comment  String?
+  position Int     @default(0)
+}
+
+// ── Service / Ports editor (SERVICES_REGISTRY from firewall.py) ────
+model ServicePort {
+  id        String  @id @default(cuid())
+  service   String  @unique // ssh | cockpit | caddy | varnish | mariadb | ollama | openwebui | hermes | odysseus
+  label     String
+  port      Int
+  configPath String
+  configKey  String
+  running    Boolean @default(false)
+  updatedPort Int?
+}
+
+// ── Policy & permissions ───────────────────────────────────────────
+model PolicyRule {
+  id       String   @id @default(cuid())
+  scope    String // e.g. "org.sysdeck.builder.modify"
+  subject  String
+  effect   String   @default("allow") // allow | deny
+  priority Int      @default(50)
+  enabled  Boolean  @default(true)
+  note     String?
+}
+
+// ── Encryption Vault ───────────────────────────────────────────────
+model VaultEntry {
+  id        String   @id @default(cuid())
+  label     String
+  kind      String // luks-volume | keyfile | tpm-sealed | secret
+  device    String?
+  cipher    String?
+  sizeBytes Int?
+  status    String   @default("locked") // locked | unlocked | sealed
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+// ── Hardware alerts (orphaned bridge finally gets its panel) ────────
+model HwDevice {
+  id        String   @id @default(cuid())
+  deviceId  String   @unique
+  kind      String // usb-storage | thunderbolt | bluetooth | pci | rfid | firewire
+  name      String
+  vendor    String?
+  authorized Boolean  @default(true)
+  whitelisted Boolean @default(false)
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @default(now())
+}
+
+model HwAlert {
+  id          String   @id @default(cuid())
+  deviceId    String
+  kind        String // unauthorized-usb | dma-thunderbolt | rogue-bluetooth | firmware-tamper | new-pci
+  severity    String   @default("warn") // info | warn | danger
+  message     String
+  state       String   @default("active") // active | acknowledged | dismissed
+  ts          DateTime @default(now())
+}
+
+// ── Mining ──────────────────────────────────────────────────────────
+model MiningRig {
+  id        String   @id @default(cuid())
+  name      String
+  host      String
+  coins     String   @default("BTC")
+  status    String   @default("online") // online | offline | idle | error
+  hashrate  Float    @default(0) // TH/s
+  powerW    Int      @default(0)
+  tempC     Float    @default(0)
+  pool      String?
+  gpus      MiningGpu[]
+  updatedAt DateTime @updatedAt
+}
+
+model MiningGpu {
+  id       String  @id @default(cuid())
+  rigId    String
+  model    String
+  hashrate Float  @default(0)
+  tempC    Float  @default(0)
+  fanPct   Int    @default(0)
+  rig      MiningRig @relation(fields: [rigId], references: [id])
+}
+
+// ── Databases ──────────────────────────────────────────────────────
+model DbInstance {
+  id        String   @id @default(cuid())
+  name      String
+  engine    String // mariadb | postgres | sqlite | redis
+  host      String   @default("127.0.0.1")
+  port      Int
+  status    String   @default("running")
+  sizeMb    Float    @default(0)
+  conns     Int      @default(0)
+  version   String?
+  note      String?
+}
+
+// ── Containers & VMs / Kata / Remote FS ────────────────────────────
+model Container {
+  id        String   @id @default(cuid())
+  name      String
+  driver    String // incus | lxc | podman | libvirt | firecracker
+  kind      String   @default("container") // container | vm
+  image     String?
+  state     String   @default("stopped") // running | stopped | frozen | error
+  cpuPct    Float    @default(0)
+  memMb     Float    @default(0)
+  uptimeS   Int      @default(0)
+  ports     String?
+  createdAt DateTime @default(now())
+}
+
+model KataPod {
+  id        String   @id @default(cuid())
+  name      String
+  runtime   String   @default("kata-qemu")
+  sandbox   String
+  state     String   @default("running")
+  vmm       String?
+  memMb     Float    @default(0)
+  cpuPct    Float    @default(0)
+  pods      Int      @default(1)
+}
+
+model RemoteFs {
+  id        String   @id @default(cuid())
+  name      String
+  backend   String // ceph | glusterfs | moosefs | beegfs | orangefs
+  state     String   @default("healthy") // healthy | degraded | offline
+  sizeGb    Float    @default(0)
+  usedGb    Float    @default(0)
+  mounts    Int      @default(1)
+  bricks    Int      @default(0)
+  note      String?
+}
+
+// ── Media: Jellyfin + Photos ───────────────────────────────────────
+model MediaItem {
+  id        String   @id @default(cuid())
+  kind      String // movie | series | episode | photo
+  title     String
+  library   String
+  sizeMb    Float    @default(0)
+  year      Int?
+  addedAt   DateTime @default(now())
+  playCount Int      @default(0)
+}
+
+model MediaSession {
+  id        String   @id @default(cuid())
+  user      String
+  device    String
+  item      String
+  state     String   @default("playing") // playing | paused | idle
+  startedAt DateTime @default(now())
+}
+
+model PhotoLibrary {
+  id        String   @id @default(cuid())
+  backend   String // photoprism | piwigo | lychee | nextcloud-memories | librephotos
+  name      String
+  photos    Int      @default(0)
+  videos    Int      @default(0)
+  sizeGb    Float    @default(0)
+  state     String   @default("idle") // indexing | idle | scanning | error
+}
+
+// ── Benchmark history ──────────────────────────────────────────────
+model BenchmarkResult {
+  id        String   @id @default(cuid())
+  suite     String // cpu | memory | disk | network
+  score     Float
+  metric    String
+  detail    String?
+  ts        DateTime @default(now())
+}
+
+// ── Integrity (tripwire-style) ─────────────────────────────────────
+model IntegrityBaseline {
+  id        String  @id @default(cuid())
+  path      String @unique
+  hash      String
+  kind      String  @default("file")
+  ts        DateTime @default(now())
+}
+
+model IntegrityDrift {
+  id        String  @id @default(cuid())
+  path      String
+  oldHash   String?
+  newHash   String?
+  change    String // modified | added | removed
+  detected  DateTime @default(now())
+  resolved  Boolean @default(false)
+}
+
+// ── Netsec ─────────────────────────────────────────────────────────
+model NetsecBan {
+  id        String   @id @default(cuid())
+  ip        String
+  service   String   @default("sshd")
+  jail      String   @default("sysdeck")
+  reason    String?
+  strikes   Int      @default(1)
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model NetsecScan {
+  id        String   @id @default(cuid())
+  target    String
+  kind      String   @default("port-sweep")
+  ports     String
+  result    String   @default("done")
+  ts        DateTime @default(now())
+}
+
+// ── 3rd-party module installer (catalog from modules3p.py) ─────────
+model Module3pInstall {
+  id        String   @id @default(cuid())
+  moduleId  String   @unique
+  action    String   @default("install") // install | uninstall
+  license   String
+  ts        DateTime @default(now())
+}
+
+// ── Fleet nodes ────────────────────────────────────────────────────
+model FleetNode {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  host      String
+  role      String   @default("compute") // compute | storage | edge | control
+  arch      String   @default("x86_64")
+  state     String   @default("online") // online | offline | degraded
+  cpuModel  String?
+  cores     Int      @default(4)
+  memGb     Int      @default(8)
+  local     Boolean  @default(false)
+}
+
+// ── Themes ─────────────────────────────────────────────────────────
+model ThemeSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+// ── KV store for misc module state ─────────────────────────────────
+model SdKv {
+  key   String @id
+  value String
+  ts    DateTime @default(now())
+}

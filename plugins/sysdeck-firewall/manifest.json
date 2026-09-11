@@ -1,0 +1,50 @@
+{
+    "version": 0,
+    "name": "sysdeck-firewall",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Firewall",
+            "order": 21,
+            "keywords": [
+                {
+                    "matches": [
+                        "firewall",
+                        "nftables",
+                        "iptables",
+                        "rules",
+                        "filter",
+                        "ban",
+                        "unban",
+                        "template",
+                        "ssh",
+                        "rate limit",
+                        "cilium",
+                        "ebpf",
+                        "xdp",
+                        "sysdeck-fw",
+                        "zone",
+                        "color zone",
+                        "airwall",
+                        "backend",
+                        "security",
+                        "hardening",
+                        "remote-admin",
+                        "public-webserver",
+                        "ai-llm",
+                        "ollama",
+                        "openwebui",
+                        "hermes",
+                        "odysseus",
+                        "caddy",
+                        "varnish",
+                        "mariadb"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

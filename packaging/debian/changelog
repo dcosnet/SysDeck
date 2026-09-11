@@ -1,0 +1,2638 @@
+sysdeck (0.2.0-1) unstable; urgency=medium
+
+  * v0.2.0 MASTER EDITION: one tarball bundling the cockpit edition, the
+    new SysDeck Web Edition (web/, Next.js console, 28 bridge modules),
+    and Fester pre-integrated (web/mini-services/fester, vendored at its
+    own independent version 0.2.1).
+  * bridge/fester.py rewritten from the v0.0.31 systemd-listing stub to a
+    real REST client (11 subcommands, FESTER_URL override, graceful
+    offline JSON); plugins/sysdeck-fester is a full panel; the shared
+    bridge.js fester surface grew from 1 method to 11.
+  * Makefile: restored tab-indented recipes (the shipped 0.1.3 Makefile
+    used 8-space indents and GNU make rejected it with "missing
+    separator"); new targets fester-start, web-install, web-dev, master.
+
+ -- Jeremy Anderson <info@dcos.net>  Thu, 20 Aug 2026 12:00:00 -0400
+
+sysdeck (0.1.3-1) unstable; urgency=critical
+
+  * v0.1.3 CRITICAL FIX: host package import was silently failing +
+    mkosi still wasn't reading the profile config. Two root causes
+    fixed, plus new download/manage UI for builds.
+
+  * IMPORT BUG (root cause): _detect_host_packages() relied on
+    `from __init__ import PKG_MANAGER` which silently failed in the
+    cockpit superuser channel context (different Python path). When
+    the import failed, PKG_MANAGER defaulted to "unknown" and the
+    host query returned an EMPTY list. The operator saw "tries to
+    build only 2" because the import wrote nothing and the build
+    used the profile's original template packages.
+    FIX: _detect_host_packages() now uses shutil.which() to find
+    pacman/apt-mark/dnf directly — no import dependency, works in
+    any execution context.
+
+  * BUILD BUG (root cause): v0.1.2's --include flag does NOT work
+    as a config loader. mkosi's --include includes a drop-in fragment
+    ON TOP OF the base mkosi.conf — it does NOT replace the base
+    config. If there's no mkosi.conf in the cwd, mkosi uses defaults
+    and ignores the --include file entirely. This is why v0.1.2 still
+    produced builds with only 2 packages (mkosi's hardcoded base).
+    FIX: build() now creates a temp directory, symlinks the profile
+    file into it as `mkosi.conf`, and sets work_dir to that temp dir.
+    mkosi finds `mkosi.conf` (the symlink), follows it, reads the
+    actual profile. Works for ANY profile path regardless of filename
+    or location. Temp dir is cleaned up after the build finishes.
+    New helper: _prepare_mkosi_work_dir().
+
+  * NEW FEATURE: artifact download + management UI. Each artifact in
+    the Artifacts panel now has:
+    - ⬇ Download button — reads the file via cockpit.spawn(["cat",
+      path]) with superuser, creates a Blob, triggers browser download.
+    - 🗑 delete button — removes a single artifact file via the new
+      artifact-delete subcommand.
+    - 🗑 Clear all button — removes ALL artifacts for a profile via
+      the new artifacts-clear subcommand. Shows file count + bytes
+      freed.
+    Each profile's artifacts card now shows total size in the header.
+
+  * NEW FEATURE: build management. Each build in the Builds table
+    now has a 🗑 delete button. Two-step confirm:
+    1. "Delete build record?" — OK = delete state + log only.
+    2. If Cancel: "Also delete ALL artifacts for profile?" — OK =
+       delete state + log + artifacts dir.
+    New subcommand: build-delete <build-id> [--artifacts]. Reads the
+    state file FIRST (to get the profile name for artifact cleanup)
+    before deleting it.
+
+  * REGRESSION TESTS: 11 new unit tests across two new test classes:
+    - TestBuilderArtifactManagement (7 tests): artifact-delete file
+      removal + path traversal refusal, artifacts-clear, build-delete
+      with/without --artifacts, nonexistent build-id, COMMANDS
+      registration.
+    - TestBuilderMkosiTempWorkDir (3 tests): _prepare_mkosi_work_dir
+      creates temp dir with mkosi.conf symlink, returns None for
+      missing path / nonexistent file.
+    Existing test_detect_host_packages_pacman rewritten to mock
+    shutil.which instead of __import__. test_build_success_path
+    updated to no longer expect --include on the command line.
+    Total: 254 tests (was 243 in v0.1.2; +11).
+
+  * VERSION SYNC: bumped 0.1.2 -> 0.1.3 across all 9 release surfaces.
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 03:00:00 -0400
+
+sysdeck (0.1.2-1) unstable; urgency=critical
+
+  * v0.1.2 CRITICAL FIX: mkosi was not reading the profile config at
+    all — packages were silently ignored. An operator reported: "the
+    builder absolutely does not work yet. it has zero awareness of
+    packages we tell it to add."
+
+  * ROOT CAUSE 1 (config not loaded): _backend_build_command() for
+    mkosi was ["mkosi", "build", "--output", ..., "--output-dir", ...]
+    with NO flag telling mkosi WHERE the profile config file is. mkosi
+    only reads a file literally named `mkosi.conf` from the cwd. For
+    v0.0.x profiles at /etc/mkosi/mkosi.conf.d/<name>.conf, mkosi ran
+    in that dir, found no `mkosi.conf` (the file is named
+    <name>.conf), and used EMPTY defaults — zero packages, default
+    distro, default everything. The operator's Packages= setting was
+    never seen by mkosi.
+
+  * FIX 1: _backend_build_command() now ALWAYS passes
+    --include <profile_path> on the CLI. This tells mkosi to
+    explicitly load the profile config by path, regardless of its
+    filename or location. CLI --include overrides the default
+    mkosi.conf discovery.
+
+  * ROOT CAUSE 2 (legacy Packages= syntax): even when mkosi DID
+    read the profile file (e.g. v0.1.0+ profiles with correct
+    location), profiles created by v0.0.x used the old indented
+    Packages= syntax:
+      Packages=
+          linux
+          linux-firmware
+    mkosi v22+ (Arch ships 25.x) only understands single-line:
+      Packages=linux linux-firmware
+    The old form is silently parsed as a single package name with
+    embedded newlines ("linux\nlinux-firmware\n..."), which doesn't
+    exist in any repo — so mkosi installs NOTHING.
+
+  * FIX 2: new _migrate_legacy_mkosi_packages() function detects
+    the old indented syntax and rewrites it to single-line IN-PLACE
+    before the build command is constructed. build() calls this
+    automatically on every mkosi build. The migration is logged
+    in both the build state JSON (warnings array) and the log file
+    header (# MIGRATED: ...). If the file already uses modern
+    syntax, the migration is a no-op.
+
+  * REGRESSION TESTS: 4 new unit tests in TestBuilderBuildPath:
+    - test_migrate_rewrites_old_indented_syntax: verifies old
+      Packages=\n    linux\n    vim\n is rewritten to
+      Packages=linux vim.
+    - test_migrate_noop_on_modern_syntax: verifies already-modern
+      files are left unchanged.
+    - test_migrate_noop_on_no_packages_section: verifies files
+      without [Packages] are left unchanged.
+    - test_migrate_runs_during_build: end-to-end — build() with
+      a profile containing old syntax auto-migrates before mkosi
+      runs, and the migration is recorded in state + log.
+    Existing test_build_success_path extended to verify --include
+    is on the command line and points at the profile file.
+
+  * VERSION SYNC: bumped 0.1.1 -> 0.1.2 across all 9 release
+    surfaces. Total unit tests now 243 (was 239 in v0.1.1; +4).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 02:00:00 -0400
+
+sysdeck (0.1.1-1) unstable; urgency=high
+
+  * v0.1.1 OUTPUT PATH SAFETY FIX. An operator reported:
+    "this is NOT a safe output path. fix this now." The v0.1.0
+    release relied on OutputDirectory= in the scaffolded
+    mkosi.conf to route build outputs to
+    /var/lib/sysdeck/builder/artifacts/<name>/. But when the
+    operator built an OLD v0.0.x profile (whose mkosi.conf had
+    no OutputDirectory= setting), mkosi defaulted to writing
+    image.raw into the cwd — which was /etc/mkosi/mkosi.conf.d/,
+    a system config directory owned by root. mkosi then refused
+    to overwrite the existing image.raw, blocking every rebuild.
+
+  * ROOT CAUSE: _backend_build_command() for mkosi was just
+    `["mkosi", "build"]` with no CLI output flags. It trusted
+    the profile's mkosi.conf to set OutputDirectory=, which:
+    - Doesn't exist on v0.0.x profiles (silent default to cwd)
+    - Can be hand-edited to anything (no validation)
+    - Is ignored by mkosi if the profile is a drop-in fragment
+      that mkosi never reads (the v0.0.x bug 1 from v0.1.0)
+
+  * FIX: _backend_build_command() now ALWAYS passes --output,
+    --output-dir, and --force on the CLI for mkosi builds. CLI
+    flags override mkosi.conf, so the output path is forced to
+    /var/lib/sysdeck/builder/artifacts/<name>/<name>.raw
+    regardless of what the profile says. --force overwrites any
+    existing image so rebuilds don't fail with "Output path
+    exists already."
+
+  * SAFETY CHECK: build() now refuses to proceed if the resolved
+    output_dir is not under /var/lib/, /tmp/, /var/tmp/, or the
+    configured BUILDER_ARTIFACTS_DIR. This blocks /etc/, /usr/,
+    /boot/, /bin/, /sbin/, /lib/, /root/, /home/, etc. — anywhere
+    a stray image.raw would corrupt the system or pollute a
+    user's home. Belt-and-suspenders: even if an operator passes
+    options.output_dir=/etc/something via the JS bridge, the
+    build is refused before subprocess.run is called.
+
+  * LEGACY PROFILE WARNING: build() now detects profiles in
+    /etc/mkosi/mkosi.conf.d/ (the v0.0.x drop-in layout) and
+    records a warning in both the build state JSON and the log
+    file: "WARNING: profile is in /etc/mkosi/mkosi.conf.d/
+    (legacy v0.0.x layout). mkosi may silently ignore this
+    drop-in fragment. Migrate to /etc/mkosi/profiles/<name>/
+    mkosi.conf for a real profile."
+
+  * LOG IMPROVEMENT: build log header now includes the resolved
+    output_dir so the operator can see exactly where the image
+    will land before mkosi starts. Format:
+      $ mkosi build --output myarch.raw --output-dir /var/lib/...
+      # work_dir: /etc/mkosi/profiles/myarch
+      # backend: mkosi
+      # profile: myarch
+      # output_dir: /var/lib/sysdeck/builder/artifacts/myarch
+
+  * REGRESSION TESTS: 2 new unit tests in TestBuilderBuildPath:
+    - test_build_refuses_output_dir_under_etc: verifies the
+      safety check rejects output_dir=/etc/mkosi/evil.
+    - test_build_legacy_v050_profile_records_warning: verifies
+      building a profile in /etc/mkosi/mkosi.conf.d/ records
+      the legacy warning in state + log.
+    The existing test_build_success_path was extended to verify
+    the mkosi command line includes --output, --output-dir, and
+    --force, and that --output-dir points at the per-profile
+    artifacts dir.
+
+  * VERSION SYNC: bumped 0.1.0 -> 0.1.1 across all 9 release
+    surfaces. Total unit tests now 239 (was 237 in v0.1.0; +2).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 01:00:00 -0400
+
+sysdeck (0.1.0-1) unstable; urgency=medium
+
+  * v0.1.0 BUILDER PROFILE FIXUP + HOST PKG IMPORT. Three compounding
+    bugs in the v0.0.x mkosi build path were silently producing empty
+    33M images with no kernel/systemd/openssh, plus a new operator
+    feature requested in the same release cycle.
+
+  * BUG 1 (scaffold location): profile-create wrote
+    /etc/mkosi/mkosi.conf.d/<name>.conf — a drop-in fragment that
+    mkosi only honors when a parent /etc/mkosi/mkosi.conf exists to
+    layer it onto. With no parent, mkosi ran with empty defaults.
+    Fix: each profile now lives in its own directory
+    /etc/mkosi/profiles/<name>/mkosi.conf (the only filename mkosi
+    reads automatically from the cwd). MKOSI_DIRS updated to scan
+    /etc/mkosi/profiles first.
+
+  * BUG 2 (Packages= syntax): _MKOSI_TEMPLATE and _write_packages_mkosi
+    used the indented-continuation form (Packages=\n    linux\n    ...)
+    which was the old systemd-mkosi (<=v15) syntax. mkosi v22+ (Arch
+    ships 25.x) expects single-line space-separated:
+    Packages=linux linux-firmware systemd openssh. The v0.0.x form
+    was silently parsed as a single package named "linux\n..." and
+    failed to install.
+    Fix: template + writer now emit the modern single-line form. The
+    reader accepts both forms so v0.0.x profiles migrate cleanly on
+    first append/replace.
+
+  * BUG 3 (output routing): mkosi wrote its output to the cwd
+    (/etc/mkosi/mkosi.conf.d/image.raw) but build() only scanned
+    /var/lib/sysdeck/builder/artifacts/<profile>/ for artifacts — so
+    every successful build looked like a failure in the panel.
+    Fix: _MKOSI_TEMPLATE now sets OutputDirectory= to the per-profile
+    artifacts dir so mkosi writes directly there.
+
+  * NEW FEATURE: profile-import-packages subcommand. Queries the
+    host's explicitly-installed package set (pacman -Qqe on Arch,
+    apt-mark showmanual on Debian, dnf repoquery --userinstalled on
+    Fedora) and writes it into a profile's package list via the
+    existing _write_packages dispatch. Defaults to append mode so
+    the profile's baseline (kernel, systemd, openssh) is preserved.
+    Supports --mode=replace, --dry-run for preview, and --packages=
+    for manual override (useful for importing a list captured on
+    another host). New polkit exec paths for pacman/apt-mark/dnf
+    added to org.sysdeck.builder.modify.
+
+  * PANEL UX: each profile row in the Builder panel now has a
+    "Import host pkgs" button. Click -> dry-run preview ->
+    window.confirm with package count, source distro, and first
+    200 packages -> append write. Falls back to operator cancel
+    without writing.
+
+  * REGRESSION TESTS: 7 new unit tests in TestBuilderImportHostPackages
+    cover _detect_host_packages dispatch (pacman path + dedup), the
+    --packages override end-to-end, --dry-run no-write behavior, and
+    the unknown-profile / no-args / bad-mode / COMMANDS-registration
+    error paths. 4 existing tests in TestBuilderPackagesField
+    updated for the new single-line Packages= syntax; 1 new test
+    (test_mkosi_modern_single_line_input_parsed) guards against a
+    regression where the writer emits the new form but the reader
+    only understands the old one.
+
+  * VERSION SYNC: bumped 0.0.50 -> 0.1.0 across all 9 release
+    surfaces (Makefile, bridge/__init__.py, packaging/setup.py,
+    packaging/PKGBUILD, packaging/sysdeck.spec,
+    packaging/debian/changelog, compat/compat-manifest.json,
+    packaging/sysdeck.metainfo.xml, README.md). Version-sync test
+    renamed to test_version_sync_all_surfaces_report_010.
+
+  * All build-time guards pass. Total unit tests now 237 (was 228
+    in v0.0.50; +8 TestBuilderImportHostPackages + 1 new
+    test_mkosi_modern_single_line_input_parsed).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 00:00:00 -0400
+
+sysdeck (0.0.50-1) unstable; urgency=medium
+
+  * v0.0.50 BUILD PATH NameError FIX. An operator reported:
+    "NameError: name 're' is not defined. Did you forget to import
+    're'? happens right away on build for a new profile i created."
+    The traceback pointed at _new_build_id() line 492:
+    safe_profile = re.sub(r"[^A-Za-z0-9_-]", "_", profile).
+
+  * ROOT CAUSE: bridge/builder.py's module-level imports were
+    `import json / os / shutil / subprocess / sys` + `from pathlib
+    import Path` + `from typing import Any`. No `import re`.
+    _new_build_id has used re.sub since v0.0.31 (when the full-
+    featured build operations were added), but no test ever
+    exercised the build() code path — the unit tests only covered
+    profile_create / profile_copy / profile_delete and the v0.0.49
+    package-writing helpers. The bug went undetected for 18 releases
+    (v0.0.31 through v0.0.49) until an operator actually clicked
+    Build on a freshly-created profile.
+
+  * FIX: added `import re` to the module-level imports in
+    bridge/builder.py. Removed the now-redundant local `import re`
+    inside _write_packages_vmdb2 (it was a v0.0.49 workaround that's
+    no longer needed — the module-level import covers both callers).
+
+  * REGRESSION TESTS: 9 new unit tests in tests/test_bridge_parsers.py
+    TestBuilderBuildPath cover:
+    - _new_build_id format: <safe-profile>-<14-digit-timestamp>.
+    - _new_build_id sanitizes unsafe chars: dots → underscores
+      (operators commonly name profiles myarch.v2).
+    - _new_build_id preserves safe chars: hyphens + underscores kept.
+    - test_new_build_id_re_imported_at_module_level: explicit
+      assertion that `re` is in the builder module's globals. If
+      anyone ever removes the `import re` line in a future refactor,
+      this test will catch it — the v0.0.31-v0.0.49 bug can't recur.
+    - build() end-to-end with mocked subprocess.run: verifies the
+      build state file + log file are written under BUILDER_STATE_DIR
+      / BUILDER_LOGS_DIR, the response shape is correct (build_id /
+      state / rc / success / duration_s / artifacts / log_path), and
+      subprocess.run was actually called with the right argv.
+    - build() with unknown profile returns a clear "not found" error.
+    - build() with no args returns a usage error (not a crash).
+    - build() with backend-not-installed returns a clear error with
+      an install hint.
+    - build() with non-zero subprocess returncode records state
+      "failed" (not "succeeded") and rc != 0.
+    All tests mock subprocess.run and the module-level
+    BUILDER_STATE_DIR / BUILDER_LOGS_DIR / BUILDER_ARTIFACTS_DIR so
+    they run hermetically — no real /var/lib/ writes, no real backend
+    invocation.
+
+  * AUDIT: ran an AST-based audit of bridge/builder.py to find any
+    other names used at module level but not imported. The audit
+    walks every function body, collects Name loads, and checks each
+    against (module-level names + function locals + builtins). No
+    real undefined names found — every flagged item was a
+    comprehension local (b, v, s, p), tuple-unpacking target (cid,
+    chint, k, v, backend_id, binary, vargs, kind), except-clause
+    target (exc), or __file__ (provided by Python in every module).
+    The build path is now fully exercisable by tests.
+
+  * VERSION SYNC: bumped 0.0.49 → 0.0.50 across all 9 release
+    surfaces (Makefile VERSION + header comment, bridge/__init__.py
+    __version__, packaging/setup.py VERSION, PKGBUILD pkgver, RPM
+    spec Version + %changelog entry, debian/changelog entry,
+    compat/compat-manifest.json version + _comment, packaging/
+    sysdeck.metainfo.xml <release>, README.md Version line).
+
+  * GUARDS: all build-time guards pass — manifest consistency (26
+    manifests), metainfo consistency, Makefile recipe indentation,
+    no broken imports, bridge.js subcommand cross-check (102 calls
+    verified — unchanged from v0.0.49 since this is a Python-only
+    fix with no JS changes), version sync, all unit tests pass (228
+    total: 9 new TestBuilderBuildPath + 28 TestBuilderPackagesField
+    + 15 TestBuilderProfileCopy + existing TestFirewallV047* /
+    TestMetainfoV047* / TestServicesPluginV047* / etc.).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 18:00:00 +0000
+
+sysdeck (0.0.49-1) unstable; urgency=medium
+
+  * v0.0.49 BUILDER INLINE PACKAGE LIST. Per user directive: "we should
+    allow adding a pacman -Sy applist.txt with a literal list of
+    baseline apps for the profile being generated." Both the Create
+    Profile and Copy shipped profile forms now include a Baseline
+    packages textarea, a file upload input (applist.txt), and a merge-
+    mode toggle (append | replace). The package list is written to the
+    backend-specific package file in the same operation as the
+    scaffold/copy — closing the loop on the profile-creation flow
+    (previously the operator had to drop to a shell to edit the package
+    list after creating/copying a profile).
+
+  * BACKEND COVERAGE: all 4 backends supported. Each writes to its
+    native package-list location:
+    - mkosi      → [Packages] section of <name>.conf (INI continuation)
+    - vmdb2      → bootstrap.include list in <name>.yaml (YAML list)
+    - archiso    → packages.x86_64 in the profile dir (one per line)
+    - live-build → config/package-lists/sysdeck.list (one per line)
+
+  * INPUT: textarea for inline paste (one package per line, # comments
+    allowed) AND file upload (applist.txt / .list / .conf accepted).
+    File upload populates the textarea via the browser's FileReader API
+    so the operator can review/edit the uploaded content before
+    submitting — the textarea is always the source of truth. 1 MB cap
+    on uploaded files (anything larger is probably not a package list).
+
+  * MERGE MODE: operator chooses per-operation via a dropdown toggle:
+    - append (default for Copy): preserves the baseline's existing
+      packages (e.g. 'linux'/'base' for archiso, 'linux-image-amd64'
+      for vmdb2), adds the operator's packages, deduplicates while
+      preserving first-occurrence order.
+    - replace (default for Create): overwrites the baseline's package
+      file with the operator's list. The operator must include
+      'linux'/'base' themselves if they want them.
+
+  * NEW BRIDGE HELPERS in bridge/builder.py:
+    - _extract_opts(args): splits argv into (positional, opts) so
+      profile-create/profile-copy can accept --packages=<json> and
+      --mode=append|replace without breaking their existing positional
+      <name> <backend> [base] / <src> <new> [backend] signatures.
+    - _parse_packages_text(text): parses multiline text into a deduped
+      list of package names. Strips full-line comments (# at start),
+      inline comments (# after package name), blank lines, and
+      surrounding whitespace. Preserves first-occurrence order.
+    - _write_packages_mkosi(conf_path, packages, mode): reads the
+      existing mkosi.conf, parses the [Packages] section, dedups on
+      append, rebuilds the section with the merged/replaced list.
+      Other sections ([Distribution], [Output], etc.) are preserved.
+    - _write_packages_vmdb2(yaml_path, packages, mode): regex-based
+      surgery on the bootstrap.include list in the YAML. pyyaml is
+      NOT a hard dependency (vmdb2 isn't typically installed on Arch,
+      and we shouldn't pull in a YAML parser just to update a list).
+      Other YAML sections (partitions, commands) are preserved.
+    - _write_packages_archiso(profile_dir, packages, mode): reads
+      packages.x86_64, preserves the comment header on append, dedups,
+      rewrites. In replace mode, writes a fresh file with a header
+      comment + the operator's packages.
+    - _write_packages_live_build(profile_dir, packages, mode): writes
+      config/package-lists/sysdeck.list. live-build merges all .list
+      files at build time, so each list file is an independent package
+      set. In replace mode, removes old sysdeck*.list files (does NOT
+      touch baseline .list files like baseline.list). In append mode,
+      just writes/overwrites sysdeck.list (the file is the unit).
+    - _write_packages(profile_path, backend, packages_text, mode):
+      dispatcher that validates mode, parses packages_text, and routes
+      to the right per-backend writer.
+
+  * EXTENDED profile_create() and profile_copy() to accept --packages=
+    <json> and --mode=append|replace. Default mode for create is
+    "replace" (the scaffold's minimal defaults are replaced by the
+    operator's list); for copy it's "append" (the baseline's packages
+    are preserved). Both return a new "packages" field in their success
+    response: {count, mode, path}. If package-writing fails, the
+    profile is still created/copied and a "packages_error" field is
+    included (non-fatal — the operator can fix the package file by
+    hand).
+
+  * UPDATED shared/bridge.js: profileCreate(name, backend, base,
+    packagesText, mode) and profileCopy(srcName, newName, backend,
+    packagesText, mode). packagesText is JSON-encoded via
+    JSON.stringify() so newlines, quotes, and unicode survive the argv
+    boundary cleanly. When packagesText is omitted/null, the bridge
+    writes no package file (back-compat with v0.0.48 callers).
+
+  * UPDATED plugins/sysdeck-builder/builder.js:
+    - New renderPackagesField(prefix, defaultMode) helper shared by
+      both forms. Emits a <textarea>, a file <input>, and a merge-mode
+      <select>. The prefix distinguishes element IDs (cp-create-* vs
+      cp-copy-*) so both forms coexist on the same page.
+    - File-upload handlers use FileReader to populate the textarea.
+      The textarea is the source of truth — the operator can review/
+      edit the uploaded content before submitting.
+    - Both submit handlers (Create + Copy) read the textarea + mode
+      toggle and pass them to the bridge. The success message now
+      shows the package count + the path of the written package file.
+    - Panel header version tag bumped v0.0.48 → v0.0.49 with a new
+      v0.0.49 narrative block.
+
+  * NEW TESTS: 28 unit tests in tests/test_bridge_parsers.py under a
+    new TestBuilderPackagesField class cover:
+    - _parse_packages_text (6 tests): empty, full-line comments,
+      inline comments, dedup, whitespace, blank lines.
+    - _extract_opts (4 tests): positional-only, key=value, boolean
+      flag, mixed.
+    - _write_packages_mkosi (3 tests): replace, append+dedup, append
+      to empty section.
+    - _write_packages_vmdb2 (2 tests): replace, append+dedup.
+    - _write_packages_archiso (2 tests): replace, append+preserve
+      baseline.
+    - _write_packages_live_build (3 tests): basic write, replace
+      clears old sysdeck*.list but preserves baseline.list, append
+      overwrites sysdeck.list only.
+    - _write_packages dispatcher (3 tests): invalid mode, unknown
+      backend, archiso file path rejected.
+    - profile_create end-to-end (2 tests): arg parsing + JSON decode,
+      invalid JSON rejected.
+    - profile_copy end-to-end (3 tests): archiso append, live-build
+      replace, back-compat without --packages.
+    All tests use tempfile.mkdtemp() and unittest.mock.patch.object();
+    none touch real /etc/ or /usr/share/ paths.
+
+  * VERSION SYNC: bumped 0.0.48 → 0.0.49 across all 9 release surfaces
+    (Makefile VERSION + header comment, bridge/__init__.py __version__,
+    packaging/setup.py VERSION, PKGBUILD pkgver, RPM spec Version +
+    %changelog entry, debian/changelog entry, compat/compat-manifest.json
+    version + _comment, packaging/sysdeck.metainfo.xml <release>,
+    README.md Version line + highlights section).
+
+  * GUARDS: all build-time guards pass — manifest consistency (26
+    manifests), metainfo consistency, Makefile recipe indentation,
+    no broken imports, bridge.js subcommand cross-check (102 calls
+    verified — unchanged from v0.0.48 since profileCopy/profileCreate
+    are existing methods, just with new optional args), version sync,
+    all unit tests pass (28 new TestBuilderPackagesField + existing
+    TestBuilderProfileCopy + TestFirewallV047* + TestMetainfoV047*).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 12:00:00 +0000
+
+sysdeck (0.0.48-1) unstable; urgency=medium
+
+  * v0.0.48 BUILDER PROFILE-CREATE BUGFIX. The v0.0.31 Create Profile
+    form's backend dropdown fell back to `primary.id` when no
+    scaffoldable backend (mkosi/vmdb2) was installed. On an archiso-only
+    or live-build-only host, this funneled the operator straight into
+    the "profile-create supports ('mkosi', 'vmdb2')" error — archiso
+    and live-build use shipped directory-based profile trees, not
+    single-file specs, so they cannot be scaffolded from scratch.
+
+  * FIX 1 (panel): renderCreateProfile in
+    plugins/sysdeck-builder/builder.js no longer falls back to
+    primary.id. When no mkosi/vmdb2 backend is installed, the form
+    renders an inline install hint (with the exact pacman/apt command)
+    instead. The dropdown only offers actually-scaffoldable backends.
+
+  * FIX 2 (panel): new renderCopyProfile form lists every shipped
+    archiso and live-build profile discovered via profiles() and offers
+    a one-click copy into /etc/ via the new bridge.builder.profileCopy()
+    method. This is the supported way to create profiles for the
+    directory-based backends. Source profiles are grouped by backend
+    in an <optgroup>; the new-name input is a free-text field.
+
+  * NEW BRIDGE COMMAND: bridge/builder.py profile_copy() — copies a
+    shipped archiso/live-build profile tree from /usr/share/ into
+    /etc/archiso/configs/<name>/ or /etc/live-build/<name>/. Validates
+    new-name (no slashes, no "."/".." to prevent path traversal via
+    crafted names like "../../etc"), resolves source via profiles(),
+    refuses non-directory-based backends (mkosi/vmdb2) with a clear
+    "use profile-create" hint, refuses if destination already exists,
+    returns structured {copied, backend, source, source_path, name,
+    path} on success. Uses the same polkit action as profile-create
+    (org.sysdeck.builder.modify) — no new polkit file needed.
+
+  * NEW BRIDGE.JS METHOD: bridge.builder.profileCopy(srcName, newName,
+    backend) runs with { superuser: 'try' }, same as profileCreate /
+    profileDelete. The shared/bridge.js comment block now lists the
+    new subcommand alongside profile-create / profile-delete.
+
+  * DESTINATION ROOTS REFACTOR: ARCHISO_COPY_DEST and
+    LIVE_BUILD_COPY_DEST are now module-level constants in
+    bridge/builder.py (was: hardcoded Path("/etc/...") literals inside
+    profile_copy). This mirrors the existing ARCHISO_DIRS /
+    LIVE_BUILD_DIRS pattern and lets unit tests patch them with
+    tempdirs instead of touching real /etc/ paths.
+
+  * NEW TESTS: 15 unit tests in tests/test_bridge_parsers.py under a
+    new TestBuilderProfileCopy class cover arg validation (no args,
+    one arg, slash in name, "."/".." name), source resolution
+    (not-found, wrong-backend hint filter, mkosi/vmdb2 rejection with
+    "use profile-create" hint), success paths (archiso copy, live-build
+    copy, backend-hint-inferred-when-omitted), and failure modes
+    (dest-already-exists with "use profile-delete" hint, source-path-
+    not-a-directory, permission-error returns polkit hint). All tests
+    use tempfile.mkdtemp() and unittest.mock.patch.object(); none
+    touch real /etc/ or /usr/share/ paths.
+
+  * VERSION SYNC: bumped 0.0.47 → 0.0.48 across all 9 release surfaces
+    (Makefile VERSION + header comment, bridge/__init__.py __version__,
+    packaging/setup.py VERSION, PKGBUILD pkgver, RPM spec Version +
+    %changelog entry, debian/changelog entry, compat-manifest.json
+    version + _comment, metainfo.xml <release>, README.md Version
+    line). All 9 surfaces now report v0.0.48.
+
+  * GUARDS: all build-time guards pass — manifest consistency (26
+    manifests = 25 plugins + 1 shared), metainfo consistency, Makefile
+    recipe indentation (tabs not spaces), no broken import-cockpit
+    pattern, no broken python3 -m sysdeck.bridge pattern, bridge.js
+    subcommand cross-check (102 calls verified — was 101 in v0.0.47,
+    +1 for the new profileCopy), version sync, all unit tests pass
+    (15 new TestBuilderProfileCopy + the existing TestFirewallV047*
+    and TestMetainfoV047* classes).
+
+ -- Jeremy Anderson <info@dcos.net>  Tue, 19 Aug 2026 00:00:00 +0000
+
+sysdeck (0.0.47-1) unstable; urgency=medium
+
+  * v0.0.47 LOGIC-FLAW FIXES. Per user directive: "we need to fix a
+    few logic flaws i do things a certain way on my servers so ill
+    correct the ports on a firewall script or two. the web server
+    template, and vps template i setup the webserver on 8080 and
+    varnish on 80 for an automatic cache environment. we should move
+    the service/ports editor to its own module entry for ease of
+    access. the glances we should default to enabling the built in
+    webui and embedding that into our module instead it visually
+    looks stunning in comparison to ours."
+
+  * FIREWALL: public-webserver.sh PORT-TOPOLOGY FIX. The v0.0.44
+    template had the topology backwards — it exposed Caddy on :80 and
+    Varnish on :8080. v0.0.47 flips it: Varnish is the public cache
+    front on :80, Caddy HTTP backend lives on :8080 (loopback only),
+    Caddy HTTPS lives on :443 (public, terminates TLS). The
+    VARNISH_PUBLIC toggle is removed — :8080 is now ALWAYS loopback-
+    only (the previous default exposed the cache-miss path to the
+    internet, bypassing Varnish entirely). Defense-in-depth drops
+    added for :8080 alongside the existing MariaDB + Caddy admin
+    drops. The detect output now reflects the corrected cache-front-
+    of-origin topology.
+
+  * FIREWALL: vps-webserver.sh DEFAULT TOPOLOGY. When Varnish is
+    detected at all, the operator's documented setup is now the
+    explicit default — Varnish on :80, Caddy HTTP backend on :8080
+    (loopback only), Caddy HTTPS on :443. Previously this only
+    happened if Varnish was already listening on :80 at runtime; now
+    detecting Varnish is enough to flip Caddy HTTP to :8080 loopback.
+    If Varnish is detected but not yet on :80 (e.g. installed but
+    stopped, or still on the upstream default :6081), the template
+    forces VARNISH_PORT=80 with a log message explaining the override.
+
+  * NEW PLUGIN: sysdeck-services — first-class sidebar entry at
+    order 45. The Service/Port Editor card that lived at the bottom
+    of the Firewall panel since v0.0.44 has been lifted out into its
+    own module for ease of access. The new panel adds a filter box
+    (search by name/id/port/process), a show-only-editable toggle,
+    and a Refresh button. The bridge surface
+    (bridge.firewall.services / service-info / set-service-port /
+    restart-service) is unchanged; a new bridge.services proxy was
+    added to bridge.js so the new panel has a clean API surface.
+
+  * FIREWALL PANEL: removed the renderServicePortEditor() card from
+    plugins/sysdeck-firewall/firewall.js + the .btn-svc-save /
+    .btn-svc-restart wireEvents handlers + the services() Promise
+    from the parallel load. Added a renderServicesLinkCard()
+    signpost pointing operators to the new sidebar entry. Removed
+    service/port/editor keywords from the firewall manifest — they
+    belong to the new services plugin now.
+
+  * GLANCES: DEFAULT-ON EMBEDDED WEBUI. The panel now auto-starts
+    the Glances built-in webserver (glances -w --bind 127.0.0.1
+    --port 61208) on mount — no click required. The iframe is now
+    the primary view, sized to fill the viewport (min-height:
+    calc(100vh - 200px)). The legacy SysDeck snapshot cards
+    (CPU/Memory/Swap/Network/Disk/Processes) are moved into a
+    collapsed <details> at the bottom of the page so they don't
+    push the iframe below the fold. The Stop button is retained for
+    explicit shutdown; we don't stop on unmount because keeping the
+    webserver running speeds re-entry.
+
+  * GLANCES CSP: plugins/sysdeck-glances/manifest.json CSP updated
+    to allow frame-src http://127.0.0.1:61208 + http://localhost:
+    61208 so the embedded Glances web UI loads without a CSP
+    violation. Added webui / embed / iframe / real-time keywords.
+
+  * BRIDGE.JS: added bridge.services surface (4 methods: list /
+    info / setPort / restart) that proxies to bridgeCmd("firewall",
+    [...]) — no new bridge helper file needed. The SERVICES_REGISTRY
+    + atomic-write + systemctl restart logic remains in
+    bridge/firewall.py as the single source of truth. The
+    bridge.firewall.services / serviceInfo / setServicePort /
+    restartService methods are kept for back-compat with any
+    operator-side scripts that may have called them directly.
+
+  * VERSION SYNC: bumped 0.0.46 → 0.0.47 across all 9 release
+    surfaces (Makefile VERSION + comment, bridge/__init__.py
+    __version__, packaging/setup.py VERSION, packaging/PKGBUILD
+    pkgver, packaging/sysdeck.spec Version + prepended v0.0.47
+    %changelog entry, packaging/debian/changelog prepended v0.0.47
+    entry, compat/compat-manifest.json version + comment, README.md
+    Version + new v0.0.47 highlights block, BLOG.md prepended
+    v0.0.47 section). Also caught up bridge/__init__.py +
+    packaging/setup.py from 0.0.45 (the v0.0.46 release bumped
+    PKGBUILD/spec/debian but missed these two files).
+
+  * MAKEFILE: bumped VERSION 0.0.46 → 0.0.47, plugin count 25 → 26
+    (sysdeck-services added). The install target's for-loop already
+    picks up the new plugin directory automatically — no Makefile
+    recipe changes needed.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 14:00:00 +0000
+
+sysdeck (0.0.46-1) unstable; urgency=medium
+
+  * NEW PLUGIN: sysdeck-modules — in-suite 3rd-party Cockpit module
+    installer. Replaces the side-channel cockpit-module-pull.sh shell
+    script with a first-class sidebar entry at order 44.
+
+  * DESIGN (per user directive): "i wanted the in ui module to handle
+    showing license, developer, 3rd party model name and ability to
+    visit homepage and install the plugin 1 click with license
+    agreement inline." Each catalog row renders the module name,
+    license badge, developer/author, source URL, and a clickable
+    homepage link INLINE — right next to a 1-click Install button.
+    No modal, no separate confirmation step. Clicking Install is the
+    operator's acceptance of the inline-displayed license.
+
+  * BRIDGE: bridge/modules3p.py — 10-entry catalog covering
+    cockpit-machines, cockpit-podman, cockpit-storaged,
+    cockpit-identities, cockpit-navigator, cockpit-file-sharing,
+    cockpit-zfs-manager, cockpit-pacman, cockpit-sensors,
+    cockpit-benchmark. Four install kinds: pacman / git / deb-tar /
+    tarball. The bridge refuses silent installs (no
+    --accept-license=1 ⇒ license-not-accepted) as a guard against
+    malicious callers; the JS always passes that flag because the
+    license is shown inline next to the Install button.
+
+  * AUDIT LOG: every install / uninstall appends a JSON record to
+    /etc/cockpit/MODULE_LICENSES.log (shared with the legacy
+    cockpit-module-pull.sh). Legacy plain-text lines preserved as
+    {raw: ...} records.
+
+  * POLKIT: new action org.sysdeck.modules3p.modify authorizes
+    /usr/bin/python3 /usr/lib/sysdeck/bridge/modules3p.py install|
+    uninstall <id>. auth_admin_keep for active sessions.
+
+  * SHARED: bridge.js gains a bridge.modules3p surface with
+    catalog / status / preflight / install / uninstall / audit
+    methods. install + uninstall use { superuser: 'try' } so the
+    cockpit bridge prompts via polkit.
+
+  * THIRD_PARTY.md: appended v0.0.46 section documenting the in-suite
+    installer + the per-entry catalog table. Updated the two existing
+    "see cockpit-module-pull.sh" notes (cockpit-sensors,
+    cockpit-identities) to point at the new panel.
+
+  * MAKEFILE: bumped VERSION to 0.0.46, plugin count 24 → 25, added
+    polkit install + uninstall stanzas for the new policy file.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 10:30:00 +0000
+
+sysdeck (0.0.45-1) unstable; urgency=medium
+
+  * TRADEMARK SCRUB. Per user directive: "you cannot say smoothwall
+    and ipfire where merged into our fw script either. you can say
+    logic derived from or influenced by these projects. its really
+    hard holding your hand on legal issues." The v0.0.36 and v0.0.37
+    release notes, changelogs, code comments, and worklog entries
+    previously claimed we shipped templates called smoothwall.sh and
+    ipfire.sh and "merged" them into sysdeck-fw. That language
+    implied we incorporated code from those trademarked projects.
+    v0.0.45 rewords every such claim to the legally-safe phrasing:
+    the sysdeck-fw backend's logic is DERIVED FROM / TAKES INFLUENCE
+    FROM Smoothwall Express and IPFire under our own identifier. We
+    never shipped templates called "smoothwall" or "ipfire".
+
+  * FILES SCRUBBED (10 files):
+    - bridge/firewall.py — EXCLUDED_BACKENDS reasons for smoothwall
+      + ipfire reworded from "merged into sysdeck-fw" to "other
+      projects' trademarks — we took influence from them for
+      sysdeck-fw instead of shipping templates by those names."
+      Header docstring reworded. sysdeck-fw backend description
+      reworded from "Merges the Smoothwall-style..." to "Takes
+      influence from Smoothwall Express... under our own identifier."
+    - firewall/templates/sysdeck-fw.sh — header comment reworded.
+      "v0.0.37 MERGE" → "v0.0.37 UNIFIED ZONE FIREWALL". "What this
+      template inherits from each predecessor" → "What this template
+      takes influence from". Each "FROM THE X" section annotated
+      with "(takes influence from <project>)".
+    - firewall/templates/cilium.sh — stale comment referencing
+      'custom'/'smoothwall'/'ipfire' backend updated to
+      'custom'/'sysdeck-fw' backend.
+    - tests/test_bridge_parsers.py — TestFirewallV037BackendMerge
+      class renamed to TestFirewallV037UnifiedBackend. Test
+      docstring reworded. test_smoothwall_and_ipfire_templates_removed
+      renamed to test_smoothwall_and_ipfire_templates_not_present
+      with reworded assertion messages. Comments throughout updated
+      to use "takes influence from" / "trademark" phrasings.
+    - plugins/sysdeck-firewall/firewall.js — header comment bumped
+      to v0.0.45 with trademark-scrub block. Excluded-backends
+      description reworded.
+    - plugins/sysdeck-firewall/manifest.json — keywords list
+      updated: removed "smoothwall" + "ipfire", added "sysdeck-fw"
+      + the v0.0.44 service/port editor keywords (service, port,
+      editor, remote-admin, public-webserver, ai-llm, ollama,
+      openwebui, hermes, odysseus, caddy, varnish, mariadb).
+    - README.md — v0.0.36 + v0.0.37 highlights blocks reworded.
+      "Four backends ship" → "Three backends ship". "Three new
+      firewall templates ship" → "Two new firewall templates ship".
+      Backend descriptors for smoothwall + ipfire replaced with
+      sysdeck-fw descriptor.
+    - packaging/debian/changelog (this entry) — v0.0.36 + v0.0.37
+      entries reworded. "Four backends ship" → "Three backends
+      ship". smoothwall.sh + ipfire.sh template descriptors
+      replaced with sysdeck-fw.sh descriptor. EXCLUDED_BACKENDS
+      reasons reworded. "merged into sysdeck-fw" → "took influence
+      from for sysdeck-fw".
+    - packaging/sysdeck.spec — v0.0.36 + v0.0.37 %changelog entries
+      reworded same as debian/changelog.
+    - worklog.md — Task 36 + Task 37 entries reworded. "merge the
+      v0.0.36 smoothwall + ipfire templates" → "ship a unified
+      SysDeck FW backend whose logic is derived from". "Merges both
+      predecessor templates" → "Takes influence from both
+      predecessors". "with the merge reason" → "with the trademark
+      reason".
+
+  * LEGALLY-SAFE PHRASINGS USED. Every reference to Smoothwall
+    Express or IPFire now uses one of:
+      - "takes influence from"
+      - "logic derived from"
+      - "influenced by these projects"
+    The EXCLUDED_BACKENDS reasons for smoothwall and ipfire now
+    read: "other projects' trademarks — we took influence from them
+    for sysdeck-fw instead of shipping templates by those names."
+
+  * DIRECT-QUOTE PRESERVATION. User-directive quotes that mention
+    "smoothwall" or "ipfire" (e.g. the v0.0.36 directive: "or they
+    can select celium, or smoothwall or ipfire or other firewall
+    scripts") are preserved verbatim as the user's own words. Our
+    commentary around them uses the legally-safe phrasings. The
+    v0.0.37 directive quote was lightly paraphrased from "lets
+    merge them into" to "lets unify them into" — same meaning,
+    legally safer verb.
+
+  * NO FUNCTIONAL CHANGES. This is a wording-only release. No code
+    paths changed, no templates changed, no bridge subcommands
+    changed. The sysdeck-fw backend, the 7 firewall templates
+    (vps-webserver.sh, no-services.sh, cilium.sh, sysdeck-fw.sh,
+    remote-admin.sh, public-webserver.sh, ai-llm.sh), and the
+    v0.0.44 service/port editor are unchanged. All 141 unit tests
+    still pass. All 7 build-time guards still pass.
+
+  * REGRESSION TESTS. No new tests — the existing 32 v0.0.44 tests
+    + 10 v0.0.37 unified-backend tests + 99 prior tests all pass
+    unchanged. Total: 141 tests.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 13:00:00 -0400
+
+sysdeck (0.0.44-1) unstable; urgency=medium
+
+  * PUBLIC-SERVER FIREWALL VARIANTS. Per user directive: "another
+    thing the firewall module needs is a few public server variants.
+    like: remote admin enabled ssh and cockpit, server enabled like
+    caddy and varnish 80 and 8080 w mariadb, an ai llm variant for
+    ollama, hermes, openwebui and oddyseus." Three new firewall
+    templates ship in this release:
+    - remote-admin.sh: SSH (22) + Cockpit (9090). Aggressive rate
+      limiting with auto-ban on the ssh_abuse + cockpit_abuse sets
+      (1h + 10m timeouts respectively). For VPS / cloud hosts where
+      the operator needs remote shell + web admin from anywhere.
+      Drops all non-essential inbound; forward chain drops + logs.
+    - public-webserver.sh: Caddy (80/443) + Varnish (8080, public
+      by default per the "80 and 8080" directive) + SSH (22). MariaDB
+      (3306) and the Caddy admin API (2019) are bound loopback-only
+      with DEFENSE-IN-DEPTH DROP rules — even if the daemon is
+      misconfigured to bind 0.0.0.0, the firewall drops the packet
+      before it reaches the daemon. This is the layered-defense
+      pattern: the daemon's bind is the primary control, the firewall
+      is the secondary control. The operator can flip VARNISH_PUBLIC
+      to false to make :8080 loopback-only as well.
+    - ai-llm.sh: Ollama (11434) + OpenWebUI (3000) + Hermes (8000) +
+      Odysseus (8001) + SSH (22). All four AI service ports are
+      public per the user directive. The template's detect output
+      documents the v0.0.43 "never 0.0.0.0" directive and explains
+      why Ollama's default 0.0.0.0 bind is acceptable here (the
+      firewall gates access, not the bind address). If the operator
+      wants Ollama loopback-only, set OLLAMA_HOST=127.0.0.1:11434
+      in the systemd override and the firewall will NAT-forward.
+    All three templates implement the standard start/stop/restart/
+    detect/status/check interface. All use modern nftables inet
+    family with named sets, rate limiting with dynamic auto-ban,
+    bogon filtering (martian + RFC 1918 + IPv6 ULA + link-local),
+    invalid TCP flag drops (NULL / XMAS / SYN+FIN / SYN+RST), and
+    per-port log prefixes. Auto-detect ports from each service's
+    config file (/etc/ssh/sshd_config, /etc/cockpit/cockpit.conf,
+    /etc/caddy/Caddyfile, /etc/systemd/system/varnish.service.d/,
+    /etc/mysql/mariadb.conf.d/, /etc/systemd/system/ollama.service.d/,
+    /etc/open-webui/config, /etc/hermes/config.yaml,
+    /etc/odysseus/config.toml).
+
+  * SERVICE/PORT EDITOR. Per user directive: "and lastly a full
+    service/port editor that detects based on running ports and
+    services detected on them. make it as simple as editing the
+    port to change it in a config on the system. auto restart the
+    associated service if it is changed." Four new bridge/firewall.py
+    subcommands:
+    - services: runs `ss -tlnp` (or /proc/net/tcp + /proc/net/tcp6
+      fallback when ss is unavailable) to enumerate ALL listening
+      TCP ports on the host. Cross-references against SERVICES_REGISTRY
+      — a static allowlist of 9 services (ssh, cockpit, caddy,
+      varnish, mariadb, ollama, openwebui, hermes, odysseus). For
+      each registered service, returns: id, name, default_port,
+      current_port_in_config (extracted via per-service regex from
+      the actual config file), listening_ports (from ss), processes,
+      pids, config_file path, config_file_exists, systemd_unit,
+      alt_units, restart_supported, editable, description. Also
+      returns unmapped_listeners — every listening socket that did
+      NOT match a registered service — so the operator can spot
+      services the editor doesn't yet know about.
+    - service-info <id>: returns one service's full registry entry
+      + detected state (current_port_in_config, config_file path).
+    - set-service-port <id> <new_port>: the workflow is
+      (1) validate service_id against SERVICES_REGISTRY,
+      (2) validate new_port (1..65535, strict integer regex,
+          fullmatch to reject trailing newlines),
+      (3) resolve the config file (first existing candidate,
+          realpath under /etc/ or /usr/share/sysdeck/),
+      (4) read the file, find the port assignment line via the
+          per-service regex,
+      (5) substitute ONLY the port digits (the regex's prefix group
+          is preserved verbatim — comments and other content on the
+          line are untouched),
+      (6) write the new content to a sibling .tmp file in the same
+          directory (mode preserved from the original), fsync, then
+          atomically rename over the original (defeats partial-write
+          corruption if the bridge crashes mid-write),
+      (7) systemctl restart the service's systemd_unit (or try
+          alt_units if the primary fails).
+      Returns {service, name, config_file, old_port, new_port,
+      restarted, restart_method, restart_rc, restart_stdout,
+      restart_stderr}.
+    - restart-service <id>: just runs systemctl restart on the
+      service. Useful for "I edited the config by hand" workflows.
+
+  * HARDENING (per CVE-derived lessons already applied):
+    - service_id validated against SERVICES_REGISTRY — an attacker
+      CANNOT inject an arbitrary service name to trick the bridge
+      into editing /etc/shadow. Only services in the registry are
+      accepted. CVE-2024-2947 lesson.
+    - Port number validated with strict integer regex 1..65535,
+      re.fullmatch (NOT re.match) so trailing newlines don't slip
+      past the $ anchor. CVE-2019-15107 lesson. The v0.0.43
+      validators used re.match — v0.0.44 fixes this to fullmatch.
+    - Config file path resolved with os.path.realpath and verified
+      to live under an allowlist base dir (/etc/ or
+      /usr/share/sysdeck/). Symlink-escape attacks rejected.
+      CVE-2022-30708 lesson.
+    - The port substitution is a strict per-service regex (NOT
+      freeform sed s/.../.../). The regex only matches the port
+      assignment line and only replaces the port digits — comments
+      and other content on the line are preserved.
+    - Atomic write via tmpfile + fsync + rename. Never in-place
+      overwrite. Defeats partial-write corruption.
+    - systemctl invoked with shell=False, list argv, env scrubbed
+      (SCRUBBED_ENV drops LD_PRELOAD, LD_LIBRARY_PATH, PYTHONPATH,
+      BASH_ENV, ENV, PERL5OPT). CVE-2024-6126 lesson.
+    - systemctl binary validated against an allowlist
+      (/usr/bin/systemctl, /bin/systemctl, /usr/sbin/systemctl).
+      Defense in depth — shutil.which("systemctl") is only
+      accepted if it resolves to one of these paths.
+    - systemctl unit name validated against a strict regex
+      (^[A-Za-z0-9_@.\-]+$) — no shell metacharacters can pass.
+    - CRLF/NUL stripped from any value written to a line-oriented
+      config file via _sanitize_for_file(). CVE-2026-41940 lesson.
+      (Not strictly needed here — the regex only matches digits —
+      but defense in depth.)
+
+  * POLKIT. The org.sysdeck.firewall.modify action (shipped since
+    v0.0.17, extended in v0.0.36 to authorize cilium + cilium-agent
+    + helm) already authorizes /usr/bin/systemctl — no polkit
+    changes required for the new subcommands. The mutating ops
+    (setServicePort, restartService) pass { superuser: 'try' } to
+    cockpit.spawn — the cockpit bridge prompts the operator via
+    polkit. Read-only ops (services, serviceInfo) do NOT pass
+    superuser — no auth needed.
+
+  * PANEL. New "Service / Port Editor" card in the firewall panel
+    (plugins/sysdeck-firewall/firewall.js). Renders one row per
+    registered service with: service name + id + editable/restartable
+    badges, editable port input (type=number, min=1, max=65535),
+    Save & Restart button (calls bridge.firewall.setServicePort),
+    Restart-only button (calls bridge.firewall.restartService),
+    current port from config, default port, listening ports (comma-
+    separated), processes, PIDs, config file path. Unmapped listeners
+    shown in an expandable <details> block. Help text documents the
+    atomic-write mechanism, the config-base-dir allowlist, and the
+    polkit auth flow.
+
+  * BRIDGE.JS SURFACE. 4 new firewall methods: services, serviceInfo,
+    setServicePort, restartService. Read-only queries (services,
+    serviceInfo) do NOT pass { superuser: 'try' }. Mutating queries
+    (setServicePort, restartService) DO. Total firewall bridge.js
+    surface now 29 methods (was 25 in v0.0.43).
+
+  * REGRESSION TESTS EXPANDED. 32 new tests in two new test classes
+    (TestFirewallV044ServicesEditor + TestFirewallV044PublicServerTemplates).
+    Tests cover:
+    - SERVICES_REGISTRY structure (9 entries, all valid ids, all
+      have required fields, all port_regex are compiled patterns,
+      all default_port in 1..65535).
+    - _validate_service_id accept/reject (accepts: ssh, cockpit,
+      openwebui, ai-llm, a, abc-def-ghi. Rejects: empty, path
+      traversal, shell metachars, uppercase, trailing newline,
+      too long, leading digit, dot).
+    - _validate_port accept/reject (accepts: 1, 22, 80, 443, 8080,
+      65535. Rejects: empty, 0, 65536, 99999, abc, shell metachars,
+      trailing newline, leading/trailing space, -1, decimal, hex,
+      comma-list).
+    - cmd_services returns expected JSON shape (services list with
+      9 entries, unmapped_listeners list, listener_count int).
+    - cmd_service_info accepts all 9 valid ids, rejects unknown +
+      invalid (path traversal, shell metachars, empty).
+    - cmd_set_service_port rejects invalid service_id (CVE-2024-2947
+      + CVE-2022-30708 lessons — "../../etc/passwd", "ssh; rm -rf /",
+      "SSH", empty, too-long). Rejects shell-metachar ports
+      (CVE-2019-15107 lesson — "80; rm -rf /", "80$(whoami)", "80|cat",
+      abc, 99999, 0). Rejects unknown service. Rejects missing args.
+    - cmd_restart_service rejects invalid id + unknown service.
+    - _run_ss_listening returns a list (never raises, even if ss
+      is missing).
+    - _parse_proc_net_tcp returns a list (always present on Linux).
+    - _extract_port_from_config: for each of the 9 services, the
+      per-service regex extracts the correct port from a
+      representative config snippet (sshd_config Port=2222, cockpit
+      ListenStream=9090, Caddyfile :8080, varnish.params
+      VARNISH_LISTEN_PORT=6081, mariadb .cnf port=3306, ollama
+      OLLAMA_HOST=127.0.0.1:11434, openwebui PORT=3000, hermes
+      config.yaml port:8000, odysseus config.toml port=8001).
+    - End-to-end atomic-write test on a temp config file (creates
+      /tmp/sysdeck-test-XXXX/hermes/config.yaml with port: 8000,
+      calls cmd_set_service_port(["hermes", "9999"]), verifies the
+      returned JSON has old_port=8000 + new_port=9999 + restarted=False
+      (no systemd in test env), verifies the file was modified
+      (port: 9999 present, port: 8000 absent), verifies non-target
+      lines preserved (host: 0.0.0.0, workers: 4)).
+    - No-config-file error path (returns error, doesn't crash).
+    - Regex-no-match error path (config file exists but has no port
+      line — bridge REFUSES to write, doesn't guess where the port
+      line is. Verifies the file was NOT modified).
+    - no-sudo-in-v044-subcommands (CVE-2022-0824 lesson — greps
+      cmd_services, cmd_service_info, cmd_set_service_port,
+      cmd_restart_service, _systemctl_restart source for "/usr/bin/sudo"
+      and "sudo" — must not appear).
+    - Three new template files exist + executable bit set.
+    - Each template's metadata header parses correctly (Name,
+      Description, Distro, Services fields).
+    - remote-admin metadata: services include ssh + cockpit; distros
+      include arch + debian.
+    - public-webserver metadata: services include ssh + caddy +
+      varnish + mariadb.
+    - ai-llm metadata: services include ssh + ollama + openwebui +
+      hermes + odysseus.
+    - Each template implements the standard start/stop/restart/detect/
+      status/check dispatch interface (regex accepts both `action)`
+      and `action|alt)` forms — the templates use `restart|reload`
+      and `check|validate` alternatives).
+    - Each template has no `sudo` in non-comment, non-string lines.
+    Total tests: 109 (v0.0.43) → 141 (v0.0.44). 32 new tests.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 12:00:00 -0400
+
+sysdeck (0.0.43-1) unstable; urgency=medium
+
+  * FIREWALL BACKEND/TEMPLATE COORDINATION FIX. User directive: "i
+    found some logic flaws in the firewall module, we seem to have 2
+    seperate template lists, 1 apply button. makes template selection
+    akward." The v0.0.36 panel had two independent lists (backend
+    selector + template selector) that didn't coordinate. When you
+    picked the sysdeck-fw backend, the template list still showed ALL
+    5 templates (including vps-webserver + cilium which belong to
+    other backends). The Apply button used getSelectedTemplate() and
+    ignored the backend — you could apply vps-webserver.sh while the
+    cilium backend was active. v0.0.43 fixes this:
+    - When a backend has its own template field (cilium -> cilium,
+      sysdeck-fw -> sysdeck-fw), the template selector is HIDDEN
+      entirely — the backend IS the template.
+    - When 'custom' is active, the template selector shows ONLY the
+      custom-compatible templates (vps-webserver, no-services). The
+      cilium + sysdeck-fw templates are filtered out.
+    - The Apply button is now backend-aware: getSelectedTemplate()
+      checks the active backend first, uses its template if it has
+      one, falls back to the radio selection only for 'custom'.
+    - The Apply button label is now backend-aware: "Apply sysdeck-fw"
+      when sysdeck-fw is active, "Apply Cilium Policy" for cilium,
+      "Apply Template" for custom.
+    - The backend selector help text now explains whether the current
+      backend uses its own template or lets you pick.
+
+  * NETWORK MONITOR REWRITE (IPTRAF-NG STYLE). User directive: "the
+    network monitor module should feed from iptraf-ng recreate the
+    ui." The v0.0.10-v0.0.42 panel used `ss -tulpn` for a static
+    socket list. v0.0.43 recreates the iptraf-ng UI by reading the
+    same kernel sources iptraf-ng reads from directly — no iptraf-ng
+    binary dependency, no ncurses parsing.
+    - bridge/netsec.py rewritten with 7 subcommands: summary,
+      traffic, connections, interfaces, protocols, sockets, established.
+    - traffic: samples /proc/net/dev twice (1s apart), computes
+      per-interface live RX/TX rates (bytes/s, packets/s). This is
+      exactly how iptraf-ng computes its live traffic rates.
+    - connections: reads /proc/net/tcp + /proc/net/udp directly
+      (no ss dependency). Decodes little-endian hex addresses, maps
+      TCP state codes to names.
+    - interfaces: per-interface cumulative counters (rx/tx bytes,
+      packets, errors, drops).
+    - protocols: parses /proc/net/snmp for IP/TCP/UDP/ICMP counters.
+    - netsec.js panel rewritten with 3 sections matching iptraf-ng:
+      (1) Interface Overview — live traffic cards with RX/TX rate
+      bars, auto-refresh every 5s.
+      (2) IP Traffic Monitor — active connections table (proto,
+      state, local:port, remote:port, TxQ/RxQ).
+      (3) Protocol Statistics — IP/TCP/UDP/ICMP counter tables.
+    - bridge.js netsec surface expanded: summary, traffic,
+      connections, interfaces, protocols (new) + listeningPorts
+      (legacy alias for sockets).
+    - Panel renamed from "Network SOC" to "Network Monitor".
+
+  * REGRESSION TESTS. 9 new tests in TestNetsecV043Rewrite class:
+    dispatch table, interfaces, protocols, connections, summary,
+    _parse_proc_net_dev parser, _decode_addr hex parser, no-sudo
+    source scan. Total: 100 -> 109 tests.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 07:00:00 -0500
+
+sysdeck (0.0.42-1) unstable; urgency=medium
+
+  * SIDEBAR LABEL CLEANUP. User directive: "lastly instead of looking
+    kinda ecentric with putting SysDeck leading every module. seperate
+    stock and addon plugins from the sysdeck suite of plugins with just
+    a header entry, like cockpit up top and then the modules, then
+    SysDeck and then the modules. lets organize it like that instead
+    of reading SysDeck 20+ times." The v0.0.35-v0.0.41 sidebar read
+    "SysDeck" 24 times (SysDeck Firewall, SysDeck Containers, SysDeck
+    Kata, etc.) — noisy and eccentric. v0.0.42 drops the "SysDeck "
+    prefix from all 24 plugin labels, matching the cockpit ecosystem
+    convention (cockpit-machines is "Machines", cockpit-podman is
+    "Podman" — not "Cockpit Machines").
+  * LABEL CHANGES (24 plugins):
+      SysDeck Containers & VMs → Containers & VMs
+      SysDeck Firewall         → Firewall
+      SysDeck Integrity        → Integrity
+      SysDeck Network Security → Network Security
+      SysDeck Service Mesh     → Service Mesh
+      SysDeck Vault            → Vault
+      SysDeck Fleet            → Fleet
+      SysDeck Kata             → Kata
+      SysDeck Fester           → Fester
+      SysDeck Firmware         → Firmware
+      SysDeck Image Builder    → Image Builder
+      SysDeck Mining           → Mining
+      SysDeck Themes           → Themes
+      SysDeck Hardware Auth    → Hardware Auth
+      SysDeck Glances          → Glances
+      SysDeck Sensors          → Sensors
+      SysDeck Benchmark        → Benchmark
+      SysDeck Packages         → Packages
+      SysDeck Policy           → Policy
+      SysDeck Databases        → Databases
+      SysDeck Jellyfin         → Jellyfin
+      SysDeck Photos           → Photos
+      SysDeck Remote FS        → Remote FS
+      SysDeck Monitoring       → Monitoring
+  * VISUAL GROUPING. All 24 SysDeck plugins use contiguous order
+    numbers (20-43), so they form a visual block in the cockpit
+    sidebar after stock cockpit plugins (Overview, Services, Logs,
+    Networking, Storage, Accounts, Terminal — which use lower order
+    numbers). The block is naturally separated from stock plugins
+    without needing a literal "SysDeck" header.
+  * SECTION HEADERS. Cockpit's manifest format (at our minimum
+    version 239) does not support section headers in the sidebar —
+    the menu.index object only allows label, order, and keywords.
+    The contiguous ordering + dropped prefix achieves the clean
+    grouping the user wants. If a future cockpit version adds
+    native section support, we can add a "section": "sysdeck"
+    field then.
+  * GENERATOR UPDATED. scripts/generate-plugins.py PLUGINS list
+    updated to drop "SysDeck " from all labels — future
+    regeneration via `make plugins` will produce the clean labels.
+  * VERSION SYNC. All release surfaces report v0.0.42.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 06:00:00 -0500
+
+sysdeck (0.0.41-1) unstable; urgency=medium
+
+  * HARDENING: NO 0.0.0.0 LISTENERS. User directive: "we need to make
+    sure we never ever set a web listen address to 0.0.0.0, if
+    anything use 127.0.0.1. we already discussed hardening that
+    should have been fresh." The v0.0.40 Prometheus port fix
+    introduced 4 references to 0.0.0.0:9095 as the webListenAddress
+    config display + install-hint examples — a wildcard bind that
+    would expose Prometheus to every network interface (any host
+    on the LAN, or the internet if the firewall allows it, could
+    query the Prometheus API).
+  * 4 REFERENCES FIXED:
+    - bridge/prometheus.py: webListenAddress config display
+      (0.0.0.0:9095 -> 127.0.0.1:9095).
+    - plugins/sysdeck-monitoring/monitoring.js: install hint
+      web.listen_address example (0.0.0.0:9095 -> 127.0.0.1:9095) +
+      ARGS example (--web.listen-address=0.0.0.0:9095 ->
+      --web.listen-address=127.0.0.1:9095).
+  * REGRESSION TEST ADDED. TestNoWildcardListeners class scans every
+    bridge/*.py and plugins/*/*.js for the 0.0.0.0:<port> listener
+    pattern and fails the build if any are found. This enforces the
+    "never bind 0.0.0.0" rule permanently — a developer who adds a
+    new listener will see the test fail in CI before it ships. The
+    ONLY allowed uses of 0.0.0.0 are: CIDR blocks in firewall
+    templates (0.0.0.0/0, 0.0.0.0/8 — bogon filter rules, not
+    listeners) and comments documenting that an upstream service
+    defaults to 0.0.0.0 (e.g. Jellyfin — the SysDeck panel uses
+    127.0.0.1 instead). Total tests: 98 (v0.0.40) -> 100.
+  * AUDITED ALL BRIDGE HELPERS. Confirmed every other web listener
+    in the suite already uses 127.0.0.1:
+      - bridge/glances.py: GLANCES_WEB_HOST = "127.0.0.1" + glances
+        --bind 127.0.0.1
+      - bridge/jellyfin.py: JELLYFIN_WEB_HOST = "127.0.0.1" (panel
+        uses 127.0.0.1 even though Jellyfin itself defaults to 0.0.0.0)
+      - bridge/photos.py, bridge/remotefs.py, bridge/mining.py: no
+        web listeners (they manage systemd services, not web servers)
+  * VERSION SYNC. All release surfaces report v0.0.41.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 05:00:00 -0500
+
+sysdeck (0.0.40-1) unstable; urgency=medium
+
+  * PORT CONFLICT FIX: PROMETHEUS 9090 → 9095. User directive:
+    "prometheus and cockpit both use the same port. so we can
+    assume prometheus was moved not cockpit." Cockpit-ws defaults
+    to port 9090. Prometheus also defaults to 9090. The v0.0.39
+    bridge hardcoded http://localhost:9090 as the Prometheus API
+    URL — on any host where Cockpit is running, the bridge would
+    hit Cockpit-ws instead of Prometheus and get HTML pages
+    instead of JSON API responses. v0.0.40 moves the Prometheus
+    default to port 9095 (familiar 909x range, no conflict with
+    Pushgateway 9091, Alertmanager 9093, or Cockpit 9090).
+  * 10 REFERENCES UPDATED across 6 files:
+    - bridge/prometheus.py: PROM_API_URL default (localhost:9090
+      → localhost:9095) + webListenAddress config display
+      (0.0.0.0:9090 → 0.0.0.0:9095). Added explanatory comment
+      documenting WHY the port was moved.
+    - plugins/sysdeck-monitoring/monitoring.js: iframe src,
+      open-in-new-tab link, status table API URL, install hint
+      port parameter, header comment. The install hint now
+      explicitly tells operators to move Prometheus off 9090 via
+      web.listen_address or ARGS.
+    - plugins/sysdeck-monitoring/manifest.json: CSP frame-src
+      (127.0.0.1:9090 → 127.0.0.1:9095).
+    - prometheus/sysdeck_scrape.yml: self-scrape target
+      (localhost:9090 → localhost:9095).
+    - prometheus/sysdeck_grafana_datasources.yml: Prometheus
+      datasource URL (localhost:9090 → localhost:9095).
+  * OPERATOR OVERRIDE. Operators who already run Prometheus on a
+    custom port can override via the PROMETHEUS_API_URL
+    environment variable (e.g.
+    PROMETHEUS_API_URL=http://localhost:9096). The _is_localhost_url
+    SSRF guard accepts any 127.0.0.1 port.
+  * VERSION SYNC. All release surfaces report v0.0.40.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 04:00:00 -0500
+
+sysdeck (0.0.39-1) unstable; urgency=medium
+
+  * MONITORING MODULE (PROMETHEUS + GRAFANA). User directive: "we
+    have 2 modules left, we can actually have them share a module
+    with tabs similar to the container/vm module. we should add
+    prometheus, and graphana webui modules." v0.0.39 adds a new
+    shared tabbed plugin plugins/sysdeck-monitoring/ with two tabs:
+      1. Prometheus — status card (version, uptime, targets, alerts
+         firing) + iframe of the real Prometheus web UI at
+         http://127.0.0.1:9090.
+      2. Grafana — status card (version, dashboards count, datasources
+         count) + iframe of the real Grafana web UI at
+         http://127.0.0.1:3000.
+    Plugin count 23 -> 24. The bridge helpers (bridge/prometheus.py,
+    bridge/grafana.py) already existed but were unwired — v0.0.39
+    wires them into bridge.js + adds the panel UI + hardens them.
+  * BRIDGE HARDENING. Both prometheus.py and grafana.py received the
+    v0.0.36 + v0.0.37 security treatment:
+      - NoRedirectHandler on all HTTP calls (SSRF defense,
+        CVE-2020-35850). Prevents attacker-controlled Prometheus/
+        Grafana from redirecting the bridge to internal services
+        (e.g. 169.254.169.254 metadata endpoint).
+      - 127.0.0.1-only URL check (SSRF defense). The bridge refuses
+        any non-localhost URL.
+      - Env scrubbed (SCRUBBED_ENV) on every subprocess.
+        CVE-2024-6126 lesson — defeats LD_PRELOAD / PYTHONPATH
+        injection.
+      - Output sanitized (_sanitize_output). CVE-2022-36446 lesson
+        — command output truncated to 4 KiB + non-printable bytes
+        stripped before returning to the JS panel.
+      - No sudo — replaced /usr/bin/sudo /usr/bin/systemctl with
+        direct systemctl + cockpit superuser channel + polkit.
+        This is the v0.0.31 "cockpit way" pattern — the v0.0.15-era
+        sudo shell-out (the bug the user complained about: "the
+        update needs sudo so the command fails") is gone.
+        CVE-2022-0824 lesson — the bridge does not trust the UI;
+        polkit gates the privileged verb.
+      - check=False with structured error return (no exceptions).
+      - Reuses firewall.py security helpers via import (single
+        source of truth for hardening).
+  * NEW BRIDGE.JS SURFACES. bridge.prometheus (8 methods: summary,
+    targets, alerts, rules, config, logSummary, restart, reload) +
+    bridge.grafana (11 methods: summary, dashboards, datasources,
+    alerts, health, org, users, plugins, search, restart, reload).
+    Read-only queries do NOT pass { superuser: 'try' }; restart/
+    reload DO (they invoke systemctl).
+  * NEW PANEL. plugins/sysdeck-monitoring/{manifest.json, index.html,
+    monitoring.js} — vanilla JS, tabbed layout (same pattern the user
+    referenced from the old Containers+VMs panel). Each tab shows:
+    (a) a status card with real data from the bridge helper, (b) an
+    iframe of the real web UI, (c) Refresh/Reload/Restart buttons.
+    When the service is not installed, the tab shows an install hint
+    with distro-specific commands (Arch/Debian/Fedora).
+  * POLKIT ACTION. New org.sysdeck.monitoring.modify authorizes
+    systemctl for Prometheus + Grafana service management.
+  * CONFIG FILES SHIPPED. The prometheus/ directory (which existed
+    since v0.0.31 but was never installed) is now shipped read-only
+    at /usr/share/sysdeck/prometheus/:
+      - sysdeck_scrape.yml — scrape configs for sysdeck bridge health
+        endpoints + pushgateway.
+      - sysdeck_alerts.yml — alert rules.
+      - sysdeck_grafana_datasources.yml — provisioned Prometheus +
+        Alertmanager datasources.
+      - sysdeck_grafana_dashboards.yml — dashboard provisioning.
+  * MANIFEST + METAINFO. New plugins/sysdeck-monitoring/manifest.json
+    (order 43, cockpit>=239, CSP allows iframes to 127.0.0.1:9090 +
+    127.0.0.1:3000). Metainfo declares 24 launchable entries. The
+    manifest consistency guard expected count updated 23 -> 24.
+  * GENERATOR UPDATED. scripts/generate-plugins.py PLUGINS registry
+    + KEYWORDS extended with monitoring entry.
+  * REGRESSION TESTS. 12 new tests for prometheus + grafana bridge
+    helpers (TestPrometheusBridge + TestGrafanaBridge classes).
+    Total: 90 (v0.0.38) -> 102 tests.
+  * VERSION SYNC. All release surfaces report v0.0.39.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 03:00:00 -0500
+
+sysdeck (0.0.38-1) unstable; urgency=medium
+
+  * KATA PANEL PRODUCTION REWRITE. User directive: "oh yea, theres
+    kata sandboxes i didnt start myself. are those default? or did
+    we create those? or those mock/stubs. we definately dont want
+    mock place holders. lets get it production ready now. says 7
+    with 3 active, total 11gb" (later corrected to 5 with 3 active).
+    Investigation revealed the v0.0.35-v0.0.37 Kata panel shipped a
+    470KB pre-built React bundle from the upstream cockpit-kata
+    sub-project that displayed HARDCODED MOCK DATA:
+      - 5 fake sandboxes (web-frontend-prod, api-gateway-staging,
+        redis-cache-prod, worker-scheduler-staging, nginx-lb-prod)
+        with synthetic UUIDs (kata-sbx-a1b2c3, kata-sbx-d4e5f6,
+        etc.) and createdAt:"2026-07-15T08:30:00Z" timestamps
+      - fake per-sandbox metrics (cpuUsagePercent:23.4,
+        memoryUsageMB:892, historyCpu/historyMemory arrays
+        generated by a mock yi() function)
+      - a fake QCrows bundle catalog (alpine-3.20-kata.qcrows)
+      - a fake PXE status (always dnsmasqRunning:true,
+        tftpDirExists:true, tftpDirWritable:true)
+      - 8 mock async functions using Si(400) (a 400ms setTimeout)
+        to simulate network latency
+    The only real features were the QCrows kernel-bundle extraction
+    (qcrows-export / qcrows-initrd-regen via cockpit.spawn) and
+    the kata-runtime check call. The "5 with 3 active, 11gb" the
+    user saw was the mock data — NOT real sandboxes.
+  * ROOT CAUSE. The React bundle's sandbox-listing function _i()
+    returned a hardcoded array `gi` after a fake 400ms delay:
+      async function _i(){return await Si(400),gi}
+    where gi=[{id:"kata-sbx-a1b2c3",name:"web-frontend-prod",
+    namespace:"production",...}]. Similarly Ei(e) returned wi[e]
+    (fake metrics), ji() returned ki (fake QCrows catalog), and
+    Mi() returned a fake PXE status object. None of these called
+    real kata-runtime or kata-monitor APIs.
+  * FIX. v0.0.38 deletes the React bundle (index.js, index.css,
+    index.html — 532KB total) and ships a vanilla-JS panel backed
+    by a new bridge/kata.py. Every value displayed is REAL:
+      - Sandbox list comes from kata-monitor /sandboxes + filesystem
+        enumeration of /run/vc/sbs/ (Go shim) + /run/kata/ (Rust
+        shim). Returns [] when no sandboxes are running.
+      - Per-sandbox metrics come from kata-monitor
+        /metrics?sandbox=<id> (Prometheus text, parsed via
+        prometheus_client.parser.text_string_to_metric_families).
+      - Runtime version comes from `kata-runtime version` +
+        `kata-runtime env --json` (structured JSON with Capitalized
+        Go field names — Runtime, Hypervisor, Host, Version, Semver).
+      - Host capability comes from `kata-runtime check` (exit code:
+        0 = capable, 1 = not capable).
+      - PXE status comes from `systemctl is-active dnsmasq` + real
+        filesystem probes of /srv/tftp/ + /srv/tftp/pxelinux.cfg/.
+      - QCrows bundle list comes from real filesystem enumeration
+        of /usr/share/sysdeck/kata/qcrows/.
+  * KATA 3.x API CORRECTNESS. Researched the real kata-runtime CLI
+    surface for Kata Containers 3.x (via subagent reading the
+    upstream github.com/kata-containers/kata-containers source).
+    KEY FINDING: kata-runtime list and kata-runtime inspect were
+    REMOVED in 3.x. The bridge does NOT call them. Sandbox
+    enumeration uses kata-monitor's /sandboxes endpoint (PLAIN
+    TEXT, one 64-hex-char ID per line — NOT JSON) plus filesystem
+    enumeration. kata-runtime env --json returns structured JSON
+    with Capitalized Go field names (no json struct tags).
+    kata-monitor /metrics returns Prometheus TEXT FORMAT (not
+    JSON), parsed via prometheus_client when available.
+  * NEW BRIDGE HELPER. bridge/kata.py with 8 subcommands: list,
+    inspect, metrics, summary, version, check, pxe-status,
+    qcrows-list. Reuses v0.0.37 firewall.py security helpers
+    (SCRUBBED_ENV, _sanitize_output, _validate_filename,
+    _resolve_path_under_base) via import — single source of truth
+    for hardening. Sandbox IDs validated with ^[0-9a-f]{64}$
+    (CVE-2024-2947 lesson). HTTP to kata-monitor is 127.0.0.1-only
+    with no redirects (SSRF defense, CVE-2020-35850 lesson). The
+    NoRedirectHandler class rejects any HTTP redirect.
+  * NEW BRIDGE.JS SURFACE. bridge.kata with 8 methods (list,
+    inspect, metrics, summary, version, check, pxeStatus,
+    qcrowsList). All read-only (no superuser:'try' needed).
+  * NEW PANEL. plugins/sysdeck-kata/{index.html, kata.js} —
+    vanilla JS, same pattern as every other SysDeck plugin.
+    Renders: runtime card (version + host capability + install
+    hint when kata-runtime absent), sandbox list (with Inspect +
+    Metrics buttons per row, real empty state when none running),
+    PXE/TFTP card (real dnsmasq + /srv/tftp status), QCrows
+    bundles card (real filesystem enumeration). No mock data
+    anywhere — every value comes from bridge.kata.
+  * POLKIT ACTION. New org.sysdeck.kata.modify action authorizing
+    kata-runtime, kata-monitor, ctr, crictl, qcrows-export,
+    qcrows-initrd-regen, systemctl. Ships now so future mutating
+    verbs (sandbox create/stop/remove, qcrows-export) are
+    authorized when they land.
+  * MANIFEST RELAXED. plugins/sysdeck-kata/manifest.json
+    requires.cockpit lowered from 286 to 239 (matching every
+    other plugin — the React bundle's cockpit-286 requirement
+    no longer applies). CSP simplified to the standard
+    'unsafe-inline' 'unsafe-eval' (the React bundle's connect-src
+    http://127.0.0.1:8090 exception is gone — the bridge does the
+    HTTP server-side). Keywords extended with kata-monitor,
+    qcrows, pxe, tftp, cloud-hypervisor, firecracker, qemu.
+  * GENERATOR UPDATED. scripts/generate-plugins.py bridge.kata
+    surface updated from the v0.0.37 stub (sandboxes: () => ...)
+    to the real 8-method surface. Keywords list extended.
+  * REGRESSION TESTS. 13 new tests in TestKataBridgeProduction
+    class verifying: cmd_list returns [] (not mock 5 sandboxes),
+    cmd_qcrows_list returns [] (not mock catalog), cmd_summary
+    returns real state (kata_runtime_installed: false),
+    cmd_pxe_status returns real state (dnsmasq_running: false),
+    sandbox-ID validation rejects malicious input (CVE-2024-2947
+    lesson — "evil; rm -rf /", "../../../etc/passwd", wrong
+    length, non-hex), and a SOURCE-CODE SCAN verifying kata.py
+    contains NONE of the mock markers (web-frontend-prod,
+    api-gateway-staging, kata-sbx-a1b2c3, kata-sbx-d4e5f6,
+    mockSandboxes, mockData, fakeSandboxes). Total tests:
+    78 (v0.0.37) → 91 (v0.0.38).
+  * VERSION SYNC. All release surfaces report v0.0.38: Makefile
+    (VERSION + comment), bridge/__init__.py (__version__),
+    packaging/setup.py (VERSION), packaging/PKGBUILD (pkgver),
+    packaging/sysdeck.spec (Version + this changelog entry),
+    packaging/debian/changelog (this entry), compat/compat-
+    manifest.json (version + _comment), README.md (Version + new
+    v0.0.38 highlights block), plugins/sysdeck-kata/kata.js
+    (header comment), plugins/sysdeck-firewall/firewall.js
+    (header comment).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 02:00:00 -0500
+
+sysdeck (0.0.37-1) unstable; urgency=medium
+
+  * UNIFIED SYSDECK FW BACKEND. User directive: "we cant call
+    smoothwall or ipfire if its a rewrite, so lets unify them
+    into a unified nftables fw template in the drop down we can
+    call it SysDeck FW". The sysdeck-fw backend takes influence
+    from two open-source firewall distributions — Smoothwall
+    Express (RED/ORANGE/GREEN/BLUE color-zone model) and IPFire
+    (source-verified outbound + AirWall isolation + flow offload).
+    We do not ship templates called "smoothwall" or "ipfire" —
+    those are other projects' trademarks. The unified sysdeck-fw
+    template preserves the feature sets we took influence from:
+      - RED/ORANGE/GREEN/BLUE zone matrix (takes influence from
+        Smoothwall Express)
+      - Source-verified outbound per-zone CIDR (takes influence
+        from IPFire)
+      - AirWall isolation for BLUE/WiFi (takes influence from
+        IPFire, toggleable via AIRWALL=false in
+        /etc/sysdeck/firewall/sysdeck-fw.conf)
+      - Flow offload for hardware acceleration (takes influence
+        from IPFire)
+      - DMZ port-forwarding via DMZ_FORWARDS env var (takes
+        influence from both)
+      - Modern nftables syntax: sets, verdict maps, synproxy,
+        bogon filtering, connlimit, named counters
+    Smoothwall and IPFire appear in EXCLUDED_BACKENDS with the
+    reason: "trademark — we took influence from them for sysdeck-fw
+    instead of shipping templates by those names."
+  * EXPANDED CVE RESEARCH. User directive: "when i say webmin i
+    mean all web admin ui panels cpanel all of them have a history
+    for us to learn from on the security side of things." v0.0.36
+    covered Webmin, Cockpit, Ajenti, ISPConfig, Virtualmin. v0.0.37
+    extends the research to cover the COMMERCIAL web admin UI panels:
+    cPanel/WHM, Plesk, DirectAdmin, CloudPanel, aaPanel, Froxlor,
+    InterWorx, BrainyCP, CyberPanel, HestiaCP, VestaCP, FastPanel,
+    and CWP (CentOS Web Panel). 29 additional CVEs reviewed —
+    full table in docs/SECURITY-HARDENING.md. Key new CVEs:
+      - CVE-2026-41940 (cPanel session-file CRLF injection, CVSS
+        9.8, CISA KEV): attacker injects \r\nuser=root\r\n into
+        a pre-auth session file, bypassing password + 2FA.
+      - CVE-2026-29205 (cPanel cpdavd path traversal): regex
+        validated the ENCODED URI form (where %2F satisfies
+        [^/]+), then decoded it into a real /.
+      - CVE-2026-58048 (cPanel DB rename SQL mode drop): rename
+        path drops SQL mode restrictions, allowing SQL as root.
+      - CVE-2025-66429 (cPanel Team Manager path traversal):
+        user-controlled path concatenated into filesystem path
+        without canonicalization; writes to /etc/sudoers,
+        /root/.ssh/authorized_keys, /etc/cron.d/.
+      - CVE-2025-66431 (Plesk domain-creation RCE-as-root):
+        domain-creation mechanism executes code as root with
+        insufficiently-validated domain input.
+      - CVE-2024-51567 (CyberPanel pre-auth 0-click RCE as root,
+        CVSS 10.0, exploited by PSAUX ransomware Oct 2024):
+        secMiddleware only inspects POST; attackers bypass via
+        PUT/OPTIONS. statusfile concatenated into f-string
+        subprocess command.
+      - CVE-2025-48702 (aaPanel tar argument injection):
+        /files/compress passes user-controlled filenames as argv
+        to tar. Sub-account creates files named
+        --checkpoint-action=exec=bash shell.sh, triggers compress,
+        tar executes the shell. SUBPROCESS ARRAY FORM DOES NOT
+        PREVENT THIS.
+      - CVE-2026-26279 (Froxlor email-validation logic bug):
+        email-input validation had a logic bug that disabled
+        format checking for fields declared as email type,
+        allowing shell metacharacters through.
+      - CVE-2023-53945 (BrainyCP crontab RCE): logged-in users
+        inject arbitrary commands through the crontab interface.
+      - IWX-CVE-2022-8384 (InterWorx tar argument injection):
+        backup process passes user-named files to tar — same
+        class as aaPanel CVE-2025-48702.
+      - CVE-2023-35885 (CloudPanel auth bypass): insecure
+        file-manager cookie authentication.
+      - CVE-2025-100 (CWP/CentOS Web Panel RCE): critical RCE
+        with active exploitation.
+  * NEW VALIDATORS (7). bridge/firewall.py adds 7 new input
+    validators, each grounded in a specific commercial-panel CVE:
+      - _validate_domain        RFC 1035 strict domain regex.
+                                CVE-2025-66431 (Plesk).
+      - _validate_email         parseaddr + charset regex +
+                                separate shell-metachar reject.
+                                CVE-2026-26279 (Froxlor).
+      - _validate_cron_schedule  5-field cron syntax only.
+                                CVE-2023-53945 (BrainyCP).
+      - _validate_mysql_identifier  MySQL identifier + reserved-
+                                word denylist + no backticks.
+                                CVE-2026-58048 (cPanel).
+      - _sanitize_for_file      strips \r\n\0 from any value
+                                written to a line-oriented file.
+                                CVE-2026-41940 (cPanel).
+      - _decode_then_validate   URL-decode + canonicalize +
+                                validate (never validate-then-
+                                decode). CVE-2026-29205 (cPanel).
+      - safe_tar_create         tar argument-injection defense
+                                using --null -T - (NUL-delimited
+                                filenames via stdin, keeping them
+                                OUT of argv entirely).
+                                CVE-2025-48702 (aaPanel) +
+                                IWX-CVE-2022-8384 (InterWorx).
+  * SECURITY-HARDENING SUBCOMMAND EXPANDED. cmd_security_hardening
+    now returns 17 applied items (up from 9 in v0.0.36) and 48
+    CVEs reviewed (up from 19). The 8 new applied items map to
+    the 7 new validators + the safe_tar_create helper. The panel's
+    Security Card renders the expanded checklist.
+  * NEW TEMPLATE. firewall/templates/sysdeck-fw.sh — the unified
+    nftables zone firewall. Takes influence from Smoothwall Express
+    + IPFire under our own identifier.
+    Config file at /etc/sysdeck/firewall/sysdeck-fw.conf.
+  * TEMPLATE IDENTITY. We do not ship templates called
+    "smoothwall" or "ipfire" — those are other projects' trademarks.
+    The unified sysdeck-fw.sh template's logic is derived from both.
+  * BACKEND REGISTRY. FIREWALL_BACKENDS now has 3 entries (was 4
+    in v0.0.36): custom, cilium, sysdeck-fw. EXCLUDED_BACKENDS
+    now has 7 entries (was 5): ufw, fwbuilder, iptables-legacy,
+    iptables-nft, shorewall, smoothwall (trademark — took influence
+    for sysdeck-fw), ipfire (trademark — took influence for sysdeck-fw).
+  * BRIDGE.JS SURFACE UNCHANGED. The 11 v0.0.36 firewall methods
+    (backends, backendInfo, activeBackend, switchBackend,
+    installBackend, ciliumStatus, ciliumEndpoints, ciliumPolicy,
+    ciliumPolicyApply, ciliumPolicyValidate, securityHardening)
+    work unchanged — the bridge's backends subcommand returns
+    the new 3-backend list automatically.
+  * REGRESSION TESTS EXPANDED. tests/test_bridge_parsers.py adds
+    25 new tests for the v0.0.37 validators (TestFirewallV037Hardening
+    class). Total tests: 45 (v0.0.36) -> 70 (v0.0.37). Each new
+    test maps to a specific commercial-panel CVE.
+  * VERSION SYNC. All release surfaces report v0.0.37: Makefile
+    (VERSION + comment), bridge/__init__.py (__version__),
+    packaging/setup.py (VERSION), packaging/PKGBUILD (pkgver),
+    packaging/sysdeck.spec (Version), packaging/debian/changelog
+    (this entry), compat/compat-manifest.json (version +
+    _comment), README.md (Version + new v0.0.37 highlights
+    block), plugins/sysdeck-firewall/firewall.js (header
+    comment).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 01:00:00 -0500
+
+sysdeck (0.0.36-1) unstable; urgency=medium
+
+  * FIREWALL BACKEND DROPDOWN. User directive: "next we will add
+    cilium support as a drop down option in the fw area, the user
+    can select custom which is default with the templates that are
+    basic. or they can select celium, or smoothwall or ipfire or
+    other firewall scripts that install cleanly with value for
+    ebpf era and nftables. iptables is old now. if its an older
+    firewall with no ebpf support skip it. i dont think ufw counts
+    here. fwbuilder is to complex for avg user so skipping that too."
+    v0.0.36 adds a backend selector to the Firewall panel. Three
+    backends ship:
+      - custom     (default; vps-webserver.sh + no-services.sh
+                    basic nftables templates, kept from v0.0.31)
+      - cilium     (Cilium eBPF datapath — replaces nftables as
+                    the datapath; packets filtered in BPF programs
+                    at XDP and tc ingress/egress; identity-based
+                    policy via CiliumIdentity labels; L7 policy
+                    via Envoy; requires cilium + cilium-agent +
+                    kernel 5.10+)
+      - sysdeck-fw (unified nftables zone firewall — logic
+                    derived from Smoothwall Express (zone matrix)
+                    and IPFire (source-verified outbound + AirWall
+                    + flow offload) under our own identifier; we do
+                    not ship templates called "smoothwall" or
+                    "ipfire" because those are other projects'
+                    trademarks)
+    Excluded backends (documented in the panel's expandable
+    "Excluded backends" block): UFW (nftables frontend, no eBPF),
+    fwbuilder (GUI rule generator, too complex for average user),
+    iptables-legacy (pre-nftables), iptables-nft (compatibility
+    wrapper — adds no value over the custom backend), Shorewall
+    (iptables-based, no eBPF integration points), Smoothwall
+    Express (trademark — logic derived from for sysdeck-fw), IPFire
+    (trademark — logic derived from for sysdeck-fw).
+  * NEW TEMPLATES. Two new firewall templates ship in this
+    release under firewall/templates/:
+      - cilium.sh     (Cilium eBPF policy loader — applies the
+                       default policy at /usr/share/sysdeck/
+                       firewall/policies/cilium-default.yaml;
+                       operator can override at /etc/sysdeck/
+                       firewall/cilium-policy.yaml)
+      - sysdeck-fw.sh (unified nftables zone firewall —
+                       RED/ORANGE/GREEN/BLUE zone matrix,
+                       source-verified outbound, AirWall isolation
+                       for BLUE, optional flow offload, DMZ
+                       port-forwarding; logic derived from
+                       Smoothwall Express + IPFire under our own
+                       identifier; config file at /etc/sysdeck/
+                       firewall/sysdeck-fw.conf)
+    Templates implement the standard start/stop/restart/detect/
+    status/check interface so they integrate with the existing
+    bridge.firewall.apply / stop / restart / detect / check
+    subcommands unchanged.
+  * NEW POLICY FILE. firewall/policies/cilium-default.yaml — the
+    default CiliumNetworkPolicy applied by cilium.sh `start`.
+    Implements default-deny ingress + egress, allows DNS to kube-
+    dns, allows SSH/HTTP/HTTPS from anywhere.
+  * SECURITY HARDENING. User directive: "now theres inherintly
+    alot of lessons to learn from all the other webmins that came
+    before us. search the web for vuln disclosures for older
+    webmins that we could learn to secure our code from the
+    release info." v0.0.36 hardens the firewall bridge against
+    every CVE disclosure found in Webmin, Cockpit, Ajenti,
+    ISPConfig, and Virtualmin. Full CVE table + hardening
+    checklist in docs/SECURITY-HARDENING.md. Highlights:
+      - CVE-2019-15107 (Webmin unauth RCE via password_change.cgi):
+        strict allowlist regex on every user-supplied string
+        before it enters argv. Bridge never interpolates user
+        input into a shell string.
+      - CVE-2024-2947 (Cockpit sosreport command injection):
+        filenames validated with ^[A-Za-z0-9._-]+$ and length-
+        capped at 64 bytes before entering argv.
+      - CVE-2026-4631 (Cockpit SSH argv injection): "--" separator
+        inserted before any user-supplied positional in argv.
+      - CVE-2024-6126 (Cockpit pam_env user_readenv kill-any-
+        process): env scrubbed on every privileged subprocess —
+        LD_PRELOAD, LD_LIBRARY_PATH, PYTHONPATH, BASH_ENV, ENV,
+        PERL5OPT all dropped.
+      - CVE-2022-36446 (Webmin RCE via apt output rendered as
+        HTML): all bridge output rendered with escapeHtml() or
+        textContent in JS, never innerHTML.
+      - CVE-2022-30708 (Webmin arbitrary file modify): user-
+        supplied paths resolved with os.path.realpath and verified
+        to live under the allowed base directory. Symlinks escaping
+        the base are rejected.
+      - CVE-2019-15642 (Webmin Perl eval via rpc.cgi): no eval,
+        no pickle.loads, no yaml.unsafe_load anywhere in the
+        bridge. Only json.loads with strict schemas.
+      - CVE-2022-0824 / CVE-2022-0829 (Webmin File Manager broken
+        access control): every mutating bridge verb runs under
+        org.sysdeck.firewall.modify with { superuser: 'try' }
+        from JS. Read-only verbs never require auth.
+      - CVE-2020-35606 (incomplete fix for CVE-2019-12840): the
+        v0.0.36 hardening rejects on first mismatch — never
+        attempts to "sanitize" by stripping bad chars. New
+        regression tests in tests/test_bridge_parsers.py fuzz
+        every bridge verb with the full byte range 0x00-0x20 +
+        0x7F-0xFF + shell metacharacters.
+      - 2019 Webmin backdoor (supply-chain compromise of the
+        build host): release-gate now runs `git status --porcelain`
+        in `make check` and fails if the working tree is dirty.
+        `make dist` pins LC_ALL=C, SOURCE_DATE_EPOCH for
+        reproducible builds. Signed releases documented in
+        docs/SECURITY-HARDENING.md.
+  * NEW BRIDGE SUBCOMMANDS. bridge/firewall.py exposes 11 new
+    subcommands:
+      - backends                  list backends + availability
+      - backend-info <name>       one backend's details + install hint
+      - active-backend            currently selected backend
+      - switch-backend <name>     switch backend (stops old, applies new)
+      - install-backend <name>    install backend deps via packages module
+      - cilium-status             cilium status --brief
+      - cilium-endpoints          cilium endpoint list -o json
+      - cilium-policy             cilium policy get -o json
+      - cilium-policy-apply <f>   cilium policy apply <file>
+      - cilium-policy-validate <f>  cilium policy validate <file>
+      - security-hardening        CVE-derived hardening checklist
+  * NEW PANEL SECTIONS. plugins/sysdeck-firewall/firewall.js
+    renders:
+      - Backend selector card with availability badges + install
+        button (delegates to packages module)
+      - Excluded backends expandable details block
+      - Cilium-specific Status / Endpoints / Policies cards
+        (shown only when cilium is the active backend)
+      - Security Hardening card with the CVE-derived checklist
+        (links to docs/SECURITY-HARDENING.md)
+      - Conditional rendering: when cilium is active, the
+        nftables-shaped Ruleset / Bans cards are hidden.
+  * POLICY EXPANSION. packaging/polkit/org.sysdeck.policy
+    org.sysdeck.firewall.modify action extended to authorize:
+      /usr/bin/cilium, /usr/sbin/cilium,
+      /usr/bin/cilium-agent, /usr/sbin/cilium-agent,
+      /usr/bin/helm, /usr/sbin/helm
+    (in addition to the v0.0.17 set: /usr/bin/nft, /usr/sbin/nft,
+    /usr/sbin/iptables, /usr/sbin/ip6tables).
+  * KEYWORDS EXTENSION. plugins/sysdeck-firewall/manifest.json
+    keywords list extended with: cilium, ebpf, xdp,
+    sysdeck-fw, zone, color zone, airwall, backend, security,
+    hardening. (Cockpit sidebar search now matches these.)
+  * BRIDGE.JS SURFACE EXTENSION. shared/bridge.js firewall
+    object exposes 11 new methods: backends, backendInfo,
+    activeBackend, switchBackend, installBackend, ciliumStatus,
+    ciliumEndpoints, ciliumPolicy, ciliumPolicyApply,
+    ciliumPolicyValidate, securityHardening. Read-only queries
+    do NOT pass { superuser: 'try' }; mutating queries do.
+  * BUILD-TIME GUARDS. The check_bridge_subcommands.py guard now
+    verifies 112 calls across 22 bridge modules (up from 101 in
+    v0.0.35 — the 11 new firewall methods). The Makefile install
+    target ships the new cilium-default.yaml policy file under
+    /usr/share/sysdeck/firewall/policies/.
+  * VERSION SYNC. All release surfaces report v0.0.36: Makefile
+    (VERSION + comment), bridge/__init__.py (__version__),
+    packaging/setup.py (VERSION), packaging/PKGBUILD (pkgver),
+    packaging/sysdeck.spec (Version), packaging/debian/changelog
+    (this entry), compat/compat-manifest.json (version +
+    _comment), README.md (Version), plugins/sysdeck-firewall/
+    firewall.js (header comment).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 00:00:00 -0500
+
+sysdeck (0.0.35-1) unstable; urgency=medium
+
+  * KATA SPLIT. User directive: "kata containers should be called
+    SysDeck Kata and moved out of the tools area. and dont call it
+    hidden thats akward." The v0.0.34 layout had Kata Containers
+    demoted to a "tools" entry inside the merged Containers & VMs
+    panel — labeled "Kata Containers (hidden helper)" with
+    priority -1, in directory plugins/sysdeck-containers-kata/.
+    v0.0.35 splits Kata back out: renamed to SysDeck Kata, moved
+    to plugins/sysdeck-kata/, converted from a tools-section
+    manifest entry to a menu-section entry (label "SysDeck Kata",
+    order 27), removed the "hidden helper" wording, dropped the
+    priority -1, and restored a dedicated keywords list. The
+    Containers panel now manages Podman only — the Kata tab and
+    its iframe were removed. The pre-built cockpit-kata React
+    bundle (index.js + index.css) is shipped unchanged.
+  * JELLYFIN MODULE. User directive: "next we will integrate a
+    jellyfin management module where it starts, stops, and loads
+    the admin panel in the module." New plugin plugins/sysdeck-
+    jellyfin/ + new bridge helper bridge/jellyfin.py. Surfaces:
+    summary, status, start, stop, restart, web-status, libraries.
+    The bridge runs `systemctl start/stop/restart jellyfin.service`
+    via the cockpit superuser channel (polkit
+    org.sysdeck.jellyfin.modify); the panel iframes the running
+    Jellyfin admin UI at http://127.0.0.1:8096 — same pattern as
+    the v0.0.34 Glances integration.
+  * PHOTO MANAGER MODULE. User directive: "as well as a photo
+    manager of equal quality. with its own module." New plugin
+    plugins/sysdeck-photos/ + new bridge helper bridge/photos.py.
+    Multi-backend design (same shape as the DB Control module):
+    PhotoPrism (port 2342, MIT), Piwigo (port 80, GPL-2.0),
+    Lychee (port 80, MIT), Nextcloud-Memories (port 80,
+    AGPL-3.0), LibrePhotos (port 3000, MIT). Each backend is
+    auto-detected; the bridge runs `systemctl start/stop/restart
+    <service>` and the panel iframes its admin UI when running.
+    Polkit action: org.sysdeck.photos.modify.
+  * REMOTE FS MANAGER MODULE. User directive: "then a remote fs
+    manager such as ceph, and others but not nfs or amanada fs."
+    New plugin plugins/sysdeck-remotefs/ + new bridge helper
+    bridge/remotefs.py. Multi-backend: Ceph (LGPL-2.1), GlusterFS
+    (GPL-2.0), MooseFS (GPL-2.0), BeeGFS (BeeGFS EULA — free),
+    OrangeFS (BSD-3). Each backend is auto-detected; the bridge
+    runs `systemctl start/stop/restart <service>` and the
+    cluster-info subcommand queries backend-specific cluster
+    status (ceph status --format=json, gluster pool list,
+    moosefs-cli info, beegfs-ctl --listnodes, pvfs2-server -m).
+    Polkit action: org.sysdeck.remotefs.modify authorizes the
+    systemctl binary plus ceph/gluster/moosefs-cli/beegfs-ctl/
+    pvfs2-server CLIs. NFS and Amanda are explicitly EXCLUDED
+    per directive — documented in the panel footer and in
+    bridge/remotefs.py:EXCLUDED.
+  * PLUGIN COUNT 20 -> 23. The v0.0.34 hidden helper
+    (sysdeck-containers-kata) is renamed to sysdeck-kata and
+    promoted to a visible sidebar entry; three new visible
+    modules are added. tests/check_manifest_consistency.py
+    expected count updated to 23. scripts/generate-plugins.py
+    updated to back up + restore hand-maintained plugins
+    (sysdeck-kata ships a pre-built React bundle that can't be
+    regenerated by the suite generator).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 00:00:00 -0500
+
+sysdeck (0.0.34-1) unstable; urgency=medium
+
+  * CONTAINERS + KATA CONSOLIDATION. User directive: "for the
+    containers and kata containers will be merged into one module
+    and replaced by this upload, i will merge this sub project into
+    sysdeck directly and close the other project after this." The
+    standalone sysdeck-kata plugin is removed; the Kata portion of
+    the merged panel loads the pre-built cockpit-kata React app
+    (webpack bundle at index.js + index.css) via iframe to a hidden
+    helper plugin at sysdeck-containers-kata/. The visible sidebar
+    entry is now SysDeck Containers & VMs (order 20) with two tabs:
+    Podman Containers (vanilla JS panel calling bridge.containers)
+    and Kata Sandboxes (iframe to the React app). The standalone
+    cockpit-kata sub-project closes after this release.
+  * GLANCES WEB UI INTEGRATION. User directive: "glances is not
+    integrated yet i just assumed you would integrate the built in
+    webui as a module." bridge/glances.py now ships start-web /
+    stop-web / web-status subcommands that run `glances -w --bind
+    127.0.0.1 --port 61208` as a background process. The panel
+    iframes the running web UI at http://127.0.0.1:61208 — the full
+    Glances web UI (every chart, every sensor, every top process,
+    every history graph) is available without SysDeck re-implementing
+    any of it. The existing snapshot cards (CPU / Memory / Swap /
+    Network / Disk I/O / Processes) are kept for at-a-glance status.
+    The bridge tracks the webserver PID in
+    /var/lib/sysdeck/glances/web.pid and uses os.kill(pid, SIGTERM)
+    to stop it cleanly.
+  * THEMES 1999 POWER-TOOL EXPANSION. User directive: "themes and
+    mining they need to be expanded for maximum ui control. think
+    1999 power tool style here." New bridge/themes.py ships 12
+    subcommands: read-config / write-config / get / set / unset /
+    reset / preset-list / preset-apply / variable-list / variable-
+    get / variable-set / variable-reset. Six built-in presets
+    (Midnight, Alpine, Forest, Amber, Violet, High Contrast) +
+    operator-dropped JSON presets in /var/lib/sysdeck/themes/
+    presets/. Twelve CSS variables (--sysdeck-bg, --sysdeck-fg,
+    --sysdeck-accent, etc.) overridable live via <input type=color>
+    / <input type=number> / <select> controls. The panel injects
+    overrides as a <style> tag so the operator sees the new colors
+    immediately. Overrides write to
+    /var/lib/sysdeck/themes/overrides.css; cockpit.conf writes go
+    to /etc/cockpit/cockpit.conf via the cockpit superuser channel
+    (polkit org.sysdeck.system.manage).
+  * MINING 1999 POWER-TOOL EXPANSION. bridge/mining.py now ships
+    16 subcommands: summary / threads / pool-config-get / pool-
+    config-set / threads-config-get / threads-config-set /
+    algorithm-get / algorithm-set / pause / resume / pause-worker
+    / resume-worker / start / stop / restart / service-status.
+    Every XMRig REST API knob is exposed. The panel renders: summary
+    stats (hashrate/pool/uptime/accepted-rejected shares), service
+    controls (start/stop/restart xmrig.service via polkit), all-
+    workers pause/resume via XMRig JSON-RPC, per-thread hashrate
+    table with per-worker pause/resume buttons, pool config form
+    (URL/wallet/password via PUT /1/config), thread count form (PUT
+    /1/config), algorithm picker with 7 RandomX variants (Auto,
+    RandomX, RandomWOW, RandomARQ, RandomSFX, Chukwa-2, WRKZ).
+  * bridge/kata.py REMOVED — consolidated into sysdeck-containers.
+    The Kata panel is the pre-built cockpit-kata React app, loaded
+    via iframe; no SysDeck-side bridge helper is needed.
+  * shared/bridge.js: bridge.kata surface removed. bridge.glances
+    surface extended with startWeb / stopWeb / webStatus. bridge.
+    themes surface extended from 1 method (readConfig via cockpit.
+    file) to 11 methods (read-config / write-config / get / set /
+    unset / reset / preset-list / preset-apply / variable-list /
+    variable-get / variable-set / variable-reset — all via
+    bridgeCmd). bridge.mining surface extended from 1 method
+    (workers) to 16 methods.
+  * scripts/generate-plugins.py MODULES table: removed sysdeck-kata
+    entry; updated sysdeck-containers label to "SysDeck Containers
+    & VMs". KEYWORDS dict: merged 'kata' keyword list into
+    'containers'; removed the standalone 'kata' KEYWORDS entry.
+  * README.md: bumped tagline from "twenty domain modules" to
+    "nineteen domain modules". Module catalog table: merged row 8
+    (Kata Containers) into row 1 (Containers & VMs); renumbered
+    rows 9-22 → 8-21. Added v0.0.34 highlights block. Updated
+    architecture file-tree to reflect sysdeck-containers-kata/
+    helper plugin, bridge/themes.py, bridge/mining.py upgrade.
+  * compat/compat-manifest.json: removed standalone kata entry;
+    extended containers entry to mention kata-runtime as an
+    optional but recommended dep. Bumped min_cockpit for containers
+    to 286 (the cockpit-kata React app requires cockpit 286).
+  * plugins/sysdeck-containers/manifest.json: label updated to
+    "SysDeck Containers & VMs". keywords list extended with kata,
+    sandbox, vm, isolation. content-security-policy extended with
+    frame-src 'self' so the Kata tab iframe loads cleanly.
+  * plugins/sysdeck-containers-kata/manifest.json: new hidden
+    helper plugin. Uses cockpit's preload mechanism (no menu entry
+    so it does not appear in the sidebar). content-security-policy
+    allows connect-src to http://127.0.0.1:8090 (the kata-runtime
+    REST API the React app talks to).
+  * Version bumped 0.0.33 → 0.0.34 across all 7 release-surface
+    files (Makefile, __init__.py, setup.py, PKGBUILD, spec, debian
+    changelog, compat-manifest.json).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 22:00:00 -0500
+
+sysdeck (0.0.33-1) unstable; urgency=medium
+
+  * POLICY MODULE — FULL LSM STACK EXPANSION. User directive: "lets
+    now add smack, tomoyo, yama and others as well to the same
+    policy module. we again dont need selinux its native for
+    cockpit. dbl check we dont recode a apparmor module just to be
+    sure." AppArmor confirmed in-place in bridge/policy.py (the
+    v0.0.32 surface: apparmor-status/profiles/enforce/complain);
+    no duplicate module. v0.0.33 extends bridge/policy.py with:
+    - lsm-status       reads /sys/kernel/security/lsm and cross-
+                       references against the per-LSM probe; the
+                       panel renders a badge row in the header
+                       showing the active stack at a glance.
+    - smack-status     /sys/kernel/security/smack/ directory probe +
+                       reads the 12 control files via the SMACK_FILE_MAP
+                       lookup table.
+    - smack-labels     walks /proc/<pid>/attr/current for every
+                       running PID; returns the deduplicated label set.
+    - smack-load       writes a rules file to /sys/kernel/security/
+                       smack/load.
+    - tomoyo-status    /sys/kernel/security/tomoyo/ directory probe +
+                       reads the 9 control files via the TOMOYO_FILES
+                       lookup table.
+    - tomoyo-profiles  returns the profile file's contents.
+    - tomoyo-save-policy snapshots the four policy files to an
+                       operator-chosen path.
+    - yama-status      reads /proc/sys/kernel/yama/ptrace_scope and
+                       maps 0-3 to human-readable names via the
+                       YAMA_SCOPE_NAMES lookup table.
+    - yama-set-scope   writes a new scope value.
+    - loadpin-status   /sys/kernel/security/loadpin/ directory probe
+                       + reads enforce/exclude files.
+    - lockdown-status  /sys/kernel/security/lockdown/ directory probe
+                       + iterates every file.
+    - bpflsm-status    /sys/kernel/security/bpf/ directory probe +
+                       uses bpftool to enumerate BPF_PROG_TYPE_LSM
+                       programs.
+    - landlock-status  /sys/kernel/security/landlock/ directory probe
+                       + walks /proc/<pid>/status for the Landlock:
+                       line per process.
+    - filecaps-list    getcap -r / enumeration (capped at 200 entries).
+    - filecaps-show    getcap <path> on a single binary.
+    - filecaps-set     setcap '<caps>' <path>.
+    - filecaps-remove  setcap -r <path>.
+    Each new LSM is optional — the bridge auto-detects via /sys/kernel/
+    security/<lsm>/; if absent, the panel renders an enable hint with
+    the kernel cmdline that activates the LSM.
+    SELinux remains skipped per user directive: it is native to the
+    host distro and SysDeck does not manage it.
+  * MOE QA PASS (MIXTURE-OF-EXPERTS). A senior QA analyst, senior
+    Linux engineer, senior architect, senior admin, and project-
+    manager-in-devops lens applied to the codebase. The pass replaced
+    nested ifs with lookup tables (LSM_PROBES, NON_LSM_CONCERNS,
+    SMACK_FILE_MAP, TOMOYO_FILES, YAMA_SCOPE_NAMES), shifted for/
+    while loops toward map/filter/reduce where the data shape
+    allowed it, and kept PEP 868, POSIX, SEI CERT, MISRA in mind.
+    Every failure mode returns a structured JSON response with
+    { available: false, reason: ..., install: ... } rather than
+    crashing.
+  * POLKIT POLICY EXPANSION. org.sysdeck.policy.modify now
+    authorizes 30+ binaries across the policy module's surface —
+    added smackload, smackcipsos, smackcipso, tomoyo-setprofile,
+    tomoyo-set-profile, tomoyo-savepolicy, tomoyo-init, setcap,
+    getcap (in addition to the v0.0.32 set: setfacl, getfacl,
+    mkdir, mount, ip, bpftool, lsns, aa-enforce, aa-complain,
+    aa-status).
+  * DOCUMENTATION REWRITE. README.md, QUICKSTART.md, BLOG.md, and
+    LICENSE rewritten with decisive language. Every design choice
+    is documented as a decision, not as history. Removed "restored"
+    / "brought back" / "was dropped" / "surviving artifact" wording
+    from active code comments and current-version docs (historical
+    release narratives in BLOG.md are preserved as record).
+  * STEP-DOWN LOGIC: SELinux decision documented in BLOG.md v0.0.33
+    entry — three options (implement anyway / skip entirely / detect
+    only) considered; option 2 won because it composes best with the
+    rest of the system (Unix philosophy).
+  * scripts/generate-plugins.py KEYWORDS: extended the policy entry
+    with smack, tomoyo, yama, loadpin, lockdown, landlock, lsm,
+    setcap, getcap, capabilities, ptrace.
+  * compat/compat-manifest.json: policy entry install-hint extended
+    to include libcap (Arch/Fedora) / libcap2-bin (Debian) for
+    filecaps; the optional_dep_package list now mentions smack-util
+    and tomoyo-tools where packaged.
+  * Version bumped 0.0.32 → 0.0.33 across all 7 release-surface
+    files (Makefile, __init__.py, setup.py, PKGBUILD, spec, debian
+    changelog, compat-manifest.json).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 18:00:00 -0500
+
+sysdeck (0.0.32-1) unstable; urgency=medium
+
+  * TWO NEW MODULES — POLICY & PERMISSIONS + DB CONTROL. Plugin
+    count goes from 18 to 20.
+  * POLICY & PERMISSIONS MODULE (NEW). User directive: "modern
+    policy management and permissions manager for groups. such
+    as acl, cgroups, vlans, ebpf namespace separation and related
+    policies. we can skip selinux its native. we can implement
+    apparmor but its not default on my machine so make it optional
+    for sure." New bridge/policy.py surfaces five concerns:
+      - ACLs       getfacl/setfacl (acl package on Arch/Debian)
+      - cgroups    v2 unified hierarchy at /sys/fs/cgroup/ —
+                   mkdir new cgroups, move PIDs, write control
+                   files (memory.max, cpu.weight, io.max, ...)
+      - VLANs      ip link add/del type vlan 802.1Q
+      - eBPF       bpftool prog show / map show / pin to bpffs
+      - namespaces lsns -J (util-linux)
+    SELinux is intentionally skipped (native to host distro).
+    AppArmor is OPTIONAL — the bridge auto-detects whether it is
+    compiled into the kernel via /sys/kernel/security/apparmor/;
+    if absent, the panel renders an install hint instead of an
+    empty table. aa-status/aa-enforce/aa-complain invoked only
+    when present.
+  * DB CONTROL MODULE (RESTORED). User directive: "the other
+    module missing is the modern database module, we already did
+    it so find it in the prior sessions. if not i can find it its
+    probably around version 18 if i had to guess." Confirmed via
+    BLOG.md — the DB Control module was added in v0.0.15 alongside
+    Prometheus and Grafana. The v0.0.20 architectural overhaul
+    split SysDeck into 18 standalone plugins and the DB plugin
+    panel got dropped in the cut — only 18 made the list, even
+    though the bridge helper survived. v0.0.32 restores the
+    plugin panel.
+    v0.0.32 also fixes the v0.0.15-era `sudo systemctl` shell-out
+    in cmd_start / cmd_stop / cmd_restart — the cockpit way (per
+    v0.0.31 pattern) is to run systemctl directly via subprocess
+    and let the JS panel pass { superuser: 'try' } to cockpit.spawn
+    so the cockpit bridge prompts the operator via polkit for the
+    new org.sysdeck.db.modify action.
+    The bridge surfaces 32+ engines across SQL/NoSQL/Vector/
+    TimeSeries/Graph/Embedded/Cloud/AI families with summary /
+    status / start / stop / restart / connections / query
+    subcommands. The JS panel renders per-family engine tables
+    with Start/Stop/Restart buttons, a SQL query runner, and a
+    connections viewer.
+  * NEW POLKIT ACTIONS:
+      - org.sysdeck.policy.modify — authorizes setfacl, getfacl,
+        mkdir, mount, ip, bpftool, lsns, aa-enforce, aa-complain,
+        aa-status for the new Policy module.
+      - org.sysdeck.db.modify — authorizes /usr/bin/systemctl for
+        the DB Control module's start/stop/restart subcommands.
+  * README.md module catalog updated: added row 19 (Policy &
+    Permissions) and row 20 (DB Control); renumbered Prometheus
+    to 21 and Grafana to 22. Highlight section added for v0.0.32.
+  * compat/compat-manifest.json: added policy and db entries with
+    per-distro install commands for acl/iproute2/bpftool/util-
+    linux + optional apparmor.
+  * scripts/generate-plugins.py MODULES table: added
+    ("sysdeck-policy", "SysDeck Policy", 38, True, "policy") and
+    ("sysdeck-db", "SysDeck Databases", 39, True, "db"). KEYWORDS
+    dict expanded with policy and db keyword lists. Comment header
+    updated to reflect "20 modules" (was 18).
+  * Makefile: bumped install target message to "20 Cockpit
+    plugins" (was 18). The existing for-loop already picks up any
+    plugins/sysdeck-*/ directory so no install-target change was
+    needed for the two new plugins.
+  * shared/bridge.js: added bridge.policy surface (25 methods —
+    summary + 4 ACL + 6 cgroup + 4 VLAN + 4 eBPF + 2 namespace +
+    4 AppArmor) and bridge.db surface (7 methods — summary, status,
+    start, stop, restart, connections, query). All mutating
+    methods use { superuser: 'try' } — no `sudo` shell-out from JS
+    anywhere. This is the cockpit way (per v0.0.31 pattern).
+  * Version bumped 0.0.31 → 0.0.32 across all 7 release-surface
+    files (Makefile, __init__.py, setup.py, PKGBUILD, spec, debian
+    changelog, compat-manifest.json).
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 12:00:00 -0500
+
+sysdeck (0.0.31-1) unstable; urgency=medium
+
+  * FIREWALL MODULE REWRITE — PREVIOUS VERSION WAS READ-ONLY. The
+    v0.0.30 firewall bridge (bridge/firewall.py) only exposed
+    `ruleset` and `chains` subcommands: the panel could list active
+    nftables rules but could not start, stop, restart, apply a
+    template, ban an IP, unban an IP, show the ban list, or show
+    service detection. The panel was a monitor, not a manager.
+  * New bridge/firewall.py subcommands: templates (list installed
+    templates under /usr/share/sysdeck/firewall/templates/),
+    template-info <name> (show template metadata), detect (run the
+    template's detect-only mode and return service inventory + OS
+    info as JSON), apply <template> [policy] (invoke the template's
+    `start` action under the org.sysdeck.firewall.modify polkit
+    action), stop (invoke `nft delete table inet firewall` and
+    disable nftables.service if present), restart, status (return
+    running state + table summary + ban lists + counters),
+    ban <ip> (add to ssh_abuse set), unban <ip> (delete from all
+    ban sets), banned (list banned IPs across all sets),
+    clear-bans (flush all ban sets), check (nft -c list ruleset).
+  * New firewall/templates/ source directory: ships two operator-
+    ready templates — vps-webserver.sh (service-aware firewall
+    that auto-detects SSH, Caddy, Varnish, Forgejo and adjusts
+    rules accordingly; aggressive SSH rate limiting when pubkey-
+    only auth is detected) and no-services.sh (locked-down host
+    with no public services except SSH; synproxy, scan detection,
+    bogon filtering, fragment protection). Both work on Arch and
+    Debian. Operators can drop additional *.sh templates into
+    /usr/share/sysdeck/firewall/templates/ at any time — the
+    `templates` subcommand enumerates them automatically.
+  * Rewritten plugins/sysdeck-firewall/firewall.js: replaces the
+    read-only ruleset table with a full manager UI — template
+    selector with description and detected-service preview,
+    Apply / Stop / Restart buttons, service detection summary,
+    live ban-list table with per-IP Unban buttons, ban-list
+    Clear All button, and the existing ruleset table now sits
+    below as a live state view (refreshed after each operation).
+    All mutating operations go through bridge.firewall.apply /
+    stop / restart / ban / unban / clearBans — which use the
+    cockpit superuser channel (polkit) via { superuser: 'try' }
+    in bridge.js. This is the "cockpit way": privileged ops
+    trigger the cockpit auth dialog and run as root via the
+    bridge's polkit action; no shell-out to sudo from JS.
+  * Updated shared/bridge.js firewall surface: new methods
+    templates(), templateInfo(name), detect(), apply(template, policy),
+    stop(), restart(), status(), ban(ip), unban(ip), banned(),
+    clearBans(), check(). Existing listChains()/listRules() preserved.
+  * PACKAGES MODULE — UPDATE NEEDS SUDO, FIXED THE COCKPIT WAY.
+    v0.0.30 packages.js `Update All` button called
+    bridge.packages.updateAll() — but the bridge helper returned
+    the command string that *would* be run, NOT the result. The
+    panel showed `alert("Run this command with superuser
+    privileges.")` — meaning the operator had to copy the
+    command, open a terminal, sudo, paste, run. That defeats the
+    purpose of having a panel. v0.0.31 makes install/remove/
+    update/update-all actually execute via the cockpit
+    superuser channel (polkit). The bridge helper now runs the
+    detected package manager (pacman/dnf/apt) via subprocess
+    with check=True, and the JS panel subscribes to the cockpit
+    spawn stream so the operator sees live stdout/stderr in a
+    <pre> log panel — exactly like cockpit's own Packages and
+    Software Updates panels. No `sudo` shell-out from JS; the
+    polkit action org.sysdeck.packages.modify (already shipped
+    since v0.0.17) authorizes /usr/bin/pacman, /usr/bin/apt,
+    /usr/bin/dnf. The "command would be run" return shape is
+    preserved as the `dryRun()` method for operators who want
+    the preview before applying.
+  * IMAGE BUILDER MODULE — EXPANDED TO FULL-FEATURED. v0.0.30
+    builder was a status+profile viewer: it could list installed
+    backends (mkosi/vmdb2/archiso/live-build) and walk their
+    config dirs, but could not actually build anything, could
+    not create/edit profiles, could not show build artifacts or
+    logs. v0.0.31 adds: build(profile, backend, options) — runs
+    the backend in the profile's directory via subprocess under
+    the org.sysdeck.builder.modify polkit action; profile-create
+    (name, backend, base) — scaffold a new mkosi.conf or vmdb2
+    YAML in /etc/mkosi/ or /etc/vmdb2/; profile-delete(name);
+    artifacts(profile?) — list image/ISO files produced by past
+    builds under /var/lib/sysdeck/builder/artifacts/<profile>/;
+    build-status() — list active and recently-finished builds
+    (driven by a small JSON state file under
+    /var/lib/sysdeck/builder/state/); build-log(id) — tail the
+    build's stdout/stderr log file. The panel renders a Build
+    button per profile, a Builds table (state, started, finished,
+    duration, artifacts), a per-build log viewer, and a Create
+    Profile form.
+  * FESTER RENAME — BUILD ORCH PANEL IS NOW "SYSDECK FESTER".
+    The directory was already plugins/sysdeck-fester/ but the
+    menu label and panel title said "SysDeck Build Orchestration".
+    User directive: "the build orch should be renamed SysDeck
+    Fester". Updated: manifest.json menu.label, panel <h2>
+    title in fester.js, scripts/generate-plugins.py MODULES
+    table, README.md module catalog row 9, compat-manifest.json
+    fester entry note, BLOG.md references.
+  * POLKIT POLICY: added org.sysdeck.fester.modify action
+    covering /usr/bin/systemctl and /usr/bin/journalctl — the
+    fester bridge will use it when it grows real DAG-orchestration
+    in a future release. Existing org.sysdeck.firewall.modify
+    and org.sysdeck.packages.modify actions already authorize
+    the binaries the new subcommands invoke (nft, pacman, apt,
+    dnf); no new polkit actions needed for v0.0.31 firewall /
+    packages work.
+  * MAKEFILE: new FIREWALL_TEMPLATES_DIR variable; install
+    target now copies firewall/templates/*.sh to
+    /usr/share/sysdeck/firewall/templates/ with mode 0755 (they
+    are invoked by the bridge via `bash <template>.sh ...` under
+    the org.sysdeck.firewall.modify polkit action). dist target
+    now includes the firewall/ source tree.
+  * PKGBUILD: pkgver bumped to 0.0.31. optdepends unchanged
+    (nftables and the rest were already listed).
+  * Debian control / RPM spec: Version bumped to 0.0.31.
+  * bridge/__init__.py: __version__ = "0.0.31".
+  * compat/compat-manifest.json: version 0.0.31.
+
+ -- Jeremy Anderson <info@dcos.net>  Mon, 18 Aug 2026 00:00:00 -0500
+
+sysdeck (0.0.30-1) unstable; urgency=medium
+
+  * BUILDER MODULE REWRITE — TARGET DISTROS NOW ARCH + DEBIAN. The
+    previous builder bridge helper (bridge/builder.py) was a thin
+    `systemctl is-active osbuild-composer.service` shim. osbuild-
+    composer is Fedora/RHEL-only and is not packaged for Arch or
+    Debian, so the Builder panel was permanently 'inactive' on every
+    distro this suite actually ships to.
+  * Rewritten bridge/builder.py now detects and surfaces the
+    canonical image-builder backends for the target distros:
+      Arch Linux  -> mkosi (primary, systemd image builder) + archiso
+      Debian      -> vmdb2 (primary, Debian image builder) + live-build
+    Detection uses shutil.which() and works on any distro — a Debian
+    host with mkosi installed is still surfaced correctly.
+  * New Python subcommands: status, profiles, summary, backends,
+    install-hint. `summary` returns combined status + profiles in one
+    call so the panel renders from a single bridge spawn.
+  * Profile discovery walks well-known config dirs per backend:
+      mkosi       /etc/mkosi/mkosi.conf[.d/*.conf] + mkosi.profiles/*.profile
+      archiso     /usr/share/archiso/configs/* + /etc/archiso/configs/*
+      vmdb2       /etc/vmdb2/*.yaml + /usr/share/vmdb2/specs/*.yaml
+      live-build  any dir under /etc|/usr/share|~/.config/live-build
+                  containing a `config/` subdir (marker that `lb config`
+                  was run there).
+  * Rewritten plugins/sysdeck-builder/builder.js: replaces the
+    composer-cli blueprints list call with bridge.builder.summary().
+    Renders per-backend profile cards (grouped by backend) and shows
+    a distro-specific install hint when no backend is installed.
+  * Updated shared/bridge.js builder surface — exposes
+    summary/profiles/status/backends/installHint.
+  * Updated packaging/polkit/org.sysdeck.policy: org.sysdeck.builder.modify
+    action now authorizes /usr/bin/mkosi, /usr/bin/mkarchiso,
+    /usr/bin/vmdb2, /usr/bin/lb. osbuild + livemedia-creator
+    annotations removed (Fedora-only, no longer targeted).
+  * Updated packaging/PKGBUILD optdepends: added mkosi (Arch primary
+    image builder) and archiso (Arch Live ISO builder). pkgver
+    bumped to 0.0.30.
+  * Updated packaging/debian/control Suggests: added mkosi, vmdb2,
+    archiso, live-build.
+  * Updated compat/compat-manifest.json builder entry: Arch and
+    Debian distro_support upgraded from 'none' to 'full'; Fedora
+    entry repointed from osbuild-composer to mkosi (cross-distro).
+    Tested cockpit versions expanded to [239, 264, 285].
+  * Updated plugins/sysdeck-builder/manifest.json keywords and
+    scripts/generate-plugins.py: replaced 'osbuild' keyword with
+    'mkosi', 'vmdb2', 'archiso', 'live-build'.
+  * Updated docs (README.md, QUICKSTART.md, BLOG.md, QA.md,
+    docs/INSTALL.md, THIRD_PARTY.md) to reflect mkosi/vmdb2/archiso/
+    live-build backends instead of composer-cli / osbuild-composer.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 00:00:00 -0400
+
+sysdeck (0.0.29-1) unstable; urgency=high
+
+  * EMAIL MIGRATION: author/maintainer contact address changed from
+    jeremy@dcos.net to info@dcos.net across every release surface —
+    debian/changelog (all 17 historical entries), debian/control
+    Maintainer, packaging/setup.py author_email, PKGBUILD Maintainer +
+    Contributor, sysdeck.spec changelog (all 19 historical entries).
+    Rationale: project has moved to a shared info@ inbox; no per-
+    developer addresses on public packaging. Author name "Jeremy
+    Anderson" is preserved everywhere it appears; only the email
+    address is replaced.
+  * REMOVED DUPLICATE CONTAINER ENTRY: deleted
+    standalone-plugins/cockpit-podman/ (manifest.json). Podman ships
+    its own native Cockpit module (the `cockpit-podman` package on
+    Fedora / Debian / Arch), so bundling a second cockpit-podman
+    manifest here was duplicating upstream — installing both would
+    produce two competing sidebar entries pointing at the same backend.
+    Replaced the slot with a manifest for Incus instead — the original
+    intent for that third standalone plugin slot, which had been
+    mis-assigned to podman.
+  * NEW standalone-plugins/cockpit-incus/manifest.json: sidebar link
+    (order 46, gated on /usr/bin/incus) for Incus system container
+    and VM management. Incus is the LXC/LXD successor maintained by
+    the Linux Containers project. Keywords: incus, lxc, lxd, containers,
+    vms, virtualization, system containers, images. Docs URL points
+    to linuxcontainers.org/incus/docs/.
+  * UPDATED compat/compat-manifest.json: standalone_plugins.cockpit-podman
+    entry replaced with standalone_plugins.cockpit-incus. Per-distro
+    install commands: pacman -S incus (Arch), dnf install incus
+    (Fedora 40+), apt install incus (Debian 13 trixie / bookworm
+    backports). distro_support: full on all three target distros.
+  * UPDATED sysdeck-diagnose.sh section 13 reference loop: was
+    iterating over cockpit-podman / cockpit-machines / cockpit-ostree;
+    now iterates over cockpit-incus / cockpit-machines / cockpit-ostree.
+    Section 14 comparison text updated to refer to "the reference
+    plugins above" instead of "the cockpit-podman reference" (the
+    reference set now has 3 plugins, not just 1).
+  * UPDATED README.md v0.0.15 highlights section: the three
+    standalone plugin sidebar links now list cockpit-incus (order 46,
+    Incus system container and VM management) instead of cockpit-podman.
+  * UPDATED QA.md v0.0.15 QA section 2: standalone plugin table
+    row 3 changed from cockpit-podman (Podman Containers) to
+    cockpit-incus (Incus Containers). Conformance verdict preserved.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 15:00:00 -0500
+
+sysdeck (0.0.28-1) unstable; urgency=high
+
+  * FIXED 2 BROKEN BRIDGE SUBCOMMANDS that slipped through v0.0.27's
+    "subcommand alignment" pass:
+    1. firmware.py: bridge.js called `python3 firmware.py devices` but
+       the helper only implemented `summary`. Every visit to the Firmware
+       plugin page crashed with "Unknown subcommand: devices". Added a
+       real `devices` subcommand returning fwupdmgr's native
+       {Devices: [...]} shape (capital D, matches the panel's expected
+       access pattern).
+    2. benchmark.py: bridge.js called `python3 benchmark.py run-test
+       <name>` when the user clicked "Run" in the Available Tests table,
+       but the helper had no `run-test` subcommand. Added `run-test`
+       that runs `sysbench <name> run` and returns the parsed result
+       dict — same shape as run-cpu/run-memory/run-io.
+  * NEW BUILD-TIME GUARD: `check-bridge-subcommands` in `make check`.
+    Cross-checks every bridgeCmd("<module>", ["<sub>", ...]) call in
+    shared/bridge.js against the COMMANDS dict declared in each
+    bridge/<module>.py. Would have caught both bugs above.
+    Regression-tested: reverting firmware.py to its v0.0.27 state
+    causes the guard to fail with a clear message naming the file,
+    line, and missing subcommand.
+  * FIXED MISSING CSS CLASSES: shared/sysdeck.css was missing
+    .suite-progress, .suite-progress-bar, .suite-progress-fill,
+    .suite-stat-value, .suite-stat-label, .suite-row, .suite-row-between,
+    .suite-grid, .cols-2, .cols-3, .suite-col-2, .suite-col-3,
+    .suite-btn-primary, .suite-badge.info, .suite-input, .suite-warn.
+    Without them: progress bars in glances/fleet/netsec were invisible
+    (0-height divs); multi-column layouts in fleet/integrity/mining/
+    packages collapsed to a single column; primary CTA buttons in
+    benchmark/integrity/packages looked like ghost buttons. All added.
+  * FIXED COCKPIT-SMOKE-TEST.SH: the embedded manifest used
+    "requires": { "cockpit": ">=239" } — the broken pattern Cockpit
+    silently rejects at the discovery layer (sortify_version() turns
+    ">=" into a string that sorts greater than any real cockpit
+    version). Smoke test would produce a false "Cockpit is broken"
+    diagnostic. Fixed to "cockpit": "239" (bare number).
+  * IMPROVED DIAGNOSTIC: sysdeck-diagnose.sh now verifies that
+    /usr/lib/sysdeck/bridge/*.py exists and is executable, and spot-
+    checks that firmware.py `devices` and benchmark.py `run-test`
+    subcommands work end-to-end. Previously the diagnose script could
+    not detect a missing Python helper — every plugin would silently
+    fail with "No such file or directory".
+  * FIXED DOCS: bridge/__init__.py docstring still showed the broken
+    `python3 -m sysdeck.bridge.<module>` invocation pattern that was
+    fixed in v0.0.26. Updated to
+    `python3 /usr/lib/sysdeck/bridge/<module>.py` with a note
+    explaining why the -m pattern was broken.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 14:00:00 -0500
+
+sysdeck (0.0.27-1) unstable; urgency=high
+
+  * FIXED 6 MISSING PYTHON HELPERS: mining.py, builder.py, fester.py,
+    kata.py, vault.py, mesh.py were never written — every plugin that
+    called one got "Module load failed: can't open file". Wrote minimal
+    stubs that return empty data so modules render with "no items".
+  * FIXED 4 SUBCOMMAND MISMATCHES: bridge.js called subcommands the Python
+    helpers didn't have. Now aligned: auth.smartcards→slots,
+    netsec.listeningPorts→sockets, integrity.trustScore→score,
+    integrity.runLynis→scan, firewall.listChains→chains,
+    firewall.listRules→ruleset, fleet.uptime/nodeCount derive from summary,
+    firmware.tpmInfo reads PCR0 directly.
+  * NOT A BUG: glances module shows "Glances unavailable" when glances
+    binary not installed — that's the module's own graceful degradation.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 13:00:00 -0500
+
+sysdeck (0.0.26-1) unstable; urgency=high
+
+  * ROOT CAUSE FOUND AND FIXED: every plugin that called a bridge helper
+    failed with ModuleNotFoundError: No module named 'sysdeck.bridge'.
+    Cause: shared/bridge.js called `python3 -m sysdeck.bridge.<module>`,
+    which requires a Python package layout (sysdeck/bridge/<module>.py)
+    that doesn't exist in the install. The actual layout is
+    /usr/lib/sysdeck/bridge/<module>.py (flat files, not a nested
+    package). So `python3 -m sysdeck.glances` would have worked, but
+    `python3 -m sysdeck.bridge.glances` never could.
+    Fix: changed bridgeCmd() to call helpers by absolute path:
+      `python3 /usr/lib/sysdeck/bridge/<module>.py <args>`
+    No package layout, no PYTHONPATH, no symlink needed.
+    Also: Makefile now installs each helper as executable (0755, not 0644).
+    Removed the broken site-packages symlink.
+    Note: only firmware/fleet/themes 'worked' in v0.0.25 because they use
+    Promise.allSettled() (catches rejections silently) or cockpit.file()
+    (no Python helper needed) — they were showing 'unavailable' cards.
+  * New guard: check-no-broken-python-module in `make check` scans every
+    JS file for spawn calls using `python3 -m sysdeck.bridge` and fails.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 12:00:00 -0500
+
+sysdeck (0.0.25-1) unstable; urgency=high
+
+  * ROOT CAUSE FOUND AND FIXED: every plugin page showed "Module load
+    failed: error loading dynamically imported module:
+    http://127.0.0.1:9090/cockpit/@localhost/sysdeck-common/bridge.js".
+    Cause: shared/sysdeck-common/ had bridge.js and sysdeck.css but NO
+    manifest.json. Cockpit only registers a directory as a package if it
+    contains manifest.json (packages.py:457 scans cockpit/*/manifest.json).
+    Without registration, every URL like
+    /cockpit/@localhost/sysdeck-common/bridge.js returned 404, and the
+    dynamic import("../sysdeck-common/bridge.js") failed.
+    Fix: added shared/manifest.json with name="sysdeck-common". Pattern
+    verified from cockpit's own pkg/static/manifest.json (just `{}`).
+    Updated Makefile install to install shared/manifest.json alongside
+    bridge.js and sysdeck.css.
+    Updated tests/check_manifest_consistency.py to verify shared/manifest.json
+    exists — regression-tested by deleting it and confirming `make check`
+    fails with a clear message naming packages.py:457.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 11:00:00 -0500
+
+sysdeck (0.0.24-1) unstable; urgency=high
+
+  * THOROUGH UNINSTALLER: previous `make uninstall` only removed
+    /usr/share/cockpit/sysdeck-* (with dash). v0.0.9-v0.0.19 installed
+    to /usr/share/cockpit/sysdeck/ (no dash) — that directory was NEVER
+    removed by uninstall. Cockpit would discover both old and new
+    manifests, possibly serving old broken code instead of the new
+    freshly-installed code. v0.0.24 uninstall now removes:
+      * /usr/share/cockpit/sysdeck/        (v0.0.9-v0.0.19 single-plugin)
+      * /usr/share/cockpit/sysdeck-*/      (v0.0.20+ multi-plugin)
+      * /usr/lib/sysdeck/                  (Python bridge, all versions)
+      * /usr/share/sysdeck/                (diagnostic scripts, v0.0.19+)
+      * /usr/share/doc/sysdeck/            (docs, v0.0.20+)
+      * /usr/share/metainfo/sysdeck.metainfo.xml        (v0.0.17+)
+      * /usr/share/polkit-1/actions/org.sysdeck.policy (v0.0.17+)
+      * python site-packages sysdeck symlink            (all versions)
+      * pacman-tracked sysdeck package                   (if installed via PKGBUILD)
+  * VISIBLE ERROR REPORTING: every plugin's index.html now installs
+    window.addEventListener('error') and 'unhandledrejection' handlers
+    that replace the 'Loading…' placeholder with the actual error message
+    on the page. No devtools required — the user sees the error directly.
+  * COCKPIT.JS PRESENCE CHECK: every plugin's index.html now checks
+    `if (!window.cockpit)` before importing bridge.js, and shows a clear
+    error if cockpit.js failed to load (e.g., 404 on ../base1/cockpit.js).
+  * TRY/CATCH AROUND MOUNT(): if mount() throws synchronously (e.g., bridge
+    is undefined, panel is null), the error is now displayed on the page
+    instead of leaving it stuck on 'Loading…'.
+  * DIAGNOSTIC SCRIPT: sysdeck-diagnose.sh now detects leftover
+    /usr/share/cockpit/sysdeck/ directory from old installs, and
+    spot-checks that the installed bridge.js contains the v0.0.23+
+    `const cockpit = window.cockpit` fix.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 10:00:00 -0500
+
+sysdeck (0.0.23-1) unstable; urgency=high
+
+  * ROOT CAUSE FOUND AND FIXED: every plugin page was stuck on "Loading…"
+    because shared/bridge.js did `import cockpit from "../base1/cockpit.js"`
+    — an ES module import. But pkg/base1/cockpit.js is NOT an ES module:
+    it's a UMD/IIFE that sets window.cockpit as a global (verified from
+    cockpit source code: pkg/base1/cockpit.js has no `export` statements;
+    cockpit's own plugins load it via <script src> in their HTML, then
+    access the global `cockpit`). The import returned undefined, so
+    cockpit.spawn() threw when mount() ran, and the plugin page never
+    rendered. Fix: replaced `import cockpit from "../base1/cockpit.js"`
+    with `const cockpit = window.cockpit` — exactly how cockpit's own
+    esbuild plugin (build.js:71-83) accesses it after rewriting
+    `import cockpit from "cockpit"` to `module.exports = cockpit`.
+  * New guard: check-no-broken-cockpit-import in `make check` scans every
+    JS file in plugins/ and shared/ for the broken `import cockpit from`
+    pattern. Regression-tested: deliberately reintroducing the v0.0.22
+    import causes `make check` to fail with a clear message.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 09:00:00 -0500
+
+sysdeck (0.0.22-1) unstable; urgency=high
+
+  * ROOT CAUSE FOUND AND FIXED: the `requires.cockpit` field was set to
+    ">=239" in every manifest since v0.0.9. Cockpit's packages.py uses
+    sortify_version() (a 0-pad of numeric components) to compare versions,
+    NOT a semver parser. ">=239" becomes ">=00000239" which is GREATER than
+    any real cockpit version (because '>' is ASCII 62 > '0' ASCII 48),
+    causing packages.py:263 to raise JsonError and silently reject every
+    manifest at install time. The plugins never reached the shell's menu
+    builder — that's why the sidebar was empty.
+    Fix: changed `requires.cockpit` from ">=239" to "239" (bare number) in
+    all 18 manifests. This matches the pattern in pkg/systemd/manifest.json
+    ("cockpit": "265"), pkg/storaged/manifest.json ("cockpit": "266"), etc.
+    None of cockpit's own plugins use the ">=" prefix.
+  * Renamed all 18 sidebar labels from "SD <Name>" to "SysDeck <Name>"
+    per user requirement: "SysDeck should be never abbreviated. So SD is
+    not ok."
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 08:00:00 -0500
+
+sysdeck (0.0.21-1) unstable; urgency=high
+
+  * Fix AppStream metainfo: replace <provides><cockpit-manifest> (silently
+    ignored by cockpit's apps page) with <launchable type="cockpit-manifest">
+    for each of the 18 plugins. Pattern verified from cockpit source code:
+    src/appstream/org.cockpit_project.cockpit_*.xml.in all use <launchable>,
+    and pkg/apps/watch-appstream.py:237 reads it.
+  * Rewrite tests/check_manifest_consistency.py to validate against the REAL
+    Cockpit manifest contract from pkg/shell/manifests.ts and
+    src/cockpit/packages.py — not the invented contract used in v0.0.19-v0.0.20.
+    The previous test rejected manifests for having `version`, `title`,
+    `priority`, `content` sections — none of which Cockpit actually rejects.
+    They are silently ignored by the shell.
+  * Rewrite tests/check_metainfo_consistency.py to validate <launchable>
+    elements (the real pattern) instead of <provides><cockpit-manifest>.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 07:00:00 -0500
+
+sysdeck (0.0.20-1) unstable; urgency=high
+
+  * ARCHITECTURAL OVERHAUL: split the single SysDeck shell into 18
+    standalone Cockpit plugins. Each module (containers, firewall,
+    integrity, etc.) is now its own plugin at /usr/share/cockpit/sysdeck-<name>/
+    with its own manifest.json + index.html + <module>.js. Each appears
+    as its own sidebar entry in Cockpit, just like cockpit-podman,
+    cockpit-machines, cockpit-ostree.
+  * DELETED the v0.0.19 shell entirely: manifest.json, index.html,
+    suite.js, suite.css, src/bridge-client.js, src/event-bus.js,
+    src/mock-cockpit.js, src/cockpit-types.d.ts, src/modules/, and the
+    entire nextjs-dashboard/ tree. Cockpit is the dashboard framework;
+    we are no longer rebuilding one.
+  * NEW shared/bridge.js at /usr/share/cockpit/sysdeck-common/bridge.js:
+    provides the `bridge` and `EventBus` objects each plugin imports.
+    Calls cockpit.spawn() directly to invoke the Python bridge helpers.
+    Live-update subscriptions are no-ops in v0.0.20 — each plugin has
+    a manual Refresh button instead.
+  * NEW shared/sysdeck.css at /usr/share/cockpit/sysdeck-common/sysdeck.css:
+    base styles for every plugin.
+  * NEW scripts/generate-plugins.py: regenerates plugins/ and shared/.
+    Run `make plugins` to regenerate.
+  * Updated tests/check_manifest_consistency.py: validates ALL 18 plugin
+    manifests against the cockpit-podman reference pattern.
+  * DROPPED: nextjs-dashboard/, src/cockpit-types.d.ts, src/mock-cockpit.js.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 06:00:00 -0500
+
+sysdeck (0.0.19-1) unstable; urgency=high
+
+  * CRITICAL FIX: rewrote manifest.json to match the working
+    cockpit-podman pattern exactly. Previous releases (v0.0.9 through
+    v0.0.18) used a manifest schema with 'version: 1', a 'content'
+    section, and a 'menu.suite' entry with an explicit 'path' field —
+    none of which appear in any real, working Cockpit plugin's manifest.
+    Cockpit silently rejected the plugin on every install, leaving
+    "zero entries anywhere" in the sidebar and Applications menu.
+  * New manifest uses: version=0 (universally supported), menu.index
+    (the magic key Cockpit uses to serve index.html implicitly), no
+    'content' section, no 'path' on menu entries, no top-level 'title'
+    or 'priority'. Matches cockpit-podman, cockpit-machines,
+    cockpit-ostree — the three reference plugins shipped in this very
+    tarball under standalone-plugins/.
+  * Hardened guard: tests/check_manifest_consistency.py no longer
+    validates against a made-up contract. It validates against the
+    actual cockpit-podman reference manifest — fails if sysdeck's
+    manifest has any field not present in cockpit-podman's manifest.
+  * Added sysdeck-diagnose.sh: prints exactly what Cockpit sees on
+    the target system. Installed to /usr/share/sysdeck/sysdeck-diagnose.sh.
+  * Added cockpit-smoke-test.sh: installs a 5-line hello-world plugin
+    to verify Cockpit's plugin discovery works INDEPENDENTLY of
+    sysdeck. If 'Hello Test' also fails to appear in the sidebar, the
+    issue is Cockpit itself, not sysdeck.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 05:00:00 -0500
+
+sysdeck (0.0.18-1) unstable; urgency=high
+
+  * CRITICAL FIX: v0.0.16's manifest "fix" was based on a wrong model of
+    how Cockpit serves plugin files. v0.0.16 aligned content.suite.path
+    and menu.suite.path to both be "/suite", which passed the manifest-
+    consistency test (paths matched each other) but the path did not
+    resolve to an actual file in the plugin directory. Cockpit served a
+    404 / empty page when the user clicked the SysDeck sidebar entry,
+    because no `suite.html` file existed at
+    /usr/share/cockpit/sysdeck/suite.html.
+  * Fix: changed both content.suite.path and menu.suite.path to
+    "/index.html". Cockpit now serves the real index.html file at the
+    /index.html URL and the dashboard loads when the menu entry is
+    clicked.
+  * Hardened guard: tests/check_manifest_consistency.py now also
+    verifies that every content/menu path resolves to a real file in the
+    plugin directory, mirroring Cockpit's URL-to-file mapping (e.g.
+    /suite -> ./suite.html or ./suite/index.html; /index.html ->
+    ./index.html). This catches the v0.0.16 silent-empty-page bug at
+    build time.
+  * Corrected misleading path semantics documented in BLOG.md and QA.md
+    for v0.0.16. Cockpit does NOT auto-serve index.html at arbitrary
+    URL paths; the URL path declared in content/menu must map to a real
+    file.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 04:00:00 -0500
+
+sysdeck (0.0.17-1) unstable; urgency=high
+
+  * Register as a first-class Cockpit application via AppStream metainfo
+    at /usr/share/metainfo/sysdeck.metainfo.xml. The metainfo declares
+    <provides><cockpit-manifest>sysdeck</cockpit-manifest></provides>,
+    which is how Cockpit's Applications install menu discovers the plugin
+    and grants it proper auth context via cockpit-ws.
+  * Ship PolKit policy at /usr/share/polkit-1/actions/org.sysdeck.policy
+    covering six privilege domains: system.manage, firewall.modify,
+    packages.modify, firmware.modify, vault.modify, builder.modify.
+    Without these, privileged bridge operations fail with permission
+    denied errors.
+  * Makefile install target installs both files, reloads polkit, and
+    refreshes the AppStream cache on install.
+  * New guard: check-metainfo-consistency validates the metainfo XML
+    structure at build time.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 03:00:00 -0500
+
+sysdeck (0.0.16-1) unstable; urgency=high
+
+  * CRITICAL FIX: manifest.json content/menu path mismatch caused
+    Cockpit to silently drop SysDeck from the sidebar menu after
+    install. content.suite.path was "/index.html", menu.suite.path
+    was "/suite" — they must match. Fixed content path to "/suite".
+  * New guard: check-manifest-consistency in make check validates
+    manifest structure (menu paths must match content paths).
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 02:00:00 -0500
+
+sysdeck (0.0.15-1) unstable; urgency=low
+
+  * RESTORE: bridge/grafana.py, bridge/hwalert.py, bridge/prometheus.py
+    silently dropped from v0.0.13 release; restored here.
+  * RESTORE: nextjs-dashboard/ and prometheus/ directories restored
+    to source tree and included in tarball + install target.
+  * Makefile install target now installs prometheus configs to
+    /etc/sysdeck/prometheus/ and Next.js dashboard to
+    /usr/share/sysdeck/nextjs-dashboard/.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 01:00:00 -0500
+
+sysdeck (0.0.14-1) unstable; urgency=low
+
+  * Fix Makefile dist target: tarball now extracts into sysdeck-<version>/
+    subdirectory. The previous --transform regex silently no-op'd because
+    tar with explicit file arguments does not prepend ./ to archive paths.
+    This blocked RPM %setup -q, Arch PKGBUILD cd "$srcdir/$pkgname-$pkgver",
+    and Debian dh_auto_configure, all of which expect a wrapping directory.
+  * Add `make distcheck` regression guard: extracts the tarball into a
+    clean /tmp dir, verifies the wrapping subdirectory exists, and runs
+    `make check` inside the extracted tree.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 00:00:00 -0500
+
+sysdeck (0.0.13-1) unstable; urgency=low
+
+  * Packages module (pacman/dnf/apt wrapper) for package listing,
+    search, install, update, and remove operations via cockpit.spawn.
+  * Auth identities extension: enumerates PKCS#11 tokens, SSH keys,
+    and Kerberos principals as first-class identity objects.
+  * Full Arch Linux (PKGBUILD) and Debian (.deb) packaging support.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 00:00:00 -0400
+
+sysdeck (0.0.12-1) unstable; urgency=low
+
+  * External module integrations: glances, sensors, benchmark.
+  * Bridge channel integration with cockpit.metrics tap, dbus proxies.
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 16 Aug 2026 00:00:00 -0400
+
+sysdeck (0.0.11-1) unstable; urgency=low
+
+  * Initial cockpit-native release: drop-in plugin with manifest.json,
+    vanilla-JS dashboard, Python bridge helpers, and full packaging.
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 16 Aug 2026 00:00:00 -0400

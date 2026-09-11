@@ -1,0 +1,39 @@
+{
+    "version": 0,
+    "name": "sysdeck-modules",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "3rd-Party Modules",
+            "order": 44,
+            "keywords": [
+                {
+                    "matches": [
+                        "modules",
+                        "third-party",
+                        "3rd-party",
+                        "third party",
+                        "extensions",
+                        "addons",
+                        "navigator",
+                        "file-sharing",
+                        "zfs",
+                        "45drives",
+                        "cockpit-pacman",
+                        "cockpit-identities",
+                        "cockpit-sensors",
+                        "cockpit-benchmark",
+                        "license",
+                        "attribution",
+                        "credit",
+                        "1-click",
+                        "inline license"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

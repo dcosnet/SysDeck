@@ -1,0 +1,15 @@
+{
+  "version": 0,
+  "name": "cockpit-machines",
+  "requires": { "cockpit": ">=239" },
+  "conditions": [{ "path-exists": "/usr/bin/virsh" }],
+  "menu": {
+    "index": {
+      "label": "Virtual Machines",
+      "order": 45,
+      "keywords": [{ "matches": ["machines", "vm", "libvirt", "kvm", "qemu", "virtualization", "hypervisor"] }],
+      "docs": [{ "label": "cockpit-machines", "url": "https://github.com/cockpit-project/cockpit-machines#readme" }]
+    }
+  },
+  "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+}

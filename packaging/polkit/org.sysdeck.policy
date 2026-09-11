@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SysDeck - PolKit Policy
+  Author: Jeremy Anderson (https://dcos.net)
+
+  Cockpit-bridge runs as the logged-in user. When a bridge helper needs to
+  perform a privileged operation (modify the firewall, install a package,
+  flash firmware, manage LUKS volumes), it goes through pkexec + polkit.
+  This file defines the actions that SysDeck's bridge helpers can request.
+
+  Without this file, privileged bridge operations fail with "Not authorized:
+  The user does not have permission to perform this action." Cockpit-ws
+  grants proper auth context only to registered applications — see
+  packaging/sysdeck.metainfo.xml for the AppStream registration.
+
+  Install this file to /usr/share/polkit-1/actions/org.sysdeck.policy so
+  that polkit picks it up at install time. The user will be prompted to
+  authenticate (via cockpit's auth dialog or the system's polkit agent)
+  the first time a privileged operation is requested in a session.
+
+  Coarse-grained by design: one action per privilege domain. Refine to
+  per-operation actions (org.sysdeck.firewall.add-rule, etc.) once the
+  bridge helpers grow more sophisticated.
+-->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <vendor>SysDeck</vendor>
+  <vendor_url>https://dcos.net</vendor_url>
+
+  <!-- ============================================================= -->
+  <!-- System management: systemctl start/stop/enable/disable,       -->
+  <!-- hostnamectl, timedatectl, localectl, machinectl.              -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.system.manage">
+    <description>Manage system services and configuration</description>
+    <description xml:lang="en">Manage system services and configuration</description>
+    <message>System policy prevents SysDeck from managing system services and configuration.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing system services and configuration.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/hostnamectl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/timedatectl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/localectl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/loginctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/machinectl</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Firewall: nftables rule management (nft add/insert/delete/    -->
+  <!-- flush). Read-only operations (nft list) do not need this.     -->
+  <!--                                                                -->
+  <!-- v0.0.36: extended to authorize the Cilium eBPF backend.       -->
+  <!-- Per user directive: "next we will add cilium support as a     -->
+  <!-- drop down option in the fw area, the user can select custom   -->
+  <!-- which is default with the templates that are basic. or they   -->
+  <!-- can select celium, or smoothwall or ipfire or other firewall  -->
+  <!-- scripts that install cleanly with value for ebpf era and      -->
+  <!-- nftables." The cilium backend uses the cilium CLI + cilium-   -->
+  <!-- agent binary + (optionally) helm for K8s-based install.       -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.firewall.modify">
+    <description>Modify firewall rules (nftables + Cilium eBPF)</description>
+    <description xml:lang="en">Modify firewall rules (nftables + Cilium eBPF)</description>
+    <message>System policy prevents SysDeck from modifying firewall rules.</message>
+    <message xml:lang="en">System policy prevents SysDeck from modifying firewall rules.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <!-- nftables (nftables-native backends: custom, smoothwall, ipfire) -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/nft</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/nft</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/iptables</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/ip6tables</annotate>
+    <!-- v0.0.36: Cilium eBPF backend -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/cilium</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/cilium</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/cilium-agent</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/cilium-agent</annotate>
+    <!-- v0.0.36: helm for K8s-based Cilium install -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/helm</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/helm</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Package management: pacman, apt, dnf install/remove/upgrade. -->
+  <!-- Read-only operations (list, search, info) do not need this.   -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.packages.modify">
+    <description>Install, remove, and upgrade system packages</description>
+    <description xml:lang="en">Install, remove, and upgrade system packages</description>
+    <message>System policy prevents SysDeck from modifying installed packages.</message>
+    <message xml:lang="en">System policy prevents SysDeck from modifying installed packages.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pacman</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/apt</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/dnf</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/yum</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Firmware: fwupdmgr update/install, tpm2-tools operations.     -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.firmware.modify">
+    <description>Update firmware and manage TPM 2.0 state</description>
+    <description xml:lang="en">Update firmware and manage TPM 2.0 state</description>
+    <message>System policy prevents SysDeck from modifying firmware or TPM state.</message>
+    <message xml:lang="en">System policy prevents SysDeck from modifying firmware or TPM state.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/fwupdmgr</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/tpm2</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Encryption vaults: cryptsetup luksFormat/open/close,          -->
+  <!-- LUKS key management.                                           -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.vault.modify">
+    <description>Manage LUKS encryption volumes</description>
+    <description xml:lang="en">Manage LUKS encryption volumes</description>
+    <message>System policy prevents SysDeck from managing LUKS volumes.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing LUKS volumes.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/cryptsetup</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Image builder (v0.0.30+): mkosi + archiso on Arch; vmdb2 +    -->
+  <!-- live-build on Debian. osbuild / livemedia-creator (Fedora-    -->
+  <!-- only) removed — the suite no longer targets Fedora/RHEL for    -->
+  <!-- the Builder panel.                                            -->
+  <!-- v0.0.31+: the build/profile-create/profile-delete subcommands -->
+  <!-- also need write access to /etc/mkosi/, /etc/vmdb2/ and        -->
+  <!-- /var/lib/sysdeck/builder/. The bridge runs the backend via    -->
+  <!-- subprocess; the cockpit superuser channel handles root priv. -->
+  <!-- v0.1.0: profile-import-packages also queries the host's        -->
+  <!-- package manager (pacman -Qqe / apt-mark showmanual /          -->
+  <!-- dnf repoquery --userinstalled) to capture the operator's       -->
+  <!-- explicitly-installed package set.                             -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.builder.modify">
+    <description>Build system images and ISOs</description>
+    <description xml:lang="en">Build system images and ISOs</description>
+    <message>System policy prevents SysDeck from building system images.</message>
+    <message xml:lang="en">System policy prevents SysDeck from building system images.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/mkosi</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/mkarchiso</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/vmdb2</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/lb</annotate>
+    <!-- v0.1.0: host package-list query for profile-import-packages. -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pacman</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/apt-mark</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/dnf</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- SysDeck Fester (v0.0.31+): DAG-driven build orchestration.    -->
+  <!-- The v0.0.31 fester bridge helper still runs `systemctl list-  -->
+  <!-- units` in read-only mode (no polkit needed). This action      -->
+  <!-- covers the future DAG-orchestration path that will start/    -->
+  <!-- stop build-farm services and read journal logs. The action  -->
+  <!-- is unused in v0.0.31 but ships now so admins can set up     -->
+  <!-- polkit rules before the orchestrator lands.                  -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.fester.modify">
+    <description>Manage SysDeck Fester build-farm orchestration</description>
+    <description xml:lang="en">Manage SysDeck Fester build-farm orchestration</description>
+    <message>System policy prevents SysDeck Fester from managing build-farm services.</message>
+    <message xml:lang="en">System policy prevents SysDeck Fester from managing build-farm services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/journalctl</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Policy & Permissions (v0.0.32+): ACLs, cgroups, VLANs,       -->
+  <!-- eBPF namespace separation, AppArmor (optional).               -->
+  <!-- v0.0.33+: extends to Smack, TOMOYO, Yama, LoadPin, Lockdown,  -->
+  <!-- BPF-LSM, Landlock, and file capabilities (setcap/getcap).     -->
+  <!--                                                                -->
+  <!-- Per user directive: "modern policy management and             -->
+  <!-- permissions manager for groups. such as acl, cgroups,       -->
+  <!-- vlans, ebpf namespace separation and related policies.       -->
+  <!-- we can skip selinux its native. we can implement apparmor    -->
+  <!-- but its not default on my machine so make it optional."       -->
+  <!--                                                                -->
+  <!-- v0.0.33 directive: "lets now add smack, tomoyo, yama and     -->
+  <!-- others as well to the same policy module."                    -->
+  <!--                                                                -->
+  <!-- SELinux is skipped (native to host distro). AppArmor is       -->
+  <!-- optional — the bridge auto-detects whether it is compiled    -->
+  <!-- into the kernel; if absent, the panel renders an install      -->
+  <!-- hint instead of an empty table. Smack, TOMOYO, Yama,         -->
+  <!-- LoadPin, Lockdown, BPF-LSM, and Landlock follow the same     -->
+  <!-- pattern.                                                       -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.policy.modify">
+    <description>Manage policy and permissions (ACLs, cgroups, VLANs, eBPF, file capabilities, LSM stack: AppArmor/Smack/TOMOYO/Yama/LoadPin/Lockdown/BPF-LSM/Landlock)</description>
+    <description xml:lang="en">Manage policy and permissions (ACLs, cgroups, VLANs, eBPF, file capabilities, LSM stack: AppArmor/Smack/TOMOYO/Yama/LoadPin/Lockdown/BPF-LSM/Landlock)</description>
+    <message>System policy prevents SysDeck from modifying ACLs, cgroups, VLANs, eBPF programs, file capabilities, or LSM state.</message>
+    <message xml:lang="en">System policy prevents SysDeck from modifying ACLs, cgroups, VLANs, eBPF programs, file capabilities, or LSM state.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <!-- ACLs -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/setfacl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/setfacl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/getfacl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/getfacl</annotate>
+    <!-- cgroups (mkdir is the only required binary) -->
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/mkdir</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/mkdir</annotate>
+    <!-- bpffs / eBPF pin -->
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/mount</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/mount</annotate>
+    <!-- VLANs -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/ip</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/ip</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/vconfig</annotate>
+    <!-- eBPF -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/bpftool</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/bpftool</annotate>
+    <!-- namespaces (read-only enumerate, but polkit annotation is harmless) -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/lsns</annotate>
+    <!-- AppArmor (optional) -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/aa-enforce</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/aa-enforce</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/aa-complain</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/aa-complain</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/aa-status</annotate>
+    <!-- v0.0.33: Smack userspace tools -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/smackload</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/smackcipsos</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/smackcipso</annotate>
+    <!-- v0.0.33: TOMOYO userspace tools -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/tomoyo-setprofile</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/tomoyo-set-profile</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/tomoyo-savepolicy</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/tomoyo-init</annotate>
+    <!-- v0.0.33: File capabilities (setcap / getcap) -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/setcap</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/setcap</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/getcap</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/getcap</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- DB Control (v0.0.32): start/stop/restart database engines.   -->
+  <!-- The bridge helper runs `systemctl start/stop/restart          -->
+  <!-- <engine>.service` directly (the v0.0.15-era `sudo systemctl`  -->
+  <!-- shell-out was the bug the user complained about in v0.0.31 —   -->
+  <!-- "the update needs sudo so the command fails" — same root    -->
+  <!-- cause). The cockpit way (v0.0.31+ pattern): the JS panel      -->
+  <!-- passes { superuser: 'try' } to cockpit.spawn so the cockpit  -->
+  <!-- bridge prompts the operator via polkit for this action.       -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.db.modify">
+    <description>Start, stop, and restart database engines</description>
+    <description xml:lang="en">Start, stop, and restart database engines</description>
+    <message>System policy prevents SysDeck from managing database engine services.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing database engine services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/systemctl</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Jellyfin Media Server (v0.0.35): start/stop/restart           -->
+  <!-- jellyfin.service. Per user directive: "next we will          -->
+  <!-- integrate a jellyfin management module where it starts,     -->
+  <!-- stops, and loads the admin panel in the module." The        -->
+  <!-- bridge runs `systemctl start/stop/restart jellyfin.service`  -->
+  <!-- directly; the JS panel passes { superuser: 'try' } so       -->
+  <!-- polkit prompts the operator.                                  -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.jellyfin.modify">
+    <description>Start, stop, and restart the Jellyfin media server</description>
+    <description xml:lang="en">Start, stop, and restart the Jellyfin media server</description>
+    <message>System policy prevents SysDeck from managing the Jellyfin media server.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing the Jellyfin media server.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/jellyfin</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Photo Manager (v0.0.35): start/stop/restart photo backend    -->
+  <!-- services. Per user directive: "as well as a photo manager    -->
+  <!-- of equal quality. with its own module." Multi-backend:      -->
+  <!-- PhotoPrism, Piwigo, Lychee, Nextcloud-Memories, LibrePhotos. -->
+  <!-- The bridge runs `systemctl start/stop/restart <service>`     -->
+  <!-- directly; the JS panel passes { superuser: 'try' } so       -->
+  <!-- polkit prompts the operator.                                  -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.photos.modify">
+    <description>Start, stop, and restart photo management backends</description>
+    <description xml:lang="en">Start, stop, and restart photo management backends</description>
+    <message>System policy prevents SysDeck from managing photo management backend services.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing photo management backend services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/photoprism</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Remote FS Manager (v0.0.35): start/stop/restart remote       -->
+  <!-- filesystem backend services + cluster status queries.       -->
+  <!-- Per user directive: "then a remote fs manager such as       -->
+  <!-- ceph, and others but not nfs or amanada fs." Backends:       -->
+  <!-- Ceph, GlusterFS, MooseFS, BeeGFS, OrangeFS. The bridge      -->
+  <!-- runs `systemctl start/stop/restart <service>` directly; the -->
+  <!-- JS panel passes { superuser: 'try' } so polkit prompts the  -->
+  <!-- operator. Cluster-info subcommand also calls ceph, gluster,  -->
+  <!-- moosefs-cli, beegfs-ctl, pvfs2-server — annotated here so  -->
+  <!-- polkit allows them under the same action.                    -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.remotefs.modify">
+    <description>Start, stop, and restart remote filesystem backends (Ceph, GlusterFS, MooseFS, BeeGFS, OrangeFS)</description>
+    <description xml:lang="en">Start, stop, and restart remote filesystem backends (Ceph, GlusterFS, MooseFS, BeeGFS, OrangeFS)</description>
+    <message>System policy prevents SysDeck from managing remote filesystem backend services.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing remote filesystem backend services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/systemctl</annotate>
+    <!-- Ceph -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/ceph</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/ceph</annotate>
+    <!-- GlusterFS -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/gluster</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/gluster</annotate>
+    <!-- MooseFS -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/moosefs-cli</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/moosefs-cli</annotate>
+    <!-- BeeGFS -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/beegfs-ctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/beegfs/sbin/beegfs-ctl</annotate>
+    <!-- OrangeFS / PVFS2 -->
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pvfs2-server</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/pvfs2-server</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Kata Containers (v0.0.38): kata-runtime, kata-monitor, ctr,   -->
+  <!-- crictl, and the QCrows kernel-bundle tools. The v0.0.38       -->
+  <!-- rewrite replaced the mock React bundle with a real bridge     -->
+  <!-- that calls these binaries. Most kata subcommands are read-    -->
+  <!-- only (list, inspect, metrics, summary, version, check,        -->
+  <!-- pxe-status, qcrows-list) and do NOT need this action. The     -->
+  <!-- action ships now so future mutating verbs (sandbox create /  -->
+  <!-- stop / remove, qcrows-export, qcrows-initrd-regen) are       -->
+  <!-- authorized when they land.                                    -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.kata.modify">
+    <description>Manage Kata Containers sandboxes and QCrows kernel bundles</description>
+    <description xml:lang="en">Manage Kata Containers sandboxes and QCrows kernel bundles</description>
+    <message>System policy prevents SysDeck from managing Kata Containers.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing Kata Containers.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/kata-runtime</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/kata-runtime</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/kata-monitor</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/kata-monitor</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/ctr</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/crictl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/qcrows-export</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/qcrows-initrd-regen</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+  </action>
+
+  <!-- ============================================================= -->
+  <!-- Monitoring (v0.0.39): Prometheus + Grafana service control.   -->
+  <!-- The shared SysDeck Monitoring panel has two tabs (Prometheus  -->
+  <!-- + Grafana). Read-only queries (summary, targets, alerts,      -->
+  <!-- dashboards, datasources, health, etc.) hit the HTTP APIs      -->
+  <!-- directly and need no polkit. Mutating verbs (restart, reload) -->
+  <!-- invoke systemctl — this action authorizes that.               -->
+  <!-- Prometheus is Apache-2.0; Grafana is AGPL-3.0. Neither is    -->
+  <!-- bundled — the bridge talks to their HTTP APIs.                -->
+  <!-- ============================================================= -->
+  <action id="org.sysdeck.monitoring.modify">
+    <description>Manage Prometheus and Grafana monitoring services</description>
+    <description xml:lang="en">Manage Prometheus and Grafana monitoring services</description>
+    <message>System policy prevents SysDeck from managing monitoring services.</message>
+    <message xml:lang="en">System policy prevents SysDeck from managing monitoring services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/systemctl</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/bin/systemctl</annotate>
+  </action>
+
+</policyconfig>

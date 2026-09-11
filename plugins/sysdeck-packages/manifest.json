@@ -1,0 +1,26 @@
+{
+    "version": 0,
+    "name": "sysdeck-packages",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Packages",
+            "order": 37,
+            "keywords": [
+                {
+                    "matches": [
+                        "packages",
+                        "pacman",
+                        "dnf",
+                        "apt",
+                        "updates",
+                        "install"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

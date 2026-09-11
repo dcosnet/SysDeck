@@ -1,0 +1,35 @@
+{
+    "version": 0,
+    "name": "sysdeck-monitoring",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Monitoring",
+            "order": 43,
+            "keywords": [
+                {
+                    "matches": [
+                        "prometheus",
+                        "grafana",
+                        "monitoring",
+                        "metrics",
+                        "dashboards",
+                        "alerts",
+                        "alertmanager",
+                        "pushgateway",
+                        "time series",
+                        "observability",
+                        "targets",
+                        "scrape",
+                        "datasources",
+                        "panels",
+                        "visualization"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' frame-src 'self' http://127.0.0.1:9095 http://127.0.0.1:3000;"
+}

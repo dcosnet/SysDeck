@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+# SysDeck - Debian rules
+# Author: Jeremy Anderson (https://dcos.net)
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=debian/sysdeck
+
+override_dh_auto_build:
+	# Pure static assets — nothing to compile.
+
+override_dh_auto_clean:
+	$(MAKE) clean

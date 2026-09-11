@@ -1,0 +1,77 @@
+# Maintainer: Jeremy Anderson <info@dcos.net>
+# Contributor: Jeremy Anderson <info@dcos.net>
+# Upstream: https://dcos.net
+
+pkgname=sysdeck
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Unified operations surface for Linux infrastructure — twenty-six domain modules behind one Cockpit dashboard"
+arch=('any')
+url="https://dcos.net"
+license=('MIT')
+depends=('cockpit' 'python>=3.9')
+optdepends=(
+    'podman: container management panel'
+    'nftables: firewall rules panel'
+    'lynis: integrity audit panel'
+    'iproute2: network security panel'
+    'kubectl: service mesh topology panel'
+    'cryptsetup: LUKS vault management panel'
+    'fwupd: firmware update panel'
+    'tpm2-tools: TPM firmware panel'
+    'mkosi: image builder panel (Arch primary)'
+    'archiso: bootable Arch Live ISO builder'
+    'opensc: PKCS#11 smartcard auth panel'
+    'pcsclite: smartcard reader daemon'
+    'glances: system monitoring panel'
+    'lm_sensors: hardware sensor readings panel'
+    'sysbench: system benchmark panel'
+    'kata-containers: Kata Containers panel (SysDeck Kata)'
+    'jellyfin: Jellyfin media server panel (SysDeck Jellyfin)'
+    'photoprism: PhotoPrism photo manager backend (SysDeck Photos)'
+    'piwigo: Piwigo photo manager backend (SysDeck Photos)'
+    'lychee: Lychee photo manager backend (SysDeck Photos)'
+    'librephotos: LibrePhotos photo manager backend (SysDeck Photos)'
+    'ceph: Ceph distributed filesystem backend (SysDeck Remote FS)'
+    'glusterfs: GlusterFS scale-out filesystem backend (SysDeck Remote FS)'
+    'moosefs: MooseFS distributed filesystem backend (SysDeck Remote FS)'
+    'beegfs: BeeGFS parallel filesystem backend (SysDeck Remote FS)'
+    'orangefs: OrangeFS parallel filesystem backend (SysDeck Remote FS)'
+    'polkit: privilege escalation for bridge helpers (strongly recommended)'
+    'appstream: application metadata for Cockpit Applications menu',
+    'bash: for sysdeck-diagnose.sh and cockpit-smoke-test.sh'
+)
+makedepends=('make')
+backup=()
+source=("${pkgname}-${pkgver}.tar.bz2")
+sha256sums=('SKIP')  # Replace with actual hash for release
+
+package() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+    make install DESTDIR="${pkgdir}"
+
+    # Arch-specific: ensure cockpit can find the bridge Python package.
+    # The bridge installs to /usr/lib/sysdeck/bridge/; add a symlink
+    # from the Arch Python site-packages so `python3 -m sysdeck.bridge.*`
+    # resolves correctly from the cockpit spawn context.
+    local site_packages
+    site_packages=$(python3 -c "import site; print(site.getsitepackages()[0])")
+    install -d "${pkgdir}${site_packages}"
+    ln -sf /usr/lib/sysdeck/bridge "${pkgdir}${site_packages}/sysdeck"
+}
+
+post_install() {
+    # Restart cockpit.socket so the new plugin appears in the menu.
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+    echo ">>> SysDeck installed. Restart cockpit.socket if not done automatically."
+    echo ">>>   sudo systemctl restart cockpit.socket"
+}
+
+post_upgrade() {
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+}
+
+post_remove() {
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+    echo ">>> SysDeck removed. Restart cockpit.socket to flush the menu."
+}

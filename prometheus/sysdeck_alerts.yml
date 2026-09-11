@@ -1,0 +1,268 @@
+# SysDeck Module Alert Rules
+# Deploy to /etc/prometheus/rules.d/sysdeck_alerts.yml
+
+groups:
+  # ── Log Pipeline Alerts ──────────────────────────────────────
+  - name: sysdeck_log_pipeline
+    rules:
+      - alert: SysdeckLogPushFailed
+        expr: increase(sysdeck_log_total{level="error"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          module: sysdeck
+        annotations:
+          summary: "SysDeck log push failure detected"
+          description: "Log entries are failing to push to Prometheus pushgateway in the {{ $labels.module }} module."
+
+      - alert: SysdeckLogPipelineStalled
+        expr: time() - sysdeck_log_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: critical
+          module: sysdeck
+        annotations:
+          summary: "SysDeck log pipeline stalled"
+          description: "No logs have been pushed from module {{ $labels.module }} for over 5 minutes."
+
+  # ── Container Module Alerts ──────────────────────────────────
+  - name: sysdeck_containers
+    rules:
+      - alert: SysdeckContainerDown
+        expr: sysdeck_container_status{status="stopped"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          module: containers
+        annotations:
+          summary: "Container {{ $labels.name }} is stopped"
+          description: "Container {{ $labels.name }} has been in a stopped state for over 2 minutes."
+
+      - alert: SysdeckContainerRestartLoop
+        expr: increase(sysdeck_container_restarts_total[10m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          module: containers
+        annotations:
+          summary: "Container {{ $labels.name }} in restart loop"
+          description: "Container {{ $labels.name }} has restarted {{ $value }} times in the last 10 minutes."
+
+  # ── Firewall Module Alerts ───────────────────────────────────
+  - name: sysdeck_firewall
+    rules:
+      - alert: SysdeckFirewallDroppedPackets
+        expr: rate(sysdeck_firewall_dropped_packets_total[5m]) > 100
+        for: 3m
+        labels:
+          severity: warning
+          module: firewall
+        annotations:
+          summary: "High firewall drop rate on {{ $labels.chain }}"
+          description: "Firewall chain {{ $labels.chain }} is dropping {{ $value }} packets/sec."
+
+  # ── Integrity Module Alerts ──────────────────────────────────
+  - name: sysdeck_integrity
+    rules:
+      - alert: SysdeckIntegrityFindings
+        expr: sysdeck_integrity_findings > 0
+        for: 0m
+        labels:
+          severity: high
+          module: integrity
+        annotations:
+          summary: "Security scan found {{ $value }} issues"
+          description: "Integrity audit scan detected {{ $value }} findings."
+
+  # ── Network Security Alerts ──────────────────────────────────
+  - name: sysdeck_netsec
+    rules:
+      - alert: SysdeckNetsecCriticalAlert
+        expr: sysdeck_netsec_alerts{severity="critical"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          module: netsec
+        annotations:
+          summary: "Critical network security alert"
+          description: "{{ $labels.source }}: {{ $labels.message }}"
+
+      - alert: SysdeckNetsecSuspiciousConnections
+        expr: rate(sysdeck_netsec_suspicious_connections_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          module: netsec
+        annotations:
+          summary: "High rate of suspicious connections"
+          description: "{{ $value }} suspicious connections/sec detected."
+
+  # ── Fleet Compute Alerts ─────────────────────────────────────
+  - name: sysdeck_fleet
+    rules:
+      - alert: SysdeckFleetNodeOffline
+        expr: sysdeck_fleet_node_status{status="offline"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          module: fleet
+        annotations:
+          summary: "Fleet node {{ $labels.hostname }} offline"
+          description: "Fleet node {{ $labels.hostname }} has been offline for over 2 minutes."
+
+      - alert: SysdeckFleetJobFailed
+        expr: increase(sysdeck_fleet_jobs_failed_total[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+          module: fleet
+        annotations:
+          summary: "High fleet job failure rate"
+          description: "{{ $value }} fleet jobs have failed in the last 10 minutes."
+
+  # ── Vault Alerts ─────────────────────────────────────────────
+  - name: sysdeck_vault
+    rules:
+      - alert: SysdeckVaultUnlocked
+        expr: sysdeck_vault_status{status="unlocked"} > 0
+        for: 30m
+        labels:
+          severity: warning
+          module: vault
+        annotations:
+          summary: "Vault {{ $labels.name }} unlocked for over 30 minutes"
+          description: "Encryption vault {{ $labels.name }} has been in unlocked state for over 30 minutes."
+
+  # ── Auth Module Alerts ───────────────────────────────────────
+  - name: sysdeck_auth
+    rules:
+      - alert: SysdeckAuthDeviceRejected
+        expr: sysdeck_auth_device_status{status="rejected"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          module: auth
+        annotations:
+          summary: "Authentication device rejected"
+          description: "Auth device {{ $labels.name }} was rejected. Possible security breach."
+
+  # ── Firmware Module Alerts ───────────────────────────────────
+  - name: sysdeck_firmware
+    rules:
+      - alert: SysdeckFirmwareMEActive
+        expr: sysdeck_firmware_me_status{status="enabled"} > 0
+        for: 0m
+        labels:
+          severity: info
+          module: firmware
+        annotations:
+          summary: "Intel ME is enabled"
+          description: "Intel Management Engine is active on this system."
+
+  # ── Sensor Alerts ────────────────────────────────────────────
+  - name: sysdeck_sensors
+    rules:
+      - alert: SysdeckSensorTempCritical
+        expr: sysdeck_sensor_temperature_celsius > sysdeck_sensor_temp_crit_celsius
+        for: 1m
+        labels:
+          severity: critical
+          module: sensors
+        annotations:
+          summary: "Critical temperature on {{ $labels.adapter }}"
+          description: "Sensor {{ $labels.adapter }}/{{ $labels.sensor }} reading {{ $value }}C exceeds critical threshold."
+
+      - alert: SysdeckSensorTempWarning
+        expr: sysdeck_sensor_temperature_celsius > sysdeck_sensor_temp_max_celsius
+        for: 3m
+        labels:
+          severity: warning
+          module: sensors
+        annotations:
+          summary: "High temperature on {{ $labels.adapter }}"
+          description: "Sensor {{ $labels.adapter }}/{{ $labels.sensor }} reading {{ $value }}C exceeds warning threshold."
+
+  # ── Hardware Alert (Intrusion Detection) ─────────────────────
+  - name: sysdeck_hwalert
+    rules:
+      - alert: SysdeckHardwareIntrusion
+        expr: sysdeck_hwalert_intrusion_detected > 0
+        for: 0m
+        labels:
+          severity: critical
+          module: hwalert
+        annotations:
+          summary: "Hardware intrusion detected"
+          description: "Unauthorized hardware device detected: {{ $labels.device_type }} {{ $labels.device_name }}."
+
+  # ── DB Module Alerts ─────────────────────────────────────────
+  - name: sysdeck_db
+    rules:
+      - alert: SysdeckDbEngineDown
+        expr: sysdeck_db_engine_status{status="stopped"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          module: db
+        annotations:
+          summary: "Database engine {{ $labels.name }} is stopped"
+          description: "DB engine {{ $labels.name }} on port {{ $labels.port }} has been stopped for over 2 minutes."
+
+      - alert: SysdeckDbHighConnections
+        expr: sysdeck_db_connections / sysdeck_db_max_connections > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          module: db
+        annotations:
+          summary: "Database {{ $labels.name }} connection pool near capacity"
+          description: "DB engine {{ $labels.name }} is using {{ $value | humanizePercentage }} of its connection limit."
+
+  # ── Service Mesh Alerts ──────────────────────────────────────
+  - name: sysdeck_mesh
+    rules:
+      - alert: SysdeckMeshHighErrorRate
+        expr: rate(sysdeck_mesh_request_errors_total[5m]) / rate(sysdeck_mesh_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          module: mesh
+        annotations:
+          summary: "High error rate in service mesh"
+          description: "Service {{ $labels.service }} error rate is {{ $value | humanizePercentage }}."
+
+  # ── Build/Fester Alerts ──────────────────────────────────────
+  - name: sysdeck_fester
+    rules:
+      - alert: SysdeckBuildStuck
+        expr: sysdeck_fester_build_duration_seconds > 3600
+        for: 5m
+        labels:
+          severity: warning
+          module: fester
+        annotations:
+          summary: "Build {{ $labels.name }} running for over 1 hour"
+          description: "Build job {{ $labels.name }} has been running for {{ $value }} seconds."
+
+  # ── Prometheus Self-Monitoring ───────────────────────────────
+  - name: sysdeck_prometheus
+    rules:
+      - alert: SysdeckPrometheusTargetDown
+        expr: up{job=~"sysdeck_.*"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          module: prometheus
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} down"
+          description: "Scrape target {{ $labels.instance }} (job {{ $labels.job }}) has been down for over 3 minutes."
+
+      - alert: SysdeckPrometheusHighScrapeFailures
+        expr: rate(prometheus_scrape_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          module: prometheus
+        annotations:
+          summary: "Prometheus scrape failure rate high"
+          description: "{{ $value }} scrape failures/sec detected."

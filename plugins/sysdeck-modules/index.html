@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>SysDeck 3rd-Party Modules</title>
+    <link rel="stylesheet" href="../sysdeck-common/sysdeck.css" />
+    <script src="../base1/cockpit.js"></script>
+    <script>
+        // Visible error reporting — same pattern as every other sysdeck plugin.
+        function __sysdeckShowError(title, msg, detail) {
+            var root = document.getElementById('root');
+            if (!root) return;
+            var html = '<div class="sysdeck-card">' +
+                '<h3 class="sysdeck-card-title">' + title + '</h3>' +
+                '<p class="sysdeck-card-body sysdeck-mono">' + String(msg).replace(/</g, '&lt;') + '</p>';
+            if (detail) {
+                html += '<pre class="sysdeck-mono" style="white-space:pre-wrap;background:#1a1a1a;padding:8px;border-radius:4px;overflow:auto;max-height:300px">' +
+                    String(detail).replace(/</g, '&lt;') + '</pre>';
+            }
+            html += '<p class="sysdeck-muted">Paste this error back so we can fix it. ' +
+                'Also open browser devtools (F12) → Console for more detail.</p>' +
+                '</div>';
+            root.innerHTML = html;
+        }
+        window.addEventListener('error', function(ev) {
+            __sysdeckShowError('Page error', ev.message || 'Unknown error',
+                (ev.error && ev.error.stack) ? ev.error.stack :
+                (ev.filename ? 'at ' + ev.filename + ':' + ev.lineno + ':' + ev.colno : null));
+        });
+        window.addEventListener('unhandledrejection', function(ev) {
+            var r = ev.reason;
+            __sysdeckShowError('Unhandled promise rejection',
+                (r && r.message) ? r.message : String(r),
+                (r && r.stack) ? r.stack : null);
+        });
+    </script>
+    <style>
+        /* Plugin-local styles. The shared sysdeck.css handles base typography,
+           card/table/button primitives. Here we only add what the catalog
+           grid, per-row meta lines, and inline row-flash need. */
+        .modules-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+        @media (min-width: 960px) { .modules-grid { grid-template-columns: 1fr 1fr; } }
+        .modules-row { display: flex; flex-direction: column; gap: 0.5rem; }
+        .modules-row header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+        .modules-row header h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+        .modules-row .blurb { color: var(--sysdeck-muted); font-size: 0.88rem; line-height: 1.45; margin: 0; }
+        .modules-row .meta { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; font-size: 0.78rem; align-items: baseline; }
+        .modules-row .meta .pair { color: var(--sysdeck-muted); }
+        .modules-row .meta .pair b { color: var(--sysdeck-fg); font-weight: 500; }
+        .modules-row .meta .pair a { color: var(--sysdeck-accent); text-decoration: none; }
+        .modules-row .meta .pair a:hover { text-decoration: underline; }
+        .modules-row .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+        .modules-row .row-flash { min-height: 0; }
+        .modules-row .row-flash:empty { display: none; }
+        .modules-row .row-flash .sysdeck-badge { display: inline-block; padding: 0.3rem 0.5rem; line-height: 1.4; max-width: 100%; }
+        .modules-filter { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        .modules-filter select, .modules-filter input {
+            background: var(--sysdeck-card-bg); color: var(--sysdeck-fg);
+            border: 1px solid var(--sysdeck-border); border-radius: 4px;
+            padding: 0.35rem 0.5rem; font-size: 0.85rem;
+        }
+        .sysdeck-badge.info { background: rgba(0, 102, 204, 0.18); color: #6cb6ff; }
+    </style>
+</head>
+<body>
+    <main id="root" class="sysdeck-page">
+        <div class="sysdeck-loading">Loading…</div>
+    </main>
+    <script type="module">
+        if (!window.cockpit) {
+            document.getElementById('root').innerHTML = '<div class="sysdeck-card">' +
+                '<h3 class="sysdeck-card-title">cockpit.js not loaded</h3>' +
+                '<p class="sysdeck-card-body">This plugin requires <code>../base1/cockpit.js</code> to be loaded first.</p>' +
+                '</div>';
+            throw new Error('window.cockpit is undefined — ../base1/cockpit.js failed to load');
+        }
+
+        try {
+            const { mount } = await import("./modules.js");
+            const { bridge, EventBus } = await import("../sysdeck-common/bridge.js");
+            const root = document.getElementById('root');
+            await mount(root, { bridge, EventBus });
+        } catch (err) {
+            __sysdeckShowError('Module load failed', err.message || String(err),
+                err.stack || null);
+        }
+    </script>
+</body>
+</html>

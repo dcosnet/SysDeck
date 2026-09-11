@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-mesh",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Service Mesh",
+            "order": 24,
+            "keywords": [
+                {
+                    "matches": [
+                        "mesh",
+                        "kubernetes",
+                        "kubectl",
+                        "services",
+                        "k8s"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

@@ -1,0 +1,421 @@
+{
+  "_comment": "Compatibility Manifest — sysdeck v0.1.3",
+  "version": "0.2.0",
+  "suite_requires": { "cockpit": ">=239", "python": ">=3.9" },
+  "modules": {
+    "containers": {
+      "_comment_v0.0.35": "Containers panel now manages Podman only. Kata Containers was split out per v0.0.35 directive: 'kata containers should be called SysDeck Kata and moved out of the tools area.' The standalone sysdeck-kata plugin hosts the pre-built cockpit-kata React app.",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/podman" }],
+      "config": {
+        "arch": { "dep_package": "podman", "install_cmd": "pacman -S --noconfirm podman" },
+        "debian": { "dep_package": "podman", "install_cmd": "apt install -y podman" },
+        "fedora": { "dep_package": "podman", "install_cmd": "dnf install -y podman" }
+      },
+      "fallback": { "message": "Podman is required for the Containers panel. Kata Containers is now its own sidebar entry — SysDeck Kata." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "kata": {
+      "_comment_v0.0.35": "SysDeck Kata — restored to its own sidebar entry per user directive. Hosts the pre-built cockpit-kata React app (index.js + index.css). Requires cockpit ≥ 286 because the React bundle uses newer cockpit-podman base1 APIs. The standalone cockpit-kata sub-project is consolidated into SysDeck.",
+      "requires": { "cockpit": ">=286" },
+      "conditions": [{ "path-or-exists": "/usr/bin/kata-runtime" }, { "path-or-exists": "/usr/bin/kata-containerd-shim-v2" }],
+      "config": {
+        "arch": { "dep_package": "kata-containers", "install_cmd": "pacman -S --noconfirm kata-containers" },
+        "debian": { "dep_package": "kata-containers", "install_cmd": "apt install -y kata-containers" },
+        "fedora": { "dep_package": "kata-containers", "install_cmd": "dnf install -y kata-containers" }
+      },
+      "fallback": { "message": "Kata Containers provides hardware-virtualized OCI sandboxes. Install kata-containers to manage Kata sandboxes & VMs from this panel." },
+      "min_cockpit": 286,
+      "tested_cockpit_versions": [285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "firewall": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/sbin/nft" }],
+      "config": {
+        "arch": { "dep_package": "nftables", "install_cmd": "pacman -S --noconfirm nftables" },
+        "debian": { "dep_package": "nftables", "install_cmd": "apt install -y nftables" },
+        "fedora": { "dep_package": "nftables", "install_cmd": "dnf install -y nftables" }
+      },
+      "fallback": { "message": "nftables is not installed.", "install_docs": "https://wiki.nftables.org/wiki-nftables/index.php/Main_Page" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "integrity": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/sbin/lynis" }],
+      "config": {
+        "arch": { "dep_package": "lynis", "install_cmd": "pacman -S --noconfirm lynis" },
+        "debian": { "dep_package": "lynis", "install_cmd": "apt install -y lynis" },
+        "fedora": { "dep_package": "lynis", "install_cmd": "dnf install -y lynis" }
+      },
+      "fallback": { "message": "Lynis is not installed.", "install_docs": "https://cisofy.com/lynis/" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "netsec": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/sbin/ss" }],
+      "config": {
+        "arch": { "dep_package": "iproute2", "install_cmd": "pacman -S --noconfirm iproute2" },
+        "debian": { "dep_package": "iproute2", "install_cmd": "apt install -y iproute2" },
+        "fedora": { "dep_package": "iproute2", "install_cmd": "dnf install -y iproute2" }
+      },
+      "fallback": { "message": "iproute2 (ss command) is required.", "install_docs": "https://wiki.linuxfoundation.org/networking/iproute2" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "mesh": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/kubectl" }],
+      "config": {
+        "arch": { "dep_package": "kubectl", "install_cmd": "pacman -S --noconfirm kubectl" },
+        "debian": { "dep_package": "kubectl", "install_cmd": "apt install -y kubectl" },
+        "fedora": { "dep_package": "kubectl", "install_cmd": "dnf install -y kubectl" }
+      },
+      "fallback": { "message": "kubectl is not installed. Required for service mesh topology.", "install_docs": "https://kubernetes.io/docs/tasks/tools/" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "vault": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/sbin/cryptsetup" }],
+      "config": {
+        "arch": { "dep_package": "cryptsetup", "install_cmd": "pacman -S --noconfirm cryptsetup" },
+        "debian": { "dep_package": "cryptsetup", "install_cmd": "apt install -y cryptsetup" },
+        "fedora": { "dep_package": "cryptsetup", "install_cmd": "dnf install -y cryptsetup" }
+      },
+      "fallback": { "message": "cryptsetup is required for LUKS volume management.", "install_docs": "https://gitlab.com/cryptsetup/cryptsetup" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "fleet": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": { "dep_package": null, "note": "Uses /etc/cockpit/machines.d/ and standard system tools" },
+        "debian": { "dep_package": null },
+        "fedora": { "dep_package": null }
+      },
+      "fallback": { "message": "Fleet module uses standard system tools — no extra deps needed." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "fester": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": { "dep_package": null, "note": "SysDeck Fester — build orchestration, uses system tools" },
+        "debian": { "dep_package": null, "note": "SysDeck Fester — build orchestration, uses system tools" },
+        "fedora": { "dep_package": null, "note": "SysDeck Fester — build orchestration, uses system tools" }
+      },
+      "fallback": { "message": "SysDeck Fester build orchestration uses system tools." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "firmware": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/fwupdmgr" }],
+      "config": {
+        "arch": { "dep_package": "fwupd", "install_cmd": "pacman -S --noconfirm fwupd" },
+        "debian": { "dep_package": "fwupd", "install_cmd": "apt install -y fwupd" },
+        "fedora": { "dep_package": "fwupd", "install_cmd": "dnf install -y fwupd" }
+      },
+      "fallback": { "message": "fwupd is not installed.", "install_docs": "https://fwupd.org/" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "builder": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [
+        { "path-exists": "/usr/bin/mkosi" },
+        { "path-exists": "/usr/bin/mkarchiso" },
+        { "path-exists": "/usr/bin/vmdb2" },
+        { "path-exists": "/usr/bin/lb" }
+      ],
+      "config": {
+        "arch": {
+          "dep_package": "mkosi",
+          "install_cmd": "pacman -S --noconfirm mkosi",
+          "iso_dep_package": "archiso",
+          "iso_install_cmd": "pacman -S --noconfirm archiso",
+          "note": "mkosi is the primary image builder; archiso for bootable Live ISOs"
+        },
+        "debian": {
+          "dep_package": "vmdb2",
+          "install_cmd": "apt install -y vmdb2",
+          "iso_dep_package": "live-build",
+          "iso_install_cmd": "apt install -y live-build",
+          "note": "vmdb2 is the Debian project's image builder; live-build for Live ISOs"
+        },
+        "fedora": {
+          "dep_package": "mkosi",
+          "install_cmd": "dnf install -y mkosi",
+          "iso_dep_package": "live-build",
+          "iso_install_cmd": "dnf install -y live-build",
+          "note": "v0.0.30+: osbuild-composer dropped — mkosi/vmdb2 are cross-distro; Fedora can use mkosi"
+        }
+      },
+      "fallback": {
+        "message": "No image-builder backend installed. Install mkosi (Arch) or vmdb2 (Debian).",
+        "install_docs": "https://github.com/systemd/mkosi / https://gitlab.com/lvm-team/vmdb2"
+      },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" },
+      "_comment_v0.0.48": "Builder panel v0.0.48 fixes a profile-create bug that surfaced on archiso-only or live-build-only hosts. The v0.0.31 Create Profile dropdown fell back to `primary.id` when no mkosi/vmdb2 backend was installed, funneling operators into the 'profile-create supports (mkosi, vmdb2)' error. v0.0.48 (a) gates the Create Profile form on a scaffoldable backend being installed and shows an inline install hint otherwise, and (b) adds a new 'Copy shipped profile' form backed by the new bridge.builder.profileCopy(srcName, newName, backend) method — copies /usr/share/archiso/configs/<src>/ → /etc/archiso/configs/<new>/ (and the live-build equivalent). Same polkit action (org.sysdeck.builder.modify). 15 new unit tests in tests/test_bridge_parsers.py TestBuilderProfileCopy.",
+      "_comment_v0.0.49": "Builder panel v0.0.49 adds an inline package-list field to both the Create Profile and Copy shipped profile forms. Per user directive: 'we should allow adding a pacman -Sy applist.txt with a literal list of baseline apps for the profile being generated.' The field has a textarea (inline paste), a file upload (applist.txt via FileReader), and a merge-mode toggle (append | replace). All 4 backends supported: mkosi writes [Packages] section, vmdb2 writes bootstrap.include list, archiso writes packages.x86_64, live-build writes config/package-lists/sysdeck.list. Default mode is replace for Create, append for Copy. New bridge helpers: _extract_opts, _parse_packages_text, _write_packages_{mkosi,vmdb2,archiso,live_build}, _write_packages dispatcher. profile_create and profile_copy extended with --packages=<json> + --mode=append|replace. 28 new unit tests in TestBuilderPackagesField.",
+      "_comment_v0.0.50": "Builder bridge v0.0.50 fixes a NameError that blocked every build() invocation since v0.0.31. _new_build_id() called re.sub() but `import re` was missing from bridge/builder.py's module-level imports. The bug went undetected for 18 releases because no unit test exercised the build() code path — tests only covered profile_create/profile_copy/profile_delete and the v0.0.49 package-writing helpers. Fix: added `import re` to module-level imports. 9 new unit tests in TestBuilderBuildPath cover _new_build_id (format, sanitization, safe-char preservation, explicit re-in-globals regression check) and build() end-to-end with mocked subprocess.run (success path, unknown profile, no args, backend-not-installed, non-zero returncode).",
+      "_comment_v0.1.0": "Builder bridge v0.1.0 fixes three compounding bugs in the mkosi build path and adds a new operator feature. BUG 1: profile-create now writes /etc/mkosi/profiles/<name>/mkosi.conf (per-profile directory with a real mkosi.conf filename) instead of /etc/mkosi/mkosi.conf.d/<name>.conf (drop-in fragment that mkosi silently ignored without a parent mkosi.conf). BUG 2: _MKOSI_TEMPLATE and _write_packages_mkosi now use the modern single-line Packages=a b c syntax (mkosi v22+ format) instead of the legacy indented continuation form. Reader accepts both forms for migration. BUG 3: _MKOSI_TEMPLATE now sets OutputDirectory=/var/lib/sysdeck/builder/artifacts/<name> so mkosi writes directly to the artifacts dir that build() scans. NEW FEATURE: profile-import-packages subcommand queries the host's explicitly-installed packages (pacman -Qqe / apt-mark showmanual / dnf repoquery --userinstalled) and writes them into a profile via _write_packages. Supports --mode=append|replace (default append), --dry-run for preview, --packages=<json> for manual override. Panel adds 'Import host pkgs' button per profile row with two-step dry-run + confirm flow. New polkit exec paths for pacman/apt-mark/dnf added to org.sysdeck.builder.modify. 7 new unit tests in TestBuilderImportHostPackages; 4 existing TestBuilderPackagesField tests updated for new Packages= syntax.",
+      "_comment_v0.1.1": "Builder bridge v0.1.1 fixes a critical output-path safety bug. v0.1.0 relied on OutputDirectory= in the scaffolded mkosi.conf to route build outputs to /var/lib/sysdeck/builder/artifacts/<name>/. But when building an OLD v0.0.x profile (whose mkosi.conf had no OutputDirectory= setting), mkosi defaulted to writing image.raw into the cwd (/etc/mkosi/mkosi.conf.d/) — a system config directory owned by root. mkosi then refused to overwrite the existing image.raw, blocking every rebuild. FIX: _backend_build_command() now ALWAYS passes --output, --output-dir, and --force on the CLI for mkosi builds. CLI flags override mkosi.conf so the output path is forced to /var/lib/sysdeck/builder/artifacts/<name>/<name>.raw regardless of what the profile says. SAFETY CHECK: build() refuses to proceed if the resolved output_dir is not under /var/lib/, /tmp/, /var/tmp/, or the configured BUILDER_ARTIFACTS_DIR — blocks /etc/, /usr/, /boot/, /bin/, /sbin/, /lib/, /root/, /home/, etc. LEGACY PROFILE WARNING: build() detects profiles in /etc/mkosi/mkosi.conf.d/ (v0.0.x drop-in layout) and records a warning in both the build state JSON and the log file. LOG IMPROVEMENT: build log header now includes the resolved output_dir. 2 new unit tests in TestBuilderBuildPath cover the safety check and legacy-profile warning; existing test_build_success_path extended to verify --output/--output-dir/--force on the mkosi command line.",
+      "_comment_v0.1.2": "Builder bridge v0.1.2 fixes the critical 'zero packages' bug. Operator reported: 'the builder absolutely does not work yet. it has zero awareness of packages we tell it to add.' TWO compounding root causes. CAUSE 1: _backend_build_command() for mkosi had no flag telling mkosi WHERE the profile config file is — mkosi only reads a file literally named mkosi.conf from the cwd, so profiles at /etc/mkosi/mkosi.conf.d/<name>.conf were silently ignored and mkosi used EMPTY defaults (zero packages). FIX 1: _backend_build_command() now ALWAYS passes --include <profile_path> on the CLI so mkosi explicitly loads the profile config by path regardless of filename or location. CAUSE 2: profiles created by v0.0.x used the old indented Packages= syntax (Packages=\\n    linux\\n...) which mkosi v22+ silently parses as a single package name with embedded newlines — installs NOTHING. FIX 2: new _migrate_legacy_mkosi_packages() function detects old indented syntax and rewrites to single-line IN-PLACE before build. build() calls this automatically on every mkosi build. Migration logged in build state JSON (warnings array) and log header (# MIGRATED: ...). No-op on modern syntax. 4 new unit tests in TestBuilderBuildPath cover migration (old rewrite, modern no-op, no-section no-op, end-to-end during build). Existing test_build_success_path extended to verify --include on command line. Total 243 tests (was 239; +4).",
+      "_comment_v0.1.3": "Builder bridge v0.1.3 fixes TWO more critical bugs v0.1.2 missed + adds download/manage UI. IMPORT BUG: _detect_host_packages() relied on `from __init__ import PKG_MANAGER` which silently failed in the cockpit superuser channel context (different Python path). PKG_MANAGER defaulted to 'unknown', host query returned EMPTY list, import wrote nothing. Operator saw 'tries to build only 2'. FIX: now uses shutil.which() to find pacman/apt-mark/dnf directly — no import dependency. BUILD BUG: v0.1.2's --include flag does NOT replace the base config. mkosi's --include includes a drop-in fragment ON TOP OF the base mkosi.conf — if no mkosi.conf in cwd, mkosi uses defaults and ignores --include file entirely. FIX: build() now creates a temp directory, symlinks the profile file as `mkosi.conf`, sets work_dir to that temp dir. mkosi finds the symlink, follows it, reads the real profile. Works for ANY profile path. Temp dir cleaned up after build. New: _prepare_mkosi_work_dir(). NEW FEATURES: artifact download (cockpit.spawn cat + Blob + browser download), artifact-delete (per-file), artifacts-clear (per-profile, reports files+bytes freed), build-delete (state+log, optionally --artifacts). Panel: each artifact has Download + Delete buttons, each profile has Clear all button, each build has Delete button with two-step confirm. 11 new unit tests in TestBuilderArtifactManagement (7) + TestBuilderMkosiTempWorkDir (3). Total 254 tests (was 243; +11)."
+    },
+    "mining": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/xmrig" }],
+      "config": {
+        "arch": { "dep_package": "xmrig", "install_cmd": "pacman -S --noconfirm xmrig" },
+        "debian": { "dep_package": null, "note": "XMRig requires manual install on Debian" },
+        "fedora": { "dep_package": null, "note": "XMRig requires manual install on Fedora" }
+      },
+      "fallback": { "message": "XMRig is not installed.", "install_docs": "https://xmrig.com/docs/miner/build" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264],
+      "distro_support": { "arch": "full", "debian": "partial", "fedora": "partial" }
+    },
+    "themes": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": { "dep_package": null },
+        "debian": { "dep_package": null },
+        "fedora": { "dep_package": null }
+      },
+      "fallback": { "message": "Themes module uses Cockpit's built-in configuration." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "auth": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": { "dep_package": "opensc pcsclite", "install_cmd": "pacman -S --noconfirm opensc pcsclite" },
+        "debian": { "dep_package": "opensc pcscd", "install_cmd": "apt install -y opensc pcscd" },
+        "fedora": { "dep_package": "opensc pcsc-lite", "install_cmd": "dnf install -y opensc pcsc-lite" }
+      },
+      "fallback": { "message": "OpenSC/pcscd recommended for PKCS#11 smartcard support." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [239, 264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "glances": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/glances" }],
+      "config": {
+        "arch": { "dep_package": "glances", "install_cmd": "pacman -S --noconfirm glances" },
+        "debian": { "dep_package": "glances", "install_cmd": "apt install -y glances" },
+        "fedora": { "dep_package": "glances", "install_cmd": "dnf install -y glances" }
+      },
+      "fallback": { "message": "Glances is not installed.", "install_docs": "https://glances.readthedocs.io/en/latest/install.html" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "sensors": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/sensors" }],
+      "config": {
+        "arch": { "dep_package": "lm_sensors", "install_cmd": "pacman -S --noconfirm lm_sensors" },
+        "debian": { "dep_package": "lm-sensors", "install_cmd": "apt install -y lm-sensors" },
+        "fedora": { "dep_package": "lm_sensors", "install_cmd": "dnf install -y lm_sensors" }
+      },
+      "fallback": { "message": "lm-sensors is not installed.", "install_docs": "https://hwmon.wiki.kernel.org/lm_sensors" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "benchmark": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/sysbench" }],
+      "config": {
+        "arch": { "dep_package": "sysbench", "install_cmd": "pacman -S --noconfirm sysbench" },
+        "debian": { "dep_package": "sysbench", "install_cmd": "apt install -y sysbench" },
+        "fedora": { "dep_package": "sysbench", "install_cmd": "dnf install -y sysbench" }
+      },
+      "fallback": { "message": "sysbench is not installed.", "install_docs": "https://github.com/akopytov/sysbench#readme" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "packages": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/pacman" }, { "path-or-exists": "/usr/bin/dnf" }, { "path-or-exists": "/usr/bin/apt" }],
+      "config": {
+        "arch": { "dep_package": "pacman", "install_cmd": "echo 'pacman always available on Arch'" },
+        "debian": { "dep_package": "apt", "install_cmd": "echo 'apt always available on Debian'" },
+        "fedora": { "dep_package": "dnf", "install_cmd": "echo 'dnf always available on Fedora'" }
+      },
+      "fallback": { "message": "No supported package manager found (pacman/dnf/apt)." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "policy": {
+      "_comment_v0.0.33": "Policy & Permissions module — modern Linux policy management and permissions manager for groups. v0.0.32 introduced the module; v0.0.33 expanded it to cover the full modern LSM stack (AppArmor, Smack, TOMOYO, Yama, LoadPin, Lockdown, BPF-LSM, Landlock) plus file capabilities. SELinux skipped (native).",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": {
+          "dep_package": "acl iproute2 bpftool util-linux libcap",
+          "install_cmd": "pacman -S --noconfirm acl iproute2 bpftool util-linux libcap",
+          "optional_dep_package": "apparmor apparmor-utils smack-util tomoyo-tools",
+          "optional_install_cmd": "pacman -S --noconfirm apparmor apparmor-utils",
+          "note": "LSMs are optional — kernel compiled-in + userspace tools. SELinux skipped (native). Smack/TOMOYO userspace is not packaged on Arch; the kernel-side is enabled via the lsm= kernel cmdline."
+        },
+        "debian": {
+          "dep_package": "acl iproute2 linux-tools-common util-linux libcap2-bin",
+          "install_cmd": "apt install -y acl iproute2 linux-tools-common util-linux libcap2-bin",
+          "optional_dep_package": "apparmor apparmor-utils tomoyo-tools",
+          "optional_install_cmd": "apt install -y apparmor apparmor-utils",
+          "note": "LSMs are optional — kernel compiled-in + userspace tools. SELinux skipped (native). Smack userspace is not packaged on Debian; the kernel-side is enabled via the lsm= kernel cmdline."
+        },
+        "fedora": {
+          "dep_package": "acl iproute2 bpftool util-linux libcap",
+          "install_cmd": "dnf install -y acl iproute2 bpftool util-linux libcap",
+          "optional_dep_package": "apparmor apparmor-utils",
+          "optional_install_cmd": "dnf install -y apparmor apparmor-utils",
+          "note": "LSMs are optional — kernel compiled-in + userspace tools. SELinux skipped (native). Smack/TOMOYO userspace is not packaged on Fedora; the kernel-side is enabled via the lsm= kernel cmdline."
+        }
+      },
+      "fallback": { "message": "Policy module degrades gracefully when individual binaries are absent. Install what you need (acl, iproute2, bpftool, util-linux, libcap, optionally apparmor / apparmor-utils)." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "db": {
+      "_comment_v0.0.32": "DB Control module — unified control for SQL/NoSQL/vector/AI database engines. The cockpit-way pattern: the bridge runs systemctl directly via subprocess; the JS panel passes { superuser: 'try' } so the operator authenticates via polkit (org.sysdeck.db.modify).",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": {
+          "dep_package": null,
+          "note": "DB Control auto-detects 32+ engines (postgresql, mysql, mongodb, redis, influxdb, neo4j, clickhouse, milvus, qdrant, duckdb, etc.). Install only the engines you use."
+        },
+        "debian": { "dep_package": null, "note": "Same auto-detection on Debian." },
+        "fedora": { "dep_package": null, "note": "Same auto-detection on Fedora." }
+      },
+      "fallback": { "message": "No database engines detected on this host." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "jellyfin": {
+      "_comment_v0.0.35": "Jellyfin media server management. Per user directive: 'next we will integrate a jellyfin management module where it starts, stops, and loads the admin panel in the module.' The bridge runs systemctl start/stop/restart jellyfin.service; the panel iframes the running admin UI at http://127.0.0.1:8096 — same pattern as the v0.0.34 Glances integration.",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-or-exists": "/usr/bin/jellyfin" }, { "path-or-exists": "/usr/lib/sysdeck/bridge/jellyfin.py" }],
+      "config": {
+        "arch": { "dep_package": "jellyfin", "install_cmd": "pacman -S --noconfirm jellyfin" },
+        "debian": { "dep_package": "jellyfin", "install_cmd": "apt install -y jellyfin" },
+        "fedora": { "dep_package": "jellyfin", "install_cmd": "dnf install -y jellyfin" }
+      },
+      "fallback": { "message": "Jellyfin media server is not installed.", "install_docs": "https://jellyfin.org/downloads/" },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "photos": {
+      "_comment_v0.0.35": "Photo Manager module — multi-backend (PhotoPrism, Piwigo, Lychee, Nextcloud-Memories, LibrePhotos). Per user directive: 'as well as a photo manager of equal quality. with its own module.' Same shape as the Jellyfin module: bridge runs systemctl start/stop/restart; panel iframes the running admin UI.",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": {
+          "dep_package": null,
+          "note": "Photos module auto-detects PhotoPrism, Piwigo, Lychee, Nextcloud-Memories, LibrePhotos. Install only the backend you use."
+        },
+        "debian": { "dep_package": null, "note": "Same auto-detection on Debian." },
+        "fedora": { "dep_package": null, "note": "Same auto-detection on Fedora." }
+      },
+      "fallback": { "message": "No photo management backends detected. Install one of: PhotoPrism, Piwigo, Lychee, Nextcloud-Memories, LibrePhotos." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "remotefs": {
+      "_comment_v0.0.35": "Remote FS module — distributed filesystem management. Per user directive: 'then a remote fs manager such as ceph, and others but not nfs or amanada fs.' Backends shipped: Ceph, GlusterFS, MooseFS, BeeGFS, OrangeFS. NFS and Amanda explicitly EXCLUDED per directive (NFS is kernel-builtin; Amanda is a backup system, not a remote FS).",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": {
+          "dep_package": null,
+          "note": "Remote FS module auto-detects Ceph, GlusterFS, MooseFS, BeeGFS, OrangeFS. Install only the backend you use."
+        },
+        "debian": { "dep_package": null, "note": "Same auto-detection on Debian." },
+        "fedora": { "dep_package": null, "note": "Same auto-detection on Fedora." }
+      },
+      "fallback": { "message": "No remote/distributed filesystem backends detected. Install one of: ceph, glusterfs, moosefs, beegfs, orangefs. NFS and Amanda are intentionally excluded per directive." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    },
+    "services": {
+      "_comment_v0.0.47": "Service / Port Editor module — promoted from a card at the bottom of the Firewall panel (v0.0.44) to its own sidebar entry at order 45 per user directive: 'we should move the service/ports editor to its own module entry for ease of access.' The bridge surface (bridge.services.{list,info,setPort,restart}) is a thin proxy over bridge.firewall.{services,service-info,set-service-port,restart-service}; the SERVICES_REGISTRY + atomic-write + systemctl restart logic remains in bridge/firewall.py as the single source of truth. No new bridge helper file was needed.",
+      "requires": { "cockpit": ">=239" },
+      "conditions": [],
+      "config": {
+        "arch": { "dep_package": "iproute2", "install_cmd": "pacman -S --noconfirm iproute2", "note": "Uses ss -tlnp for listening-socket enumeration; falls back to /proc/net/tcp if unavailable." },
+        "debian": { "dep_package": "iproute2", "install_cmd": "apt install -y iproute2", "note": "Uses ss -tlnp; falls back to /proc/net/tcp." },
+        "fedora": { "dep_package": "iproute2", "install_cmd": "dnf install -y iproute2", "note": "Uses ss -tlnp; falls back to /proc/net/tcp." }
+      },
+      "fallback": { "message": "Service / Port Editor degrades gracefully — if ss is unavailable it falls back to /proc/net/tcp. The SERVICES_REGISTRY covers ssh, cockpit, caddy, varnish, mariadb, ollama, openwebui, hermes, odysseus." },
+      "min_cockpit": 239,
+      "tested_cockpit_versions": [264, 285, 300],
+      "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
+    }
+  },
+  "standalone_plugins": {
+    "cockpit-ostree": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/rpm-ostree" }],
+      "config": {
+        "fedora": { "dep_package": "cockpit-ostree", "install_cmd": "dnf install -y cockpit-ostree" },
+        "arch": { "dep_package": null, "note": "rpm-ostree not available on Arch" }
+      },
+      "fallback": { "message": "rpm-ostree is only available on Fedora Silverblue / Kinoite." },
+      "distro_support": { "fedora": "full", "arch": "none", "debian": "none" }
+    },
+    "cockpit-machines": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/virsh" }],
+      "config": {
+        "arch": { "dep_package": "cockpit-machines", "install_cmd": "pacman -S --noconfirm cockpit-machines" },
+        "fedora": { "dep_package": "cockpit-machines", "install_cmd": "dnf install -y cockpit-machines" },
+        "debian": { "dep_package": "cockpit-machines", "install_cmd": "apt install -y cockpit-machines" }
+      },
+      "fallback": { "message": "libvirt is required for virtual machine management." },
+      "distro_support": { "arch": "full", "fedora": "full", "debian": "full" }
+    },
+    "cockpit-incus": {
+      "requires": { "cockpit": ">=239" },
+      "conditions": [{ "path-exists": "/usr/bin/incus" }],
+      "config": {
+        "arch": { "dep_package": "incus", "install_cmd": "pacman -S --noconfirm incus" },
+        "fedora": { "dep_package": "incus", "install_cmd": "dnf install -y incus" },
+        "debian": { "dep_package": "incus", "install_cmd": "apt install -y incus" }
+      },
+      "fallback": { "message": "Incus is required for system container and VM management.", "install_docs": "https://linuxcontainers.org/incus/docs/main/installing/" },
+      "distro_support": { "arch": "full", "fedora": "full", "debian": "full" }
+    }
+  }
+}

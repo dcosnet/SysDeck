@@ -1,0 +1,51 @@
+MIT License
+
+Copyright (c) 2026 Jeremy Anderson <info@dcos.net> · https://dcos.net
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+────────────────────────────────────────────────────────────────────────────
+
+SysDeck is a drop-in plugin for the Cockpit web UI. It is distributed
+under the MIT license so that it remains compatible with the widest
+range of host distributions and integration points. The MIT license
+is permissive: it permits commercial use, modification, and
+re-distribution, and it imposes no copyleft obligation on
+distributors who bundle SysDeck with their own software.
+
+Third-party attributions and license summaries are documented in
+[THIRD_PARTY.md](./THIRD_PARTY.md). The SysDeck codebase invokes
+the following independently-licensed programs as separate processes
+via cockpit.spawn / subprocess — these programs retain their own
+licenses and are not bundled with SysDeck:
+
+  - cockpit-bridge (LGPL-2.1+, https://cockpit-project.org/)
+  - nftables / nft (GPL-2.0+, https://www.nftables.org/)
+  - pacman / apt / dnf (GPL-2.0+)
+  - mkosi / vmdb2 / archiso / live-build (LGPL-2.1+ / GPL-2.0+)
+  - bpftool (GPL-2.0+)
+  - setcap / getcap (libcap, GPL-2.0+ / BSD-dual)
+  - aa-status / aa-enforce / aa-complain (AppArmor userspace, GPL-2.0+)
+  - smackload / tomoyo-* (Smack / TOMOYO userspace, GPL-2.0+)
+  - systemctl / journalctl (systemd, LGPL-2.1+)
+  - getfacl / setfacl (acl, GPL-2.0+)
+  - ip / lsns / mount / mkdir (iproute2 / util-linux / util-linux)
+
+Author: Jeremy Anderson · <info@dcos.net> · https://dcos.net
+Project home: https://dcos.net

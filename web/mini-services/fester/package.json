@@ -1,0 +1,11 @@
+{
+  "name": "fester-service",
+  "version": "0.2.1",
+  "description": "Fester — distributed DAG build orchestration service (SysDeck Web Edition integration)",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3"
+  }
+}

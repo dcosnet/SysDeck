@@ -1,0 +1,168 @@
+# SysDeck Module Scrape Configuration
+# Add these scrape configs to /etc/prometheus/prometheus.yml
+# or include via: - prometheus/sysdeck_scrape.yml
+
+scrape_configs:
+  # ── SysDeck Log Pipeline (Pushgateway) ───────────────────────
+  - job_name: 'sysdeck_logs'
+    honor_labels: true
+    static_configs:
+      - targets: ['localhost:9091']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'sysdeck_.*'
+        action: keep
+
+  # ── SysDeck Bridge Health Endpoints ──────────────────────────
+  # Each bridge module exposes a /metrics endpoint when instrumented
+  - job_name: 'sysdeck_containers'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9101']
+        labels:
+          module: 'containers'
+          codename: 'cockpit-containers'
+
+  - job_name: 'sysdeck_firewall'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9102']
+        labels:
+          module: 'firewall'
+          codename: 'cockpit-firewall'
+
+  - job_name: 'sysdeck_integrity'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:9103']
+        labels:
+          module: 'integrity'
+          codename: 'cockpit-integrity'
+
+  - job_name: 'sysdeck_netsec'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9104']
+        labels:
+          module: 'netsec'
+          codename: 'cockpit-netsec'
+
+  - job_name: 'sysdeck_mesh'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9105']
+        labels:
+          module: 'mesh'
+          codename: 'cockpit-mesh'
+
+  - job_name: 'sysdeck_vault'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9106']
+        labels:
+          module: 'vault'
+          codename: 'cockpit-vault'
+
+  - job_name: 'sysdeck_fleet'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9107']
+        labels:
+          module: 'fleet'
+          codename: 'cockpit-fleet'
+
+  - job_name: 'sysdeck_firmware'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:9108']
+        labels:
+          module: 'firmware'
+          codename: 'cockpit-firmware'
+
+  - job_name: 'sysdeck_auth'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9109']
+        labels:
+          module: 'auth'
+          codename: 'cockpit-auth'
+
+  - job_name: 'sysdeck_kata'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9110']
+        labels:
+          module: 'kata'
+          codename: 'cockpit-kata'
+
+  - job_name: 'sysdeck_fester'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9111']
+        labels:
+          module: 'fester'
+          codename: 'cockpit-fester'
+
+  - job_name: 'sysdeck_glances'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9112']
+        labels:
+          module: 'glances'
+          codename: 'cockpit-glances'
+
+  - job_name: 'sysdeck_sensors'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9113']
+        labels:
+          module: 'sensors'
+          codename: 'cockpit-sensors'
+
+  - job_name: 'sysdeck_benchmark'
+    scrape_interval: 60s
+    static_configs:
+      - targets: ['localhost:9114']
+        labels:
+          module: 'benchmark'
+          codename: 'cockpit-benchmark'
+
+  - job_name: 'sysdeck_packages'
+    scrape_interval: 60s
+    static_configs:
+      - targets: ['localhost:9115']
+        labels:
+          module: 'packages'
+          codename: 'cockpit-packages'
+
+  - job_name: 'sysdeck_db'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:9116']
+        labels:
+          module: 'db'
+          codename: 'cockpit-db'
+
+  - job_name: 'sysdeck_hwalert'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9117']
+        labels:
+          module: 'hwalert'
+          codename: 'cockpit-hwalert'
+
+  - job_name: 'sysdeck_prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9095']
+        labels:
+          module: 'prometheus'
+          codename: 'cockpit-prometheus'
+
+  - job_name: 'sysdeck_grafana'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:3000']
+        labels:
+          module: 'grafana'
+          codename: 'cockpit-grafana'

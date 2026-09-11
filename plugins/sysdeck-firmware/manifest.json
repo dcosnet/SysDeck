@@ -1,0 +1,25 @@
+{
+    "version": 0,
+    "name": "sysdeck-firmware",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "Firmware",
+            "order": 29,
+            "keywords": [
+                {
+                    "matches": [
+                        "firmware",
+                        "fwupd",
+                        "tpm",
+                        "bios",
+                        "update"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}

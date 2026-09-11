@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>SysDeck Photos</title>
+    <link rel="stylesheet" href="../sysdeck-common/sysdeck.css" />
+    <script src="../base1/cockpit.js"></script>
+    <script>
+        function __sysdeckShowError(title, msg, detail) {
+            var root = document.getElementById('root');
+            if (!root) return;
+            var html = '<div class="sysdeck-card">' +
+                '<h3 class="sysdeck-card-title">' + title + '</h3>' +
+                '<p class="sysdeck-card-body sysdeck-mono">' + String(msg).replace(/</g, '&lt;') + '</p>';
+            if (detail) {
+                html += '<pre class="sysdeck-mono" style="white-space:pre-wrap;background:#1a1a1a;padding:8px;border-radius:4px;overflow:auto;max-height:300px">' +
+                    String(detail).replace(/</g, '&lt;') + '</pre>';
+            }
+            html += '<p class="sysdeck-muted">Paste this error back so we can fix it. ' +
+                'Also open browser devtools (F12) → Console for more detail.</p>' +
+                '</div>';
+            root.innerHTML = html;
+        }
+        window.addEventListener('error', function(ev) {
+            __sysdeckShowError('Page error', ev.message || 'Unknown error',
+                (ev.error && ev.error.stack) ? ev.error.stack :
+                (ev.filename ? 'at ' + ev.filename + ':' + ev.lineno + ':' + ev.colno : null));
+        });
+        window.addEventListener('unhandledrejection', function(ev) {
+            var r = ev.reason;
+            __sysdeckShowError('Unhandled promise rejection',
+                (r && r.message) ? r.message : String(r),
+                (r && r.stack) ? r.stack : null);
+        });
+    </script>
+</head>
+<body>
+    <main id="root" class="sysdeck-page">
+        <div class="sysdeck-loading">Loading…</div>
+    </main>
+    <script type="module">
+        if (!window.cockpit) {
+            document.getElementById('root').innerHTML = '<div class="sysdeck-card">' +
+                '<h3 class="sysdeck-card-title">cockpit.js not loaded</h3>' +
+                '<p class="sysdeck-card-body">This plugin requires <code>../base1/cockpit.js</code> to be loaded first. ' +
+                'The &lt;script src&gt; tag in this page\'s &lt;head&gt; either failed to fetch the file, or the file is not at the expected path. ' +
+                'Check that <code>/usr/share/cockpit/base1/cockpit.js</code> exists (installed by the <code>cockpit-bridge</code> package).</p>' +
+                '<p class="sysdeck-muted">Run: ls -l /usr/share/cockpit/base1/cockpit.js</p>' +
+                '</div>';
+            throw new Error('window.cockpit is undefined — ../base1/cockpit.js failed to load');
+        }
+
+        try {
+            const { mount } = await import("./photos.js");
+            const { bridge, EventBus } = await import("../sysdeck-common/bridge.js");
+            const root = document.getElementById('root');
+            await mount(root, { bridge, EventBus });
+        } catch (err) {
+            __sysdeckShowError('Module load failed', err.message || String(err),
+                err.stack || null);
+        }
+    </script>
+</body>
+</html>
