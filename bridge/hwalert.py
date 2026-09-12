@@ -507,28 +507,61 @@ def cmd_dismiss(alert_id):
     return {"action": "dismiss", "alertId": alert_id, "status": "dismissed"}
 
 
+def _device_path_ok(device_id):
+    """v0.1.4 SECURITY: device ids from the scanners are absolute sysfs
+    paths (/sys/bus/usb/devices/..., /sys/bus/thunderbolt/devices/...,
+    /sys/bus/pci/devices/...). block/unblock write to <id>/authorized as
+    root, so the id must resolve inside one of those scanned bases —
+    otherwise cmd_block was an arbitrary file-overwrite ('0') and
+    cmd_unblock was a root shell injection via `sudo sh -c` with the
+    f-string path (found by the 0.3.0 security audit; both sudo
+    fallbacks are also gone: the cockpit superuser channel already
+    escalates this helper via polkit, so shelling out through sudo
+    only ever added the injection primitive)."""
+    if not isinstance(device_id, str) or not device_id.startswith("/"):
+        return False
+    bases = (
+        "/sys/bus/usb/devices",
+        "/sys/bus/thunderbolt/devices",
+        "/sys/bus/pci/devices",
+    )
+    p = os.path.realpath(device_id)
+    return any(p == b or p.startswith(b + "/") for b in bases)
+
+
 def cmd_block(device_id):
     """Block a device — for USB, writes '0' to authorized sysfs."""
-    # Try USB authorization
+    if not _device_path_ok(device_id):
+        return {"action": "block", "deviceId": device_id, "result": "invalid-device-path"}
     auth_path = os.path.join(device_id, "authorized")
     if os.path.exists(auth_path):
         try:
             with open(auth_path, 'w') as f:
                 f.write('0')
             return {"action": "block", "deviceId": device_id, "result": "blocked", "method": "usb-authorize"}
-        except PermissionError:
-            # Need sudo
-            run(["sudo", "tee", auth_path], timeout=5)
-            return {"action": "block", "deviceId": device_id, "result": "blocked", "method": "usb-authorize-sudo"}
+        except (PermissionError, OSError) as exc:
+            return {"action": "block", "deviceId": device_id, "result": "error",
+                    "error": str(exc)}
     return {"action": "block", "deviceId": device_id, "result": "no-method-available"}
 
 
 def cmd_unblock(device_id):
     """Unblock a device."""
+    if not _device_path_ok(device_id):
+        return {"action": "unblock", "deviceId": device_id, "result": "invalid-device-path"}
     auth_path = os.path.join(device_id, "authorized")
     if os.path.exists(auth_path):
-        run(["sudo", "sh", "-c", f"echo 1 > {auth_path}"], timeout=5)
-        return {"action": "unblock", "deviceId": device_id, "result": "unblocked"}
+        # v0.1.4 SECURITY: was `sudo sh -c f"echo 1 > {auth_path}"` — a
+        # device_id containing shell metacharacters was literal root RCE.
+        # Direct write (this helper already runs privileged through the
+        # cockpit superuser channel when the operator approves polkit).
+        try:
+            with open(auth_path, 'w') as f:
+                f.write('1')
+            return {"action": "unblock", "deviceId": device_id, "result": "unblocked"}
+        except (PermissionError, OSError) as exc:
+            return {"action": "unblock", "deviceId": device_id, "result": "error",
+                    "error": str(exc)}
     return {"action": "unblock", "deviceId": device_id, "result": "no-method-available"}
 
 

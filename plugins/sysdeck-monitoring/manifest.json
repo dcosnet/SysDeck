@@ -31,5 +31,5 @@
             ]
         }
     },
-    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' frame-src 'self' http://127.0.0.1:9095 http://127.0.0.1:3000;"
+    "content-security-policy": "default-src 'self' 'unsafe-inline' frame-src 'self' http://127.0.0.1:9095 http://127.0.0.1:3000;"
 }

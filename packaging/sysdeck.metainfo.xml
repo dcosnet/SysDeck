@@ -119,6 +119,43 @@
   </keywords>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.1" date="2026-09-12">
+      <description>
+        <p>v0.4.1: every cockpit module installed on the host is
+        detected and loaded into the web console — distro modules
+        (cockpit-machines, cockpit-podman, networking, storage) and
+        addons alike, scanned from /usr/share/cockpit manifests. A
+        Cockpit sidebar group with per-module detail views, live
+        backend probes, and jumps to the native panels covering each
+        domain. UI codenames retired; the console subtitle is
+        dcos.net.</p>
+      </description>
+    </release>
+    <release version="0.4.0" date="2026-09-12">
+      <description>
+        <p>v0.4.0 UNIX LOGIN EDITION: the web edition signs in with a
+        Unix account, verified by the host's PAM stack — the same
+        mechanism Cockpit uses. Session cookies are bound to the
+        username (v2 tokens; 0.3.1 v1 tokens still verify). The shell
+        carries a cockpit-style account menu (avatar, user@host,
+        provenance, administrative-access badge, session countdown)
+        and the status bar shows user@host. Three auth modes: pam
+        (default), pam+local and local, with scrypt console accounts
+        managed by scripts/manage-users.mjs. The cockpit edition is
+        untouched — all modules keep working.</p>
+      </description>
+    </release>
+    <release version="0.3.0" date="2026-09-11">
+      <description>
+        <p>v0.3.0 AI GATEWAY EDITION: klanker-gate — the Frosty Deno
+        LLM gateway (independent version 0.9.0) — is vendored at
+        /klanker-gate with complete Arch Linux packaging. A new AI
+        Gateway module ships in both editions: the cockpit edition gets
+        bridge/klanker.py plus a full panel, the web edition a hybrid
+        live/demo panel. The Arch port needed zero upstream source
+        changes.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-08-20">
       <description>
         <p>v0.2.0 MASTER EDITION: one tarball bundling the cockpit

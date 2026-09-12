@@ -1,0 +1,18 @@
+# Grafana dashboard provider: loads JSON dashboards from a directory at boot.
+# Mounted at /etc/grafana/provisioning/dashboards by the `observability` profile.
+# The gateway dashboard JSON is mounted into /etc/grafana/dashboards.
+apiVersion: 1
+
+providers:
+  - name: frosty
+    orgId: 1
+    folder: Frosty
+    folderUid: frosty
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

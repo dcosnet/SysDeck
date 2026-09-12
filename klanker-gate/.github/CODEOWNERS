@@ -1,0 +1,75 @@
+# CODEOWNERS - review ownership for Frosty Deno (klanker-gate)
+#
+# Each line maps a path pattern to one or more owners. The LAST matching pattern
+# for a changed file wins. Owners are auto-requested for review on pull requests
+# that touch their paths (requires the repository to be on GitHub and the owners
+# to have write access).
+#
+# NOTE: the handles below are PLACEHOLDERS. Replace @frosty-maintainers and the
+# team handles with the real GitHub users or teams for this repository before
+# relying on auto-review. Do not leave placeholder handles in a live repo - an
+# unresolvable owner silently disables review requests for that path.
+
+# ---------------------------------------------------------------------------
+# Default owner for everything not matched more specifically below.
+# ---------------------------------------------------------------------------
+*                               @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Gateway composition root and HTTP surface (middleware onion, routing, context).
+# ---------------------------------------------------------------------------
+/apps/gateway/                  @frosty-maintainers
+/apps/gateway/main.ts           @frosty-maintainers
+/apps/gateway/context.ts        @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Control-plane SPA (design system ds-r2, same-origin, no external origins).
+# ---------------------------------------------------------------------------
+/apps/control-ui/               @frosty-maintainers
+/apps/control-ui/src/styles/    @frosty-maintainers
+/apps/control-ui/CONVENTIONS.md @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Core pipeline: canonical translation, streaming, router, orchestrator.
+# ---------------------------------------------------------------------------
+/packages/core/                 @frosty-maintainers
+
+# Provider adapters (one family per vendor; wire translation).
+/packages/providers/            @frosty-maintainers
+
+# Governance: virtual keys, hierarchy, budgets, pricing, rate limiting.
+/packages/governance/           @frosty-maintainers
+
+# Cache, MCP + Code Mode, telemetry, config/secrets, plugins, contracts.
+/packages/cache/                @frosty-maintainers
+/packages/mcp/                  @frosty-maintainers
+/packages/telemetry/            @frosty-maintainers
+/packages/config/               @frosty-maintainers
+/packages/plugins/              @frosty-maintainers
+/packages/contracts/            @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Security-sensitive surfaces: crypto-at-rest, origin guard, admin auth,
+# permission contract. Changes here warrant extra scrutiny.
+# ---------------------------------------------------------------------------
+/packages/config/src/crypto.ts        @frosty-maintainers
+/apps/gateway/routes/origin-guard.ts  @frosty-maintainers
+/apps/gateway/routes/admin.ts         @frosty-maintainers
+/permissions.md                       @frosty-maintainers
+/SECURITY.md                          @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Infrastructure, deployment and observability.
+# ---------------------------------------------------------------------------
+/Dockerfile                     @frosty-maintainers
+/docker-compose.yml             @frosty-maintainers
+/deploy/                        @frosty-maintainers
+/.github/                       @frosty-maintainers
+
+# ---------------------------------------------------------------------------
+# Documentation and decision records.
+# ---------------------------------------------------------------------------
+/docs/                          @frosty-maintainers
+/docs/contracts/decision-log.md @frosty-maintainers
+/CLAUDE.md                      @frosty-maintainers
+/AGENTS.md                      @frosty-maintainers

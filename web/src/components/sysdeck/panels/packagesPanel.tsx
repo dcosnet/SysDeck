@@ -78,7 +78,7 @@ function usePkgAction() {
       // the bridge never reaches here unprivileged, but stay correct
       toast.success(`${command} ${name} completed`)
     } else {
-      toast.error(`polkit denial — ${command} ${name} (expected in the web edition sandbox)`, {
+      toast.error(`polkit denial — ${command} ${name} (expected in the unprivileged console sandbox)`, {
         description: res.error ?? 'org.sysdeck.packages.manage — not authorized',
         duration: 8000,
       })
@@ -202,7 +202,7 @@ function InstalledTab() {
                   className="h-6 gap-1.5 px-2 font-mono text-[11px] text-muted-foreground hover:text-red-400"
                   onClick={() => void pkgAction('remove', r.name)}
                   aria-label={`Remove ${r.name}`}
-                  title="remove — will be denied by polkit (unprivileged web edition)"
+                  title="remove — will be denied by polkit (unprivileged console)"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden />
                   remove
@@ -253,7 +253,7 @@ function UpdatesTab() {
                 className="h-6 gap-1.5 px-2 font-mono text-[11px] text-muted-foreground hover:text-primary"
                 onClick={() => void pkgAction('install', r.name)}
                 aria-label={`Upgrade ${r.name}`}
-                title="apt upgrade — will be denied by polkit (unprivileged web edition)"
+                title="apt upgrade — will be denied by polkit (unprivileged console)"
               >
                 <ArrowUpCircle className="h-3 w-3" aria-hidden />
                 upgrade

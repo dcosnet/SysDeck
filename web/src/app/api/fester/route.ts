@@ -10,6 +10,7 @@
 // The browser WebSocket goes DIRECT (never through this route):
 //   new WebSocket(`${ws|wss}://${location.host}/?XTransformPort=3010`)
 import { NextResponse } from 'next/server'
+import { mintServerCookie, requireSession } from '@/lib/sysdeck/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,12 +28,15 @@ function safePath(p: unknown): string | null {
   return p
 }
 
-/** Shared upstream fetch — returns the upstream JSON body + status verbatim. */
+/** Shared upstream fetch — returns the upstream JSON body + status verbatim.
+ *  Carries a minted short-lived session cookie: the route's own gate has
+ *  already verified the caller, and fester independently verifies the
+ *  same HMAC token on its side of the loopback hop. */
 async function proxyFetch(path: string, method: 'GET' | 'POST', body?: unknown): Promise<NextResponse> {
   try {
     const res = await fetch(`${UPSTREAM}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: await mintServerCookie() },
       body: method === 'POST' && body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',
@@ -54,6 +58,9 @@ async function proxyFetch(path: string, method: 'GET' | 'POST', body?: unknown):
 }
 
 export async function POST(req: Request) {
+  const denied = await requireSession(req)
+  if (denied) return denied
+
   let payload: { path?: unknown; method?: unknown; body?: unknown }
   try {
     payload = (await req.json()) as typeof payload
@@ -74,6 +81,9 @@ export async function POST(req: Request) {
   return proxyFetch(path, method as 'GET' | 'POST', payload.body)
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await requireSession(req)
+  if (denied) return denied
+
   return proxyFetch('/api/health', 'GET')
 }

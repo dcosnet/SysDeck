@@ -484,11 +484,16 @@ export const bridge = {
         //   identities  → SSH keys + Kerberos principals
         //   ssh-keys    → SSH keys only
         //   kerberos    → Kerberos principals only
+        //   readers     → smartcard-class USB devices (lsusb)
+        //   certs       → PKCS#11 cert objects (v0.1.4 — replaces the
+        //                 panel's bridge.spawn() calls that never worked)
         // (auth.py has no 'smartcards' subcommand — use 'slots')
         smartcards: () => bridgeCmd("auth", ["slots"]),
         identities: () => bridgeCmd("auth", ["identities"]),
         sshKeys:    () => bridgeCmd("auth", ["ssh-keys"]),
         kerberos:   () => bridgeCmd("auth", ["kerberos"]),
+        readers:    () => bridgeCmd("auth", ["readers"]),
+        certs:      () => bridgeCmd("auth", ["certs"]),
     },
 
     // v0.0.38: Kata panel rewritten as vanilla JS backed by bridge/kata.py.
@@ -556,6 +561,30 @@ export const bridge = {
         startBuild: (project, targets, opts) => bridgeCmd("fester", ["start-build", "--project", String(project), "--targets", (targets || []).join(","), ...((opts && opts.noCache) ? ["--no-cache"] : []), ...((opts && opts.retries != null) ? ["--retries", String(opts.retries)] : [])]),
         cancel:   (id) => bridgeCmd("fester", ["cancel", String(id)]),
         replay:   (buildId, label) => bridgeCmd("fester", ["replay", String(buildId), ...((label != null) ? ["--label", String(label)] : [])]),
+    },
+
+    klanker: {
+        // v0.3.0 NEW MODULE — the vendored klanker-gate service
+        // (master-build/klanker-gate): the Frosty Deno LLM gateway,
+        // REST on :8080. UPSTREAM: klanker-gate by TykoDev
+        // (https://github.com/TykoDev/klanker-gate, Apache-2.0) —
+        // not SysDeck code; see klanker-gate/ATTRIBUTION.md.
+        // Read-only polls hit the operator API
+        // (KLANKER_URL / KLANKER_ADMIN_TOKEN env, see bridge/klanker.py
+        // — the token travels as a bearer header only, never echoed);
+        // service/journal wrap systemctl + journalctl for the
+        // klanker-gate.service unit (superuser via the bridgeCmd
+        // default, so polkit prompts the operator).
+        status:    () => bridgeCmd("klanker", ["status"]),
+        providers: () => bridgeCmd("klanker", ["providers"]),
+        models:    () => bridgeCmd("klanker", ["models"]),
+        vkeys:     () => bridgeCmd("klanker", ["vkeys"]),
+        logs:      (limit) => bridgeCmd("klanker", ["logs", "--limit", String(limit ?? 25)]),
+        analytics: () => bridgeCmd("klanker", ["analytics"]),
+        runtime:   () => bridgeCmd("klanker", ["runtime"]),
+        service:   (action) => bridgeCmd("klanker", ["service", String(action)]),
+        journal:   (n) => bridgeCmd("klanker", ["journal", String(n ?? 40)]),
+        localstack: () => bridgeCmd("klanker", ["localstack"]),
     },
 
     glances: {

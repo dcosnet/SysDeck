@@ -31,6 +31,7 @@ Usage:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -82,6 +83,25 @@ def readers() -> list[dict[str, str]]:
         for line in raw.splitlines()
         if any(needle in line.lower() for needle in ("smart", "card", "reader", "pcsc"))
     ]
+
+
+def certs() -> dict[str, Any]:
+    """PKCS#11 objects of type cert via pkcs11-tool.
+
+    v0.1.4: the auth panel's "List Certificates" button used to call a
+    bridge.spawn() that bridge.js never exported — the button has
+    always thrown. The listing now lives here (fixed argv list, no
+    shell), matching every other spawn in this suite.
+    """
+    if not shutil.which("pkcs11-tool"):
+        return {"available": False,
+                "reason": "pkcs11-tool not installed (opensc)",
+                "count": 0, "output": ""}
+    raw = run(["pkcs11-tool", "--list-objects", "--type", "cert"])
+    lines = [line for line in raw.splitlines() if line.strip()]
+    return {"available": True,
+            "count": sum(1 for line in lines if "Certificate" in line),
+            "output": "\n".join(lines) or "(no certificates on any slot)"}
 
 
 def pcscd_state() -> str:
@@ -238,6 +258,7 @@ COMMANDS = {
     "summary": lambda _args: summary(),
     "slots": lambda _args: slots(),
     "readers": lambda _args: readers(),
+    "certs": lambda _args: certs(),
     "identities": lambda _args: identities(),
     "ssh-keys": lambda _args: ssh_keys(),
     "kerberos": lambda _args: kerberos(),

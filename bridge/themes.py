@@ -292,10 +292,23 @@ def cmd_set(args: list[str]) -> dict[str, Any]:
     """Set one key in cockpit.conf.
 
     Usage: set <section> <key> <value>. Creates the section if absent.
+
+    v0.1.4 SECURITY: section/key/value arrive as raw argv and are
+    serialized into /etc/cockpit/cockpit.conf with naive `f"{k} = {v}"
+    lines. A value containing a newline could inject whole new
+    sections/keys into cockpit.conf ([WebService]/[Session] knobs) the
+    next time cockpit parses it (found by the 0.3.0 security audit).
+    Newlines, NULs, brackets in section names and '=' in keys are now
+    rejected; write-config remains the operator's explicit raw editor.
     """
     if len(args) < 3:
         return {"error": "usage: set <section> <key> <value>"}
     section, key, value = args[0], args[1], args[2]
+    if re.search(r"[\r\n\0]", section + key + value) or re.search(r"[\[\]]", section):
+        return {"error": "refusing to set: section/key/value must be single-line "
+                         "(no newlines, no NULs; no brackets in section names)"}
+    if "=" in key:
+        return {"error": "refusing to set: key must not contain '='"}
     text = _read_text()
     sections = _parse_conf(text)
     sections.setdefault(section, {})[key] = value

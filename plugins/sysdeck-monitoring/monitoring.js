@@ -150,7 +150,7 @@ function renderPrometheusTab(summary) {
         <div class="suite-card">
             <div class="suite-card-header">
                 <h3 class="suite-card-title">Prometheus Web UI</h3>
-                <a class="suite-btn suite-btn-ghost" href="http://127.0.0.1:9095" target="_blank">↗ Open in new tab</a>
+                <a class="suite-btn suite-btn-ghost" href="http://127.0.0.1:9095" target="_blank" rel="noopener noreferrer">↗ Open in new tab</a>
             </div>
             <div class="suite-card-body">
                 <iframe class="monitoring-iframe" src="http://127.0.0.1:9095" title="Prometheus Web UI"></iframe>
@@ -204,7 +204,7 @@ function renderGrafanaTab(summary) {
         <div class="suite-card">
             <div class="suite-card-header">
                 <h3 class="suite-card-title">Grafana Web UI</h3>
-                <a class="suite-btn suite-btn-ghost" href="http://127.0.0.1:3000" target="_blank">↗ Open in new tab</a>
+                <a class="suite-btn suite-btn-ghost" href="http://127.0.0.1:3000" target="_blank" rel="noopener noreferrer">↗ Open in new tab</a>
             </div>
             <div class="suite-card-body">
                 <iframe class="monitoring-iframe" src="http://127.0.0.1:3000" title="Grafana Web UI"></iframe>

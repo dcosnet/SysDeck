@@ -45,6 +45,7 @@ export type ModuleGroup =
   | 'integrations'
 
 export interface HostTicker {
+  hostname: string
   cpuPct: number
   memPct: number
   memUsedMb: number
@@ -55,4 +56,30 @@ export interface HostTicker {
   uptimeS: number
   procs: number
   fester: 'online' | 'offline'
+}
+
+// ── Cockpit module detection (v0.4.1) ────────────────────────────────
+export interface CockpitBackendProbe {
+  bin: string
+  present: boolean
+}
+
+export interface CockpitModuleInfo {
+  name: string
+  label: string
+  description: string
+  order: number
+  path: string
+  fileCount: number
+  apiVersion: string | null
+  pkg: string | null
+  source: 'live' | 'demo'
+  backend: CockpitBackendProbe | null
+  nativeModule: string | null
+}
+
+export interface CockpitModuleList {
+  cockpitDetected: boolean
+  scanned: string[]
+  modules: CockpitModuleInfo[]
 }

@@ -258,7 +258,12 @@ export async function handleApi(ctx: ApiCtx): Promise<Response> {
 
     return Response.json({ ok: false, error: `no route: ${method} ${path}` }, { status: 404 })
   } catch (err) {
-    return Response.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 })
+    // v0.3.0 security (audit follow-up): full detail to the service
+    // journal, generic message to the caller (error messages can carry
+    // absolute paths / internals).
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    console.error(`[fester] ${method} ${path} failed: ${detail}`)
+    return Response.json({ ok: false, error: 'request failed (see fester service log)' }, { status: 500 })
   }
 }
 

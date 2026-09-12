@@ -21,8 +21,24 @@
  * in a <pre> log panel — exactly like cockpit's own Packages and
  * Software Updates panels. No `sudo` shell-out from JS.
  *
- * Shows installed count, pending updates, and a searchable package list.
+ * v0.1.4 SECURITY: every dynamic string interpolated into innerHTML
+ * (package names, versions, descriptions, search terms echoed back,
+ * error messages) now goes through escapeHtml(). Package metadata is
+ * live data from pacman/dnf/apt output — a typo-squat repo or a
+ * locally-installed package whose name/description contains markup
+ * used to execute in the cockpit admin session (0.3.0 audit).
+ * Raw tool output already flows through textContent (showOutput),
+ * which is safe.
  */
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = renderSkeleton();
@@ -47,13 +63,13 @@ export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = `
         <header>
             <h2 class="suite-panel-title">Package Manager</h2>
-            <p class="suite-panel-subtitle">${mgr} — ${instCount} installed · ${updCount} updates available</p>
+            <p class="suite-panel-subtitle">${escapeHtml(mgr)} — ${instCount} installed · ${updCount} updates available</p>
         </header>
         <div class="suite-row">
             <div class="suite-card suite-col-2">
                 <h3 class="suite-card-title">Installed</h3>
                 <div class="suite-stat-value">${instCount}</div>
-                <div class="suite-stat-label">packages via ${mgr}</div>
+                <div class="suite-stat-label">packages via ${escapeHtml(mgr)}</div>
             </div>
             <div class="suite-card suite-col-2">
                 <h3 class="suite-card-title">Updates</h3>
@@ -73,9 +89,9 @@ export async function mount(panel, { bridge, EventBus }) {
                 <thead><tr><th>Package</th><th>Current</th><th>New</th></tr></thead>
                 <tbody>
                     ${updates.map((u) => `<tr>
-                        <td class="suite-table-mono">${u.name || u.package || '—'}</td>
-                        <td>${u.current || '—'}</td>
-                        <td>${u.new || '—'}</td>
+                        <td class="suite-table-mono">${escapeHtml(u.name || u.package || '—')}</td>
+                        <td>${escapeHtml(u.current || '—')}</td>
+                        <td>${escapeHtml(u.new || '—')}</td>
                     </tr>`).join('') || '<tr><td colspan="3" class="suite-muted">No pending updates.</td></tr>'}
                 </tbody>
             </table>
@@ -99,8 +115,8 @@ export async function mount(panel, { bridge, EventBus }) {
                 <thead><tr><th>Package</th><th>Version</th></tr></thead>
                 <tbody>
                     ${installed.slice(0, 25).map((p) => `<tr>
-                        <td class="suite-table-mono">${p.name}</td>
-                        <td>${p.version}</td>
+                        <td class="suite-table-mono">${escapeHtml(p.name)}</td>
+                        <td>${escapeHtml(p.version)}</td>
                     </tr>`).join('') || '<tr><td colspan="2" class="suite-muted">No packages found.</td></tr>'}
                 </tbody>
             </table>
@@ -180,7 +196,7 @@ export async function mount(panel, { bridge, EventBus }) {
             const results = await bridge.packages.search(term);
             if (resultsDiv) {
                 resultsDiv.innerHTML = results.length
-                    ? `<table class="suite-table"><thead><tr><th>Package</th><th>Version</th></tr></thead><tbody>${results.slice(0, 20).map((r) => `<tr><td class="suite-table-mono">${r.name}</td><td>${r.version || r.description || '—'}</td></tr>`).join('')}</tbody></table>`
+                    ? `<table class="suite-table"><thead><tr><th>Package</th><th>Version</th></tr></thead><tbody>${results.slice(0, 20).map((r) => `<tr><td class="suite-table-mono">${escapeHtml(r.name)}</td><td>${escapeHtml(r.version || r.description || '—')}</td></tr>`).join('')}</tbody></table>`
                     : 'No packages found.';
             }
         } catch (err) {
@@ -204,6 +220,6 @@ function renderSkeleton() {
 function renderError(err) {
     return `<div class="suite-card">
         <h3 class="suite-card-title">Package manager unavailable</h3>
-        <p class="suite-card-body suite-muted">${err.message || err}. Ensure pacman, dnf, or apt is installed.</p>
+        <p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}. Ensure pacman, dnf, or apt is installed.</p>
     </div>`;
 }

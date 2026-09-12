@@ -1914,8 +1914,8 @@ class TestFirewallV047ManifestsAndMetainfo(unittest.TestCase):
         )
 
     def test_version_sync_all_surfaces_report_020(self):
-        # Every release surface must report v0.2.0 (Master Edition).
-        v = "0.2.0"
+        # Every release surface must report v0.4.1 (cockpit module detection release).
+        v = "0.4.1"
         files_to_check = [
             "Makefile",
             "bridge/__init__.py",

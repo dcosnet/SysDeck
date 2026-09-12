@@ -114,7 +114,7 @@ function renderServiceCard(summary, available, running, webUrl) {
                         <tr><th>Uptime</th><td class="suite-muted">${running ? escapeHtml(uptime) : '—'}</td></tr>
                         <tr><th>Version</th><td class="suite-muted">${escapeHtml(summary?.version || '—')}</td></tr>
                         <tr><th>Port</th><td class="suite-table-mono">${summary?.port || 8096}</td></tr>
-                        <tr><th>URL</th><td class="suite-table-mono"><a href="${escapeHtml(webUrl)}" target="_blank" style="color:var(--sysdeck-accent)">${escapeHtml(webUrl)}</a></td></tr>
+                        <tr><th>URL</th><td class="suite-table-mono"><a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--sysdeck-accent)">${escapeHtml(webUrl)}</a></td></tr>
                     </tbody>
                 </table>
                 <p class="suite-muted" style="font-size:0.85rem;margin-top:0.5rem">
@@ -131,7 +131,7 @@ function renderWebIframe(webUrl) {
         <div class="suite-card">
             <div class="suite-card-header">
                 <h3 class="suite-card-title">Admin Panel — ${escapeHtml(webUrl)}</h3>
-                <a href="${escapeHtml(webUrl)}" target="_blank" class="suite-btn suite-btn-ghost">↗ Open in new tab</a>
+                <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="suite-btn suite-btn-ghost">↗ Open in new tab</a>
             </div>
             <iframe src="${escapeHtml(webUrl)}"
                     style="width:100%;height:800px;border:1px solid var(--sysdeck-border);border-radius:6px;background:#1e1e1e;"

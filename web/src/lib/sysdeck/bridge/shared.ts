@@ -63,12 +63,19 @@ export async function readLines(path: string): Promise<string[]> {
   return t ? t.split('\n').filter((l) => l.length > 0) : []
 }
 
-/** Fetch JSON from the fester service (server-side). */
+/** Fetch JSON from the fester service (server-side). Carries a
+ *  short-lived minted session cookie — fester verifies the same HMAC
+ *  token the web console issues, so even the loopback hop is gated. */
 export async function festerFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
+    const { mintServerCookie } = await import('../session')
     const res = await fetch(`http://127.0.0.1:3010${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: await mintServerCookie(),
+        ...(init?.headers ?? {}),
+      },
       signal: AbortSignal.timeout(4000),
     })
     if (!res.ok) return null

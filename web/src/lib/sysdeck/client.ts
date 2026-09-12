@@ -7,6 +7,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import type { BridgeResponse } from './types'
 
+// session expiry mid-flight (v0.3.1): the page-level gate is the source
+// of truth — on a 401 from the bridge, reload the route so the login
+// screen can take over. Latched to at most one reload per 10s so a
+// degraded server can never loop the browser.
+let last401Reload = 0
+function reloadOnSessionExpiry(): void {
+  const now = Date.now()
+  if (now - last401Reload < 10_000) return
+  last401Reload = now
+  window.location.reload()
+}
+
 export async function bridgeCall<T = unknown>(
   module: string,
   command: string,
@@ -18,6 +30,10 @@ export async function bridgeCall<T = unknown>(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ module, command, args: args ?? {} }),
     })
+    if (res.status === 401) {
+      reloadOnSessionExpiry()
+      return { ok: false, error: 'session expired — signing back in', module, command }
+    }
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status}`, module, command }
     }

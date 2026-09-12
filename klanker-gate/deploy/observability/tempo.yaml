@@ -1,0 +1,76 @@
+# Grafana Tempo, distributed mode on S3 object storage (MinIO).
+# Mounted read-only by the root docker-compose.yml.
+# Development defaults: no auth, no TLS, replication factor 1.
+#
+# One config, five containers - each sets its own `-target=`, so the components
+# scale independently and find each other over memberlist. Blocks live in the
+# object store, so no container owns the trace data; only the ingester WAL is
+# node-local, and it drains to S3 on flush.
+#
+#   collector -> tempo-distributor:4317 -> ingester -> S3
+#   Grafana   -> tempo-query-frontend:3200 -> querier -> S3
+
+server:
+  http_listen_port: 3200
+  # Inter-component gRPC. Must differ from the OTLP ports below, or startup
+  # fails with a duplicate-listener error.
+  grpc_listen_port: 9095
+
+memberlist:
+  abort_if_cluster_join_fails: false
+  bind_port: 7946
+  join_members:
+    - tempo-distributor:7946
+    - tempo-ingester:7946
+    - tempo-querier:7946
+    - tempo-query-frontend:7946
+    - tempo-compactor:7946
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  lifecycler:
+    ring:
+      replication_factor: 1
+  # Small blocks keep a trace queryable seconds after the request. Production
+  # wants larger ones.
+  max_block_duration: 5m
+  complete_block_timeout: 1m
+
+querier:
+  frontend_worker:
+    frontend_address: tempo-query-frontend:9095
+
+compactor:
+  compaction:
+    block_retention: ${TEMPO_BLOCK_RETENTION}
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      endpoint: minio:9000
+      bucket: ${TEMPO_S3_BUCKET}
+      access_key: ${TEMPO_S3_ACCESS_KEY}
+      secret_key: ${TEMPO_S3_SECRET_KEY}
+      # MinIO serves path-style addressing; virtual-host style needs per-bucket DNS.
+      insecure: true
+      forcepathstyle: true
+    wal:
+      path: /var/tempo/wal
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+# The collector owns metrics; generating span metrics here too would double-count.
+overrides:
+  defaults:
+    metrics_generator:
+      processors: []

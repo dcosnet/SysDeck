@@ -11,7 +11,22 @@
  * licensed; the suite (MIT) and sysbench remain independent programs.
  *
  * Shows available tests, run controls, and results history.
+ *
+ * v0.1.4 SECURITY: raw sysbench output (result.raw — stdout+stderr,
+ * includes echoed test names) and spawn error messages are untrusted
+ * tool output; both previously landed in innerHTML unescaped (0.3.0
+ * audit). Now escaped; the numeric fields are formatted to strings
+ * before escaping too.
  */
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = renderSkeleton();
@@ -39,9 +54,9 @@ export async function mount(panel, { bridge, EventBus }) {
                 <thead><tr><th>Test</th><th>Tool</th><th>Actions</th></tr></thead>
                 <tbody>
                     ${tests.map((t) => `<tr>
-                        <td class="suite-table-mono">${t.name}</td>
-                        <td>${t.tool}</td>
-                        <td><button class="suite-btn suite-btn-primary" data-test="${t.name}">Run</button></td>
+                        <td class="suite-table-mono">${escapeHtml(t.name)}</td>
+                        <td>${escapeHtml(t.tool)}</td>
+                        <td><button class="suite-btn suite-btn-primary" data-test="${escapeHtml(t.name)}">Run</button></td>
                     </tr>`).join('') || '<tr><td colspan="3" class="suite-muted">No benchmarks available. Install sysbench.</td></tr>'}
                 </tbody>
             </table>
@@ -62,18 +77,18 @@ export async function mount(panel, { bridge, EventBus }) {
     const resultsDiv = panel.querySelector('#benchmark-results');
 
     const runBench = async (name, resultFn) => {
-        resultsDiv.innerHTML = `<em>Running ${name} benchmark...</em>`;
+        resultsDiv.innerHTML = `<em>Running ${escapeHtml(name)} benchmark...</em>`;
         try {
             const result = await resultFn();
             EventBus.emit('benchmark.run', { test: name, result });
             resultsDiv.innerHTML = `
-                <h4>${name} Results</h4>
-                <p>Events/sec: <strong>${result.events_per_sec ?? 'N/A'}</strong></p>
-                <p>Avg latency: <strong>${result.latency_ms != null ? result.latency_ms.toFixed(2) + ' ms' : 'N/A'}</strong></p>
-                <details><summary>Raw output</summary><pre>${result.raw || 'N/A'}</pre></details>
+                <h4>${escapeHtml(name)} Results</h4>
+                <p>Events/sec: <strong>${escapeHtml(result.events_per_sec ?? 'N/A')}</strong></p>
+                <p>Avg latency: <strong>${result.latency_ms != null ? escapeHtml(result.latency_ms.toFixed(2)) + ' ms' : 'N/A'}</strong></p>
+                <details><summary>Raw output</summary><pre>${escapeHtml(result.raw || 'N/A')}</pre></details>
             `;
         } catch (err) {
-            resultsDiv.innerHTML = `<span class="suite-badge warn">Error: ${err.message || err}</span>`;
+            resultsDiv.innerHTML = `<span class="suite-badge warn">Error: ${escapeHtml(err.message || err)}</span>`;
         }
     };
 
@@ -88,9 +103,9 @@ export async function mount(panel, { bridge, EventBus }) {
             try {
                 const result = await bridge.benchmark.runTest(test);
                 EventBus.emit('benchmark.run', { test });
-                resultsDiv.innerHTML = `<h4>${test} completed</h4><pre>${result}</pre>`;
+                resultsDiv.innerHTML = `<h4>${escapeHtml(test)} completed</h4><pre>${escapeHtml(result)}</pre>`;
             } catch (err) {
-                resultsDiv.innerHTML = `<span class="suite-badge warn">${err.message || err}</span>`;
+                resultsDiv.innerHTML = `<span class="suite-badge warn">${escapeHtml(err.message || err)}</span>`;
             }
             btn.disabled = false;
         });
@@ -112,7 +127,7 @@ function renderSkeleton() {
 function renderError(err) {
     return `<div class="suite-card">
         <h3 class="suite-card-title">Benchmark tools unavailable</h3>
-        <p class="suite-card-body suite-muted">${err.message || err}. Install sysbench for system benchmarking.</p>
+        <p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}. Install sysbench for system benchmarking.</p>
         <p class="suite-muted">cockpit-benchmark (MIT) by ealier — <a href="https://github.com/ealier/cockpit-benchmark">https://github.com/ealier/cockpit-benchmark</a></p>
         <p class="suite-muted">sysbench (GPL-2.0) — <a href="https://github.com/akopytov/sysbench">https://github.com/akopytov/sysbench</a></p>
     </div>`;

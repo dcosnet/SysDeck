@@ -1,0 +1,339 @@
+/* ============================================================================
+   Frosty design tokens (canonical) - revision ds-r2
+   ----------------------------------------------------------------------------
+   Product: Frosty Control Plane, the control plane for a Deno-native LLM
+   gateway. Dark is the default theme: applications mount with class="dark" on
+   the root element. Light theme is the :root base per shadcn/ui v4 convention.
+   "Auto" behavior: toggle the .dark class from prefers-color-scheme in app JS.
+
+   ds-r2 SUPERSEDES ds-r1 (glacier-blue). The register is a dense, near-neutral
+   monochrome developer console (shadcn "new-york"/neutral). Neutrals carry a
+   whisper of cool (hue 265, chroma <= 0.006), never pure gray. Primary is the
+   shadcn-neutral inversion: near-white in dark (ink label), near-black in light
+   (paper label). A single restrained cool-blue accent (hue ~252 to 255) is used
+   ONLY for the focus ring, links, and the active-nav indicator, never as a fill.
+   Semantic status colors (success/warning/destructive/info) stay a functional
+   vocabulary. A --chart-1..5 family is added for the analytics dashboard.
+
+   Format: shadcn/ui v4 compatible CSS custom properties in OKLCH, plus an
+   @theme inline mapping block for Tailwind CSS v4. Hex fallbacks are noted in
+   comments; every text/surface pair is contrast-verified in both themes (see
+   docs/design/DESIGN.md, Accessibility section: 0 failures, computed WCAG 2.x).
+
+   Source of truth: docs/design/DESIGN.md. Do not hand-edit component CSS to
+   diverge from these values; change the token here and let it propagate. Token
+   NAMES are stable across ds-r1 and ds-r2 so the app re-themes by swapping
+   values, not names.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------------ */
+/* Light theme (base) + theme-independent tokens                             */
+/* ------------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+
+  /* --- color: surfaces ------------------------------------------------- */
+  --background: oklch(0.99 0.002 265); /* #fbfcfd canvas */
+  --foreground: oklch(0.2 0.006 265); /* #151619 body text */
+  --card: oklch(1 0 0); /* #ffffff raised surface */
+  --card-foreground: oklch(0.2 0.006 265); /* #151619 */
+  --popover: oklch(1 0 0); /* #ffffff dialogs, menus */
+  --popover-foreground: oklch(0.2 0.006 265); /* #151619 */
+
+  /* --- color: primary (shadcn-neutral inversion: near-black fill) ------- */
+  --primary: oklch(0.24 0.006 265); /* #1e1f22 ink */
+  --primary-foreground: oklch(0.985 0.001 265); /* #fafafb paper label */
+
+  /* --- color: supporting surfaces --------------------------------------- */
+  --secondary: oklch(0.965 0.003 265); /* #f2f3f5 */
+  --secondary-foreground: oklch(0.24 0.006 265); /* #1e1f22 */
+  --muted: oklch(0.965 0.003 265); /* #f2f3f5 */
+  --muted-foreground: oklch(0.475 0.008 265); /* #5a5c61 */
+  --accent: oklch(0.965 0.004 265); /* #f2f3f6 hover wash */
+  --accent-foreground: oklch(0.24 0.006 265); /* #1e1f22 */
+
+  /* --- color: semantic status ------------------------------------------- */
+  --destructive: oklch(0.52 0.2 25); /* #c21725 */
+  --destructive-foreground: oklch(0.985 0.005 25); /* #fdf9f8 */
+  --success: oklch(0.48 0.13 155); /* #00723b */
+  --success-foreground: oklch(0.985 0.005 155); /* #f8fbf9 */
+  --warning: oklch(0.52 0.11 70); /* #8f5d14 */
+  --warning-foreground: oklch(0.985 0.005 80); /* #fcfaf6 */
+  --info: oklch(0.5 0.15 255); /* #1762b6 */
+  --info-foreground: oklch(0.985 0.005 250); /* #f8fafd */
+
+  /* --- color: lines and focus ------------------------------------------- */
+  --border: oklch(0.92 0.004 265); /* #e3e4e7 hairline */
+  --input: oklch(0.89 0.004 265); /* #d9dbdd field border */
+  --ring: oklch(0.55 0.15 255); /* #2971c6 accent blue */
+
+  /* --- color: chart family (data marks; AA >= 3:1 non-text on card) ------ */
+  --chart-1: oklch(0.52 0.15 255); /* #1f68bc blue */
+  --chart-2: oklch(0.52 0.14 155); /* #007f43 green */
+  --chart-3: oklch(0.6 0.12 70); /* #ad721c amber */
+  --chart-4: oklch(0.52 0.2 25); /* #c21725 red */
+  --chart-5: oklch(0.5 0.18 300); /* #7541b8 violet */
+
+  /* --- color: sidebar family -------------------------------------------- */
+  --sidebar: oklch(0.975 0.003 265); /* #f6f7f9 */
+  --sidebar-foreground: oklch(0.24 0.006 265); /* #1e1f22 */
+  --sidebar-primary: oklch(0.52 0.15 255); /* #1f68bc accent blue */
+  --sidebar-primary-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --sidebar-accent: oklch(0.955 0.005 265); /* #eef0f4 active item */
+  --sidebar-accent-foreground: oklch(0.24 0.006 265); /* #1e1f22 */
+  --sidebar-border: oklch(0.91 0.004 265); /* #e0e1e4 */
+  --sidebar-ring: oklch(0.55 0.15 255); /* #2971c6 */
+
+  /* --- shadow ramp (near-neutral, never glacier) ------------------------- */
+  --shadow-sm: 0 1px 2px 0 oklch(0.2 0.01 265 / 0.06);
+  --shadow-md: 0 2px 8px -1px oklch(0.2 0.01 265 / 0.1),
+               0 1px 2px 0 oklch(0.2 0.01 265 / 0.06);
+  --shadow-lg: 0 8px 24px -4px oklch(0.2 0.01 265 / 0.16),
+               0 2px 6px 0 oklch(0.2 0.01 265 / 0.08);
+
+  /* --- typography -------------------------------------------------------- */
+  /* JetBrains Mono (OFL-1.1, free) is an optional progressive enhancement:
+     it renders only where locally installed. No font files are shipped. */
+  --font-family-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-family-mono: "JetBrains Mono", ui-monospace, "Cascadia Code",
+    "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* compact scale, px-snapped; 13.5px body for high dashboard density */
+  --font-size-2xs: 0.6875rem;
+  --line-height-2xs: 1rem; /* 11/16 micro */
+  --font-size-xs: 0.75rem;
+  --line-height-xs: 1rem; /* 12/16 caption */
+  --font-size-sm: 0.8125rem;
+  --line-height-sm: 1.125rem; /* 13/18 secondary */
+  --font-size-base: 0.84375rem;
+  --line-height-base: 1.25rem; /* 13.5/20 body */
+  --font-size-lg: 1rem;
+  --line-height-lg: 1.375rem; /* 16/22 emphasis */
+  --font-size-xl: 1.125rem;
+  --line-height-xl: 1.5rem; /* 18/24 section */
+  --font-size-2xl: 1.3125rem;
+  --line-height-2xl: 1.625rem; /* 21/26 page title */
+  --font-size-3xl: 1.6875rem;
+  --line-height-3xl: 2rem; /* 27/32 display, stat */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --tracking-tight: -0.01em; /* titles 2xl and up */
+  --tracking-wide: 0.02em; /* tiny mono labels */
+
+  /* --- spacing (base unit 4px) ------------------------------------------- */
+  --space-1: 0.25rem; /* 4px  */
+  --space-2: 0.5rem; /* 8px  */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
+  --space-16: 4rem; /* 64px */
+
+  /* --- radius (one family, derived from a single 6px base) --------------- */
+  --radius: 0.375rem; /* 6px base */
+  --radius-sm: calc(var(--radius) - 2px); /* 4px badges, small controls */
+  --radius-md: var(--radius); /* 6px buttons, inputs */
+  --radius-lg: calc(var(--radius) + 2px); /* 8px cards, panels */
+  --radius-xl: calc(var(--radius) + 6px); /* 12px dialogs, sheets */
+  --radius-full: 9999px; /* pills, switch */
+
+  /* --- layout and control metrics (denser than ds-r1) -------------------- */
+  --border-w: 1px;
+  --ring-w: 2px;
+  --ring-offset: 2px;
+  --control-h-sm: 1.875rem; /* 30px dense-row controls */
+  --control-h: 2.125rem; /* 34px default control height */
+  --control-h-lg: 2.625rem; /* 42px prominent controls */
+  --tap-target: 2.75rem; /* 44px minimum hit area (extended if visual < 44) */
+  --sidebar-width: 15rem;
+  --sidebar-width-icon: 3rem;
+  /* Outer content cap. Was 78rem (1248px), which left ~1250px of a 2560px
+     monitor unused while tables scrolled horizontally inside it. 110rem
+     (1760px) is wide enough for dense telemetry tables and the two-pane
+     layouts without letting a page become a single ungrouped expanse. */
+  --container-max: 110rem;
+  /* Inner cap for prose and single-column forms. A control row stretched to
+     1760px puts its label a screen away from its input; text past ~75ch stops
+     being scannable. Views opt into this for text-heavy panels while their
+     tables use the full --container-max. */
+  --measure-max: 60rem;
+  /* Page gutter, tightening on small screens so a tablet does not spend a
+     quarter of its width on padding. */
+  --gutter: 1.5rem;
+  --opacity-disabled: 0.5;
+
+  /* --- motion ------------------------------------------------------------- */
+  --motion-fast: 100ms; /* hover, focus, pressed feedback */
+  --motion-default: 150ms; /* menus, popovers, toggles, tabs */
+  --motion-slow: 220ms; /* dialogs, sheets, page-level */
+  --motion-spin: 800ms; /* continuous loading spinner */
+  --motion-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-rise: -2px; /* hover lift distance */
+  --motion-enter: 8px; /* enter-toward travel distance */
+
+  /* --- z-index ------------------------------------------------------------ */
+  --z-sticky: 20;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Dark theme (Frosty default: mount with class="dark")                      */
+/* ------------------------------------------------------------------------ */
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.15 0.004 265); /* #0a0b0d canvas */
+  --foreground: oklch(0.985 0.001 265); /* #fafafb body text */
+  --card: oklch(0.185 0.004 265); /* #121314 raised surface */
+  --card-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --popover: oklch(0.205 0.004 265); /* #161719 dialogs, menus */
+  --popover-foreground: oklch(0.985 0.001 265); /* #fafafb */
+
+  --primary: oklch(0.92 0.004 265); /* #e3e4e7 near-white */
+  --primary-foreground: oklch(0.205 0.006 265); /* #16171a ink label */
+
+  --secondary: oklch(0.255 0.004 265); /* #222325 */
+  --secondary-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --muted: oklch(0.235 0.004 265); /* #1d1e20 */
+  --muted-foreground: oklch(0.712 0.008 265); /* #a0a2a7 */
+  --accent: oklch(0.255 0.006 265); /* #212326 hover wash */
+  --accent-foreground: oklch(0.985 0.001 265); /* #fafafb */
+
+  --destructive: oklch(0.665 0.19 25); /* #f25855 */
+  --destructive-foreground: oklch(0.205 0.04 25); /* #280e0c ink label */
+  --success: oklch(0.72 0.15 155); /* #43c07a */
+  --success-foreground: oklch(0.18 0.04 155); /* #021709 */
+  --warning: oklch(0.8 0.13 82); /* #e7b551 */
+  --warning-foreground: oklch(0.24 0.04 82); /* #291d07 */
+  --info: oklch(0.68 0.13 250); /* #549de5 */
+  --info-foreground: oklch(0.17 0.04 250); /* #021020 */
+
+  --border: oklch(0.27 0.006 265); /* #252629 */
+  --input: oklch(0.3 0.006 265); /* #2c2e31 */
+  --ring: oklch(0.62 0.13 252); /* #4589d2 accent blue */
+
+  --chart-1: oklch(0.66 0.14 252); /* #4b95e5 blue */
+  --chart-2: oklch(0.72 0.15 155); /* #43c07a green */
+  --chart-3: oklch(0.8 0.13 82); /* #e7b551 amber */
+  --chart-4: oklch(0.665 0.19 25); /* #f25855 red */
+  --chart-5: oklch(0.62 0.16 300); /* #966cd7 violet */
+
+  --sidebar: oklch(0.13 0.004 265); /* #070709 */
+  --sidebar-foreground: oklch(0.8 0.006 265); /* #bcbec2 */
+  --sidebar-primary: oklch(0.62 0.13 252); /* #4589d2 accent blue */
+  --sidebar-primary-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --sidebar-accent: oklch(0.235 0.006 265); /* #1d1e21 active item */
+  --sidebar-accent-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --sidebar-border: oklch(0.24 0.006 265); /* #1e1f22 */
+  --sidebar-ring: oklch(0.62 0.13 252); /* #4589d2 */
+
+  --shadow-sm: 0 1px 2px 0 oklch(0.03 0.006 265 / 0.5);
+  --shadow-md: 0 2px 8px -1px oklch(0.03 0.006 265 / 0.6),
+               0 1px 2px 0 oklch(0.03 0.006 265 / 0.5);
+  --shadow-lg: 0 10px 30px -5px oklch(0.03 0.006 265 / 0.7),
+               0 4px 8px -2px oklch(0.03 0.006 265 / 0.5);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Reduced motion: durations collapse, travel distances zero out             */
+/* ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-default: 0ms;
+    --motion-slow: 0ms;
+    --motion-rise: 0px;
+    --motion-enter: 0px;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Tailwind CSS v4 mapping (shadcn/ui v4 convention)                          */
+/* Import this file in the app stylesheet after `@import "tailwindcss";`.     */
+/* ------------------------------------------------------------------------ */
+@theme inline {
+  /* colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* typography */
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+  --text-2xs: var(--font-size-2xs);
+  --text-2xs--line-height: var(--line-height-2xs);
+  --text-xs: var(--font-size-xs);
+  --text-xs--line-height: var(--line-height-xs);
+  --text-sm: var(--font-size-sm);
+  --text-sm--line-height: var(--line-height-sm);
+  --text-base: var(--font-size-base);
+  --text-base--line-height: var(--line-height-base);
+  --text-lg: var(--font-size-lg);
+  --text-lg--line-height: var(--line-height-lg);
+  --text-xl: var(--font-size-xl);
+  --text-xl--line-height: var(--line-height-xl);
+  --text-2xl: var(--font-size-2xl);
+  --text-2xl--line-height: var(--line-height-2xl);
+  --text-3xl: var(--font-size-3xl);
+  --text-3xl--line-height: var(--line-height-3xl);
+
+  /* radius */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  /* shadows */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  /* easing */
+  --ease-out: var(--motion-ease-out);
+  --ease-in-out: var(--motion-ease-in-out);
+}

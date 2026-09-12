@@ -125,6 +125,7 @@ def write_index_html(plugin_name, module_stem, label):
     <meta charset="utf-8" />
     <title>{label}</title>
     <link rel="stylesheet" href="../sysdeck-common/sysdeck.css" />
+    <link rel="stylesheet" href="../sysdeck-common/sysdeck-web.css" />
     <script src="../base1/cockpit.js"></script>
     <script>
         // Visible error reporting — replaces "Loading…" with the actual
@@ -544,6 +545,19 @@ def main():
 
     if PLUGINS_DIR.exists():
         shutil.rmtree(PLUGINS_DIR)
+
+    # v0.3.0: shared/sysdeck-web.css is the hand-maintained web-edition
+    # skin (ports the Next.js console's midnight/teal design onto the
+    # cockpit plugin pages). The generator regenerates bridge.js +
+    # sysdeck.css + manifest.json from templates below, but the skin is
+    # maintained by hand — back it up across the shared/ wipe, exactly
+    # like HAND_MAINTAINED_PLUGINS above.
+    web_skin_backup: bytes | None = None
+    if (SHARED_DIR / "sysdeck-web.css").is_file():
+        web_skin_backup = (SHARED_DIR / "sysdeck-web.css").read_bytes()
+        print(f"BACKUP (hand-maintained): shared/sysdeck-web.css "
+              f"({len(web_skin_backup)} bytes)")
+
     if SHARED_DIR.exists():
         shutil.rmtree(SHARED_DIR)
     PLUGINS_DIR.mkdir(parents=True)
@@ -558,6 +572,17 @@ def main():
     # Pattern verified from cockpit's own pkg/static/manifest.json (just `{}`).
     (SHARED_DIR / "bridge.js").write_text(BRIDGE_JS)
     (SHARED_DIR / "sysdeck.css").write_text(SHARED_CSS)
+    if web_skin_backup is not None:
+        (SHARED_DIR / "sysdeck-web.css").write_bytes(web_skin_backup)
+        print("RESTORE (hand-maintained): shared/sysdeck-web.css")
+    else:
+        (SHARED_DIR / "sysdeck-web.css").write_text(
+            "/* stub — the canonical web-edition skin is hand-maintained.\n"
+            " * Restore it from the released tarball (shared/sysdeck-web.css)\n"
+            " * or the git history before shipping. Plugin index.html pages\n"
+            " * link it unconditionally; a missing file 404s harmlessly and\n"
+            " * pages fall back to base sysdeck.css. */\n"
+        )
     (SHARED_DIR / "manifest.json").write_text(
         '{\n'
         '    "name": "sysdeck-common",\n'

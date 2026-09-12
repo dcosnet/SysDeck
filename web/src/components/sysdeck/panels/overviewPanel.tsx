@@ -13,6 +13,7 @@ import {
   Activity,
   ArrowDownToLine,
   ArrowUpFromLine,
+  BookOpen,
   Cpu,
   Gauge,
   HardDrive,
@@ -189,7 +190,7 @@ export default function OverviewPanel() {
         title="Overview"
         subtitle="host vitals and SysDeck suite health — real /proc collectors, no fabricated numbers"
         source="live"
-        actions={<Badge variant="outline" className="font-mono text-[10px]">web edition</Badge>}
+        actions={<Badge variant="outline" className="font-mono text-[10px]">dcos.net</Badge>}
       />
 
       {/* hero: host identity + fester service */}
@@ -443,8 +444,8 @@ export default function OverviewPanel() {
                   <Waves className="h-4.5 w-4.5 text-primary" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">SysDeck v0.2.0</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">web edition · 28 bridge modules</p>
+                  <p className="text-sm font-semibold">SysDeck v0.4.1</p>
+                  <p className="font-mono text-[10px] text-muted-foreground">dcos.net · 30 bridge modules</p>
                 </div>
               </div>
               <div className="mt-2">
@@ -467,22 +468,27 @@ export default function OverviewPanel() {
             title="Master tarball"
             actions={
               <Badge variant="outline" className="font-mono text-[10px]">
-                v{release.data?.version ?? '0.2.0'}
+                v{release.data?.version ?? '0.4.1'}
               </Badge>
             }
           >
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                cockpit edition + web edition + fester, pre-integrated in one download.
+                cockpit + web + fester + klanker-gate (Arch packaging), pre-integrated in one download.
+              </p>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                klanker-gate is the “Frosty Deno” LLM gateway by TykoDev
+                (github.com/TykoDev/klanker-gate, Apache-2.0) — vendored unmodified, not SysDeck
+                code. See its ATTRIBUTION.md and THIRD_PARTY.md in the tarball.
               </p>
               <Button asChild size="sm" className="w-full gap-2 font-mono text-xs">
                 <a
-                  href={release.data?.url ?? '/download/sysdeck-0.2.0-master.tar.bz2'}
+                  href={release.data?.url ?? '/download/sysdeck-0.4.1-master.tar.bz2'}
                   download
                   aria-label="Download the SysDeck master tarball"
                 >
                   <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden />
-                  sysdeck-0.2.0-master.tar.bz2
+                  sysdeck-0.4.1-master.tar.bz2
                 </a>
               </Button>
               <KV k="size" v={fmtBytes(release.data?.sizeBytes)} />
@@ -500,6 +506,27 @@ export default function OverviewPanel() {
                   tarball not built yet — run scripts/make-master-tarball.sh
                 </p>
               ) : null}
+            </div>
+          </PanelCard>
+
+          <PanelCard title="Run without Cockpit">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                This console runs standalone on the Next.js backend — no Cockpit, no Python bridge, no systemd
+                requirement. The full runbook (dev, production build, systemd units, reverse proxy, troubleshooting)
+                is one panel away.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-2 font-mono text-xs"
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent<string>('sysdeck:goto', { detail: 'runbook' }))
+                }
+              >
+                <BookOpen className="h-3.5 w-3.5" aria-hidden />
+                open the runbook
+              </Button>
             </div>
           </PanelCard>
 

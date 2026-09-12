@@ -1537,7 +1537,11 @@ def cmd_install_backend(args: list[str]) -> dict[str, Any]:
     for p in pkgs:
         if not _validate_filename(p):
             return {"error": f"invalid package name: {p!r}"}
-    cmd = [python3, packages_helper, "install", "--", *pkgs]
+    # v0.1.4 FIX: the trailing '--' separator made packages.py's
+    # install() see '--' as args[0] and fail with "no targets" — the
+    # backend-install path had never worked. packages.py now skips
+    # leading '--' argv elements anyway, so both sides are fixed.
+    cmd = [python3, packages_helper, "install", *pkgs]
     try:
         r = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=300,

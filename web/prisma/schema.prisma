@@ -324,9 +324,68 @@ model ThemeSetting {
   value String
 }
 
+// ── Klanker / Frosty Deno LLM gateway (klanker-gate) ───────────────
+model KlankerProvider {
+  id        String   @id @default(cuid())
+  name      String   @unique // openai | anthropic | gemini | openrouter | groq | ollama-local
+  kind      String   // openai | anthropic | gemini | openrouter | groq | ollama
+  models    Int      @default(0) // enabled model count on the account
+  status    String   @default("ok") // ok | error | unknown | disabled
+  latencyMs Int? // last list-models probe latency
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model KlankerVKey {
+  id             String   @id @default(cuid())
+  label          String   @unique
+  team           String? // governance hierarchy: key -> team -> customer
+  scope          String   @default("unrestricted") // unrestricted | scoped providers/models
+  requests24h    Int      @default(0)
+  tokens24h      Int      @default(0)
+  costMicroUsd   Int      @default(0) // repo-wide cost unit: integer micro-USD
+  rateLimitPerMin Int? // maxRequests of the 60s window, when set
+  budgetUsd      Float? // budget.maxCostUsd, when set
+  state          String   @default("active") // active | disabled
+  createdAt      DateTime @default(now())
+}
+
+model KlankerLogEntry {
+  id          String   @id @default(cuid())
+  ts          DateTime @default(now())
+  model       String
+  provider    String
+  vkey        String? // virtual key label, when the request was keyed
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  costMicroUsd Int     @default(0)
+  latencyMs   Int      @default(0)
+  status      Int      @default(200)
+  cacheHit    Boolean  @default(false)
+  surface     String   @default("openai") // ingress dialect: openai | anthropic | gemini | openrouter
+}
+
 // ── KV store for misc module state ─────────────────────────────────
 model SdKv {
   key   String @id
   value String
   ts    DateTime @default(now())
+}
+
+// ── Local console accounts (v0.4.0 unix-login fallback) ────────────
+// When the host PAM path is unavailable (non-root service on a box
+// where unix_chkpwd only serves the invoking uid, or a python3-less
+// install), SYSDECK_AUTH_MODE=local/pam+local authenticates against
+// these instead: scrypt-hashed passwords, per-account lockout flag.
+// This is the escape hatch, NOT the primary path — PAM (the host's
+// own account system) is, exactly like Cockpit.
+model SdUser {
+  username    String   @unique
+  realname    String?
+  hash        String // scrypt: salt$N$r$p$hex — never the password
+  disabled    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+  lastLoginIp String?
 }

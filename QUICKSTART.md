@@ -140,9 +140,9 @@ sudo systemctl restart cockpit.socket
 
 Open the in-panel error view: every SysDeck plugin's `index.html` installs `window.addEventListener('error')` and `'unhandledrejection'` handlers that replace the "Loading…" placeholder with the actual error message on the page — no devtools required. The same page tells you whether `cockpit.js` itself loaded, whether `bridge.js` imported cleanly, and whether the panel's `mount()` threw.
 
-## 9. The Web Edition (master tarball, v0.2.0)
+## 9. The Web Edition (master tarball)
 
-The master tarball also ships the **SysDeck Web Edition** at `web/` — a standalone browser console (no cockpit required) with 28 bridge modules, real `/proc` / `/sys` collectors, and **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1):
+The master tarball also ships the **SysDeck Web Edition** at `web/` — a standalone browser console (no cockpit required) with 29 bridge modules, real `/proc` / `/sys` collectors, and **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1):
 
 ```bash
 make web-dev        # fester service in the background (:3010) + web console (:3000)
@@ -157,5 +157,271 @@ bun run dev                                    #            web console on :3000
 ```
 
 Open `http://localhost:3000`. The master tarball can be rebuilt any time with `make master`.
+
+## 10. The AI Gateway (master tarball, v0.3.0)
+
+The master tarball also vendors **klanker-gate** — the Frosty Deno LLM gateway (independent version 0.9.0, Apache-2.0, **by TykoDev: https://github.com/TykoDev/klanker-gate — not SysDeck code**, see `klanker-gate/ATTRIBUTION.md`) — at `klanker-gate/`, with the new **AI Gateway** module in both editions. On Arch Linux the whole gateway is one package away:
+
+```bash
+cd klanker-gate/arch
+pacman -S --needed deno base-devel     # deno is in [extra]
+makepkg -si                            # /usr/share/klanker-gate + systemd unit
+sudoedit /etc/klanker-gate/env         # FROSTY_PG_URL + one provider key (+ token)
+sudo systemctl enable --now klanker-gate
+curl http://localhost:8080/healthz
+```
+
+Then point SysDeck at it (cockpit bridge env, or `web/.env` for the web edition, then restart):
+
+```bash
+KLANKER_URL=http://127.0.0.1:8080
+KLANKER_ADMIN_TOKEN=<the FROSTY_ADMIN_TOKEN you set>
+```
+
+Both the cockpit AI Gateway panel and the web edition's AI Gateway panel flip from their offline/demo state to live data automatically. The full runbook — postgres provisioning, multi-worker serving (`FROSTY_WORKERS`, an Arch bonus via `SO_REUSEPORT`), the optional control-UI build — is `klanker-gate/arch/INSTALL-ARCH.md`.
+
+### 10.1 Running an all-local stack (ollama · llama.cpp · koboldcpp)
+
+The gateway is **not SaaS-only** — no API key is required anywhere in this
+setup. Five provider types are local-first upstream: `ollama`, `lmstudio`,
+`sgl` (SGLang) natively, plus the generic `openai-compatible` type that
+llama.cpp (llama-server), KoboldCpp, vLLM and TGI all speak:
+
+| backend | provider type | base URL | auth |
+|---|---|---|---|
+| Ollama | `ollama` | `http://127.0.0.1:11434/v1` | none |
+| llama.cpp (llama-server) | `openai-compatible` | `http://127.0.0.1:8081/v1` | optional |
+| KoboldCpp | `openai-compatible` | `http://127.0.0.1:5001/v1` | optional |
+| LM Studio | `lmstudio` | `http://127.0.0.1:1234/v1` | none |
+| SGLang | `sgl` | `http://127.0.0.1:30000/v1` | none |
+
+Env wiring (in `/etc/klanker-gate/env` or the gateway's `.env`):
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MODELS=qwen3:14b,llama3.1:8b,nomic-embed-text
+LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
+OPENAI_COMPAT_BASE_URL=http://127.0.0.1:8081/v1   # ONE openai-wire server
+```
+
+Env registers one `openai-compatible` account — to run llama.cpp **and**
+koboldcpp (and vLLM) side by side, register each via the admin API, then
+auto-discover its catalog:
+
+```bash
+curl -s http://127.0.0.1:8080/api/providers -H 'Authorization: Bearer $FROSTY_ADMIN_TOKEN' \
+  -H 'content-type: application/json' \
+  -d '{"id":"llama-server","type":"openai-compatible","baseUrl":"http://127.0.0.1:8081/v1","enabled":true}'
+curl -s -X POST http://127.0.0.1:8080/api/providers/llama-server/refresh-models \
+  -H 'Authorization: Bearer $FROSTY_ADMIN_TOKEN'
+```
+
+**Port note:** llama-server defaults to `:8080` — the same port the gateway
+listens on. Run it on another port (`--port 8081`) or move the gateway.
+
+Both editions ship a **Local stack wiring** card (in the AI Gateway panel)
+that live-probes each backend's `/v1/models` from the host and shows these
+recipes with copy buttons — `klanker localstack` at the bridge level.
+
+### 10.2 Turning the AI Gateway off (module toggles)
+
+Not using the gateway (or switched to a different assistant stack)?
+Both editions let you remove it from the console without uninstalling
+anything:
+
+- **web edition** — every sidebar module carries a power toggle (hover
+  a row → ⏻). Clicking it hides the module from the sidebar AND the
+  ⌘K palette; a **Disabled (N)** section appears at the sidebar bottom
+  with one-click re-enable (plus a restore-all ↻). State is persisted
+  in SQLite (`shell.disabled` via the `shell` bridge module) and
+  survives restarts; Overview is protected. If you disable the module
+  you are viewing, the console jumps back to Overview.
+- **cockpit edition** — plugins are discovered by directory: `sudo rm
+  -rf /usr/share/cockpit/sysdeck-klanker` removes the sidebar entry
+  (bridge helper stays at `/usr/lib/sysdeck/bridge/klanker.py` for
+  scripts); restore with `sudo make install`.
+
+### 10.3 The 0.3.0 security audit (both editions + the vendored gateway)
+
+A full-codebase security review shipped with 0.3.0 — the cockpit bridge
+helpers, the 27 plugin panels, the web edition, and the vendored
+klanker-gate tree. What changed:
+
+- **bridge helpers fail closed now.** `cgroup-set` validates both the
+  cgroup path (must resolve under `/sys/fs/cgroup`) and the control-file
+  name (real controller knobs only); `artifacts-clear` /
+  `build-delete` / `build-log` / `artifacts` validate ids as single
+  path components before touching state/artifacts/logs dirs;
+  `profile-create` rejects names that aren't single components (was
+  directory traversal + config injection into root-executed build
+  configs); hwalert's `sudo sh -c` is gone (direct write, device path
+  validated under the scanned sysfs bases); `db start/stop/restart`
+  resolve engines through the registry; `db query` now actually
+  enforces the read-only promise (SELECT/WITH/SHOW/… only);
+  `themes set` rejects newlines (cockpit.conf section injection);
+  `packages install/remove/update` reject option-shaped names.
+- **every plugin escapes its data.** The 8 oldest panels (packages,
+  benchmark, auth, sensors, vault, firmware, mesh, and the auth quick
+  actions) now escape every interpolated string — package metadata,
+  USB reader descriptors, fwupd device fields, sensor labels, spawn
+  errors — before it lands in `innerHTML`. All 27 manifests dropped
+  `unsafe-eval` from their CSP. Every external link carries
+  `rel="noopener noreferrer"`.
+- **the web edition binds loopback.** `bun run dev` → `127.0.0.1:3000`,
+  the fester service → `127.0.0.1:3010`, the production start script
+  pins `HOSTNAME=127.0.0.1`; the bridge endpoint gained a body-size
+  cap, a per-IP rate limit and generic error responses (details go to
+  the server log).
+- **the vendored gateway got audited, not modified.** Findings live in
+  `klanker-gate/arch/SECURITY-UPSTREAM.md` (10 findings, 3 critical:
+  no-token admin mode, 0.0.0.0 default bind, open `/v1/*` until the
+  first virtual key exists). Upstream source stays byte-identical per
+  the attribution contract; the SysDeck `arch/` packaging layer
+  mitigates: the systemd unit refuses to start without
+  `FROSTY_ADMIN_TOKEN`, `INSTALL-ARCH.md` §9 carries the firewall +
+  first-vkey runbook.
+- **fixed along the way (functional):** the Packages panel's
+  firewall-backend install path (`packages.py install --` choke), the
+  auth panel's quick-action buttons (called a bridge.spawn that never
+  existed), and the mesh panel's table (read a data shape the bridge
+  never returned).
+
+### 10.4 The web edition login (Unix accounts, cockpit-style)
+
+SysDeck is a **LAN-side console** — loopback binding stays the outer
+boundary. What 0.4.0 changes is the login itself: instead of the 0.3.1
+shared password, you now sign in with a **Unix account — the username
+and password are verified by the host's PAM stack**, exactly the
+mechanism Cockpit uses at its own login screen. The host decides; the
+console keeps no password data of its own.
+
+- **PAM path:** `web/scripts/pam-auth.py` (stdlib-only ctypes client of
+  `libpam`) runs the `pam_start` → `pam_authenticate` → `pam_acct_mgmt`
+  sequence under the **`sysdeck`** service when `/etc/pam.d/sysdeck`
+  exists, else the stock **`login`** stack. Credentials travel over
+  stdin (never argv — `/proc` would leak them). Ship your own
+  `/etc/pam.d/sysdeck` (e.g. `auth required pam_unix.so`, plus
+  `pam_google_authenticator` for MFA if you want it) to tailor the
+  stack — `SYSDECK_PAM_SERVICE` renames it.
+- **Root, or pam+local:** pam_unix needs root to read `/etc/shadow`
+  for *arbitrary* users (non-root processes only get the invoking uid
+  via `unix_chkpwd` — a pam_unix guarantee). So the modes are
+  `SYSDECK_AUTH_MODE=pam` (default; run the service as root, like
+  cockpit-ws), `pam+local` (PAM first, then the `SdUser` scrypt table
+  for installs that can't run privileged), or `local` (console
+  accounts only). Manage the local table with
+  `bun scripts/manage-users.mjs list|add|passwd|disable|enable|remove`
+  from `web/`.
+- **Session:** an HttpOnly, SameSite=Lax cookie (`sd_session`) holding
+  an HMAC-SHA256-signed token **bound to the username**
+  (`v2.<exp>.<userB64>.<hmac>`), **12h** expiry. The HMAC key is random
+  per install and persists in the SQLite DB, so sessions survive
+  restarts — including the 0.3.1 → 0.4.0 upgrade (old v1 tokens still
+  verify as a legacy "operator" session until they age out).
+- **Gate scope:** the page itself is server-rendered as the login
+  screen until the cookie verifies, every `/api/*` route answers 401
+  until signed in, and the **fester service verifies the identical
+  v2 token** on its REST + WebSocket surface — no unauthenticated path
+  into the console's data.
+- **Lockout:** wrong attempts are rate limited per-IP **and**
+  per-username (5 per 60s each — the same shape the sshd stack
+  applies). Wrong-user and wrong-password return the same generic
+  answer; nothing enumerates accounts.
+- **Identity in the shell:** the header carries an account menu —
+  avatar, `user@host`, unix-account provenance (PAM vs local), the
+  wheel/sudo "Administrative access" badge, and a live session-expiry
+  countdown with a draining life bar; the status bar shows
+  `user@host` next to the vitals. Login/logout are audited with the
+  unix username as the actor.
+- **TLS:** LAN deployments typically run plain http; front the console
+  with TLS and set `SYSDECK_SESSION_SECURE=1` to add the `Secure`
+  cookie flag. Sign out lives in the account menu (clears the cookie).
+
+The login/logout actions are audited (`module: web`, actions
+`login` / `login-failed` / `logout`, actor = the unix username, with
+source IP). This is deliberately *not* MFA-by-default or rate-proof
+crypto — it is the host's own account system doing what it already
+does at every other login surface on the box, recorded here so nobody
+mistakes it for more or less than that.
+
+### 10.5 Cockpit module detection in the web console (v0.4.1)
+
+The console scans the host the same way the cockpit shell discovers
+pages — every `/usr/share/cockpit/<pkg>/manifest.json` with a `menu`
+entry is a module — and **loads each one into its own navigation**:
+
+- a **Cockpit** sidebar group (with a LIVE/DEMO provenance badge) lists
+  every detected module — distro modules (`cockpit-machines`,
+  `cockpit-podman`, networking, storage, accounts, updates, SELinux,
+  PCP metrics, kdump, tuned...) and third-party addons alike;
+- each module opens a detail view with its manifest identity, shipped
+  files, **live backend presence probes** (`virsh`/`podman`/`nmcli`/
+  `pkcon`/... — real `which()` checks), and a jump to the native
+  console panel covering the domain when one exists;
+- `sysdeck-*` modules never duplicate (native panels already ship), and
+  menu-less chrome (`base1`, `shell`) is skipped — exactly the cockpit
+  shell's own rules;
+- `SYSDECK_COCKPIT_SCAN` (colon-separated paths) adds extra scan roots
+  for staged trees; with no cockpit tree on the host, a clearly-badged
+  typical-distro set keeps the surface explorable;
+- the **Cockpit Modules** hub panel (Integrations group) summarizes
+  detection: counts, backend availability, native coverage, and the
+  scan paths in play.
+
+This is the piece that makes the console/host pair 100% compatible:
+install a cockpit module on the box, and it shows up here — no cockpit
+login required to browse it.
+
+## 11. Run without Cockpit (the complete standalone runbook, v0.3.0)
+
+The web edition needs **nothing from sections 1–8** — no cockpit, no Python
+bridge, no systemd, no root. One Bun runtime serves the whole console:
+
+```bash
+tar xjf sysdeck-0.4.1-master.tar.bz2
+cd sysdeck-0.4.1-master
+make web-dev          # bun install + db:push + fester + next dev :3000
+```
+
+Production path (standalone build, systemd on Arch, reverse proxy with the
+`?XTransformPort=` websocket gateway, environment reference, troubleshooting):
+
+```bash
+cd web
+bun run build                              # self-contained .next/standalone/
+PORT=3000 HOSTNAME=0.0.0.0 bun run start   # or: node .next/standalone/server.js
+```
+
+The complete runbook — with the two systemd units (web + fester), the
+`.env` reference table, the Caddy/nginx websocket-gateway configs and a
+troubleshooting matrix — lives in two places, kept in sync:
+
+- **`web/README.md`** in this tarball (plain markdown)
+- the **"Run without Cockpit" panel** in the web console (system group,
+  right under Overview) — every command block has a copy button
+
+## 12. The web-edition skin for Cockpit (v0.3.0)
+
+Since 0.3.0 the Cockpit plugin pages wear the **web-edition skin** by
+default: every plugin's `index.html` links
+`../sysdeck-common/sysdeck-web.css` after the base stylesheet, porting
+the Next.js console's midnight/teal design (teal accent `#3fc9b0`,
+soft-tinted badges, 10px radii, tabular numerals, thin teal-edged
+scrollbars) onto the classic cockpit panels. Nothing else changes — the
+class vocabulary, the bridge, and every module are untouched.
+
+```bash
+# revert the plugin pages to the classic 0.1.x skin:
+sudo rm /usr/share/cockpit/sysdeck-common/sysdeck-web.css
+
+# also theme the Cockpit SHELL chrome (sidebar, header, login) to match:
+sudo make install-branding      # backs up any existing branding.css first
+sudo make uninstall-branding    # restore the backup
+```
+
+`install-branding` installs `shared/branding.css` as
+`/usr/share/cockpit/branding.css` — Cockpit's documented override point
+for the shell. It targets both PatternFly v5 (`pf-v5-*`, Cockpit ≥ 300)
+and v4 (`pf-c-*`) selector generations, so unmatched rules simply no-op.
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>

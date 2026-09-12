@@ -210,7 +210,7 @@ function renderWebIframe(webUrl) {
         <div class="suite-card">
             <div class="suite-card-header">
                 <h3 class="suite-card-title">Web UI — ${escapeHtml(webUrl)}</h3>
-                <a href="${escapeHtml(webUrl)}" target="_blank" class="suite-btn suite-btn-ghost">↗ Open in new tab</a>
+                <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="suite-btn suite-btn-ghost">↗ Open in new tab</a>
             </div>
             <iframe src="${escapeHtml(webUrl)}"
                     style="width:100%;min-height:calc(100vh - 200px);height:calc(100vh - 200px);border:1px solid var(--sysdeck-border);border-radius:6px;background:#1e1e1e;"

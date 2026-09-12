@@ -1,0 +1,95 @@
+# Contributor: SysDeck project
+# Upstream: klanker-gate by TykoDev <https://github.com/TykoDev/klanker-gate>
+#
+# Frosty Deno ("klanker-gate") — Arch Linux package, built from the vendored
+# source tree this PKGBUILD lives in (arch/ is a subdirectory of the tree).
+# The gateway itself is upstream code by TykoDev (Apache-2.0); the arch/
+# directory is the SysDeck project's packaging. The port verdict that
+# motivated this file: the upstream code needed ZERO source changes for
+# Arch — Deno 2 + TypeScript is cross-platform and the repo's own
+# Docker/entrypoint path is Linux-first. This package turns the vendored
+# tree into a pacman-managed systemd service.
+#
+# Build + install (from the tree root's arch/ directory):
+#   pacman -S --needed deno base-devel    # deno lives in [extra]
+#   makepkg -si
+#
+# If you package from a released archive instead, drop it next to this file
+# and swap source=() for: source=("klanker-gate-${pkgver}.zip")
+
+pkgname=klanker-gate
+pkgver=0.9.0
+pkgrel=1
+pkgdesc="OpenAI-compatible LLM gateway with governance, virtual keys, caching, MCP and telemetry (Deno 2 + PostgreSQL), same-origin React control plane"
+arch=('x86_64' 'aarch64')
+url="https://github.com/TykoDev/klanker-gate"
+license=('Apache-2.0')
+depends=('deno>=2.9' 'sh')
+optdepends=(
+    'postgresql: local durable state store (or point FROSTY_PG_URL at a remote)'
+    'docker-compose: the upstream compose assets for PG + observability stack'
+)
+makedepends=()
+checkoptions=()
+backup=('etc/klanker-gate/env')
+options=(!strip !zipman)
+# Self-packaged tree: files are taken from "$startdir"/.. — see package().
+source=()
+sha256sums=()
+
+# Gateway runtime layout (package() mirrors this):
+#   /usr/share/klanker-gate   — the source tree (Deno runs TypeScript directly)
+#   /usr/bin/klanker-gate     — systemd ExecStart wrapper (cache warmup +
+#                               scoped --allow-run for FROSTY_WORKERS>1)
+#   /etc/klanker-gate/env     — operator EnvironmentFile (backup'd)
+#   /var/lib/klanker-gate     — StateDirectory: data/ + .cache/deno (DENO_DIR)
+#
+# The Control UI is NOT prebuilt in this package: the gateway serves its API
+# only until apps/control-ui/dist exists. Two supported options:
+#   1. SysDeck is the operator surface (what this package is for) — no need.
+#   2. Build it once on the host: see arch/INSTALL-ARCH.md section 6.
+
+build() {
+    # No compiled artifacts: Deno executes TypeScript from /usr/share at
+    # runtime. Module cache warmup happens as the service user at first
+    # start (it must land in the klanker user's DENO_DIR, not the builder's).
+    return 0
+}
+
+package() {
+    local tree="$startdir/.."
+
+    # ── the gateway tree ────────────────────────────────────────────────
+    install -dm755 "$pkgdir/usr/share/$pkgname"
+    cp -a "$tree"/{apps,packages,deploy,docs,scripts} \
+        "$pkgdir/usr/share/$pkgname/"
+    install -Dm644 "$tree"/deno.jsonc "$pkgdir/usr/share/$pkgname/deno.jsonc"
+    install -Dm644 "$tree"/deno.lock   "$pkgdir/usr/share/$pkgname/deno.lock"
+    install -Dm644 "$tree"/README.md   "$pkgdir/usr/share/$pkgname/README.md"
+    install -Dm644 "$tree"/LICENSE     "$pkgdir/usr/share/$pkgname/LICENSE"
+    install -Dm644 "$tree"/ATTRIBUTION.md \
+        "$pkgdir/usr/share/$pkgname/ATTRIBUTION.md"
+    install -Dm644 "$tree"/CHANGELOG.md "$pkgdir/usr/share/$pkgname/CHANGELOG.md"
+    install -Dm644 "$tree"/permissions.md "$pkgdir/usr/share/$pkgname/permissions.md"
+    install -Dm644 "$tree"/.env.example "$pkgdir/usr/share/$pkgname/.env.example"
+    # v0.3.0 security audit deliverable: upstream findings + the packaging
+    # mitigations that ship in this very package (referenced by the unit's
+    # ExecStartPre refusal message).
+    install -Dm644 "$startdir"/SECURITY-UPSTREAM.md \
+        "$pkgdir/usr/share/$pkgname/SECURITY-UPSTREAM.md"
+
+    # tests/ and .github/ are development harnesses, not runtime surface.
+    # The browser Playwright harness additionally needs node/npm by design
+    # (documented upstream) and is excluded here for that reason.
+
+    # ── service plumbing ────────────────────────────────────────────────
+    install -Dm755  "$startdir/run.sh"        "$pkgdir/usr/bin/$pkgname"
+    install -Dm644  "$startdir/$pkgname.service" \
+        "$pkgdir/usr/lib/systemd/system/$pkgname.service"
+    install -Dm644  "$startdir/sysusers.conf" \
+        "$pkgdir/usr/lib/sysusers.d/$pkgname.conf"
+    install -Dm644  "$startdir/tmpfiles.conf" \
+        "$pkgdir/usr/lib/tmpfiles.d/$pkgname.conf"
+    install -Dm600  "$startdir/env.example" \
+        "$pkgdir/etc/klanker-gate/env"
+}

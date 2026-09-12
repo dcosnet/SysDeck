@@ -1,0 +1,347 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1292"
+  viewBox="0 0 1700 1292" role="img" aria-labelledby="title desc">
+  <title id="title">Frosty Deno Resource Flow</title>
+  <desc
+    id="desc">Runtime and deployment topology for Frosty Deno, including the gateway container, PostgreSQL, optional pooling and observability services, ports, volumes, configuration flow, and startup dependencies.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5"
+      orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
+    </marker>
+    <style>
+    text {
+      font-family: Arial, Helvetica, sans-serif;
+      fill: #0f172a;
+      font-size: 14px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .subtitle {
+      font-size: 15px;
+      fill: #334155;
+    }
+    .entity {
+      fill: #eef6d7;
+      stroke: #3f6212;
+      stroke-width: 2;
+    }
+    .process {
+      fill: #e2e8f0;
+      stroke: #334155;
+      stroke-width: 2;
+    }
+    .store {
+      fill: #dbeafe;
+      stroke: #1d4ed8;
+      stroke-width: 2;
+    }
+    .group {
+      fill: #ffffff;
+      stroke: #64748b;
+      stroke-width: 2;
+      stroke-dasharray: 10 6;
+    }
+    .legend {
+      fill: #ffffff;
+      stroke: #334155;
+      stroke-width: 1.5;
+    }
+    .line {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 2.5;
+      marker-end: url(#arrow);
+    }
+    .line-dashed {
+      fill: none;
+      stroke: #64748b;
+      stroke-width: 2.5;
+      stroke-dasharray: 8 6;
+      marker-end: url(#arrow);
+    }
+    .small {
+      font-size: 12px;
+      fill: #475569;
+    }
+    .label {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #334155;
+      /* Halo so an edge label stays readable where it must cross a
+         connector. Repositioning fixes label-on-box; this fixes
+         label-on-line, which no amount of nudging avoids. */
+      paint-order: stroke;
+      stroke: #f8fafc;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .center {
+      text-anchor: middle;
+    }
+    </style>
+  </defs>
+
+  <g id="layer-background">
+    <rect x="0" y="0" width="1700" height="1292" fill="#f8fafc" />
+  </g>
+
+  <g id="layer-title">
+    <text x="40" y="54" class="title">Frosty Deno Resource Flow</text>
+    <text x="40" y="82"
+      class="subtitle">Docker and runtime topology with verified ports, volumes, optional profiles, config flow, and service dependencies</text>
+  </g>
+
+  <!-- Legend is a single bottom strip, not a floating block. Its right-hand
+    column put 14px labels at x=1542, so "Optional profile or startup
+    dependency" ran to ~1799 and was clipped by the 1700 canvas - the longest
+    label in the set, and the one that made the whole legend look truncated.
+    Every x below is placed from the measured label width. -->
+  <g id="layer-legend">
+    <rect x="40" y="1192" width="1620" height="84" rx="12" class="legend" />
+    <text x="64" y="1240" class="label" style="font-size:14px;">Legend</text>
+
+    <rect x="146" y="1222" width="44" height="26" rx="13" class="entity" />
+    <text x="200" y="1240">External entity or source</text>
+
+    <rect x="409" y="1222" width="44" height="26" class="process" />
+    <text x="463" y="1240">Service or container</text>
+
+    <path d="M635 1222 L635 1248 L679 1248 L679 1222 Q657 1232 635 1222 z"
+      class="store" />
+    <text x="689" y="1240">Volume or persistent store</text>
+
+    <path d="M905 1235 L961 1235" class="line" />
+    <text x="971" y="1240">Runtime data or traffic</text>
+
+    <path d="M1165 1235 L1221 1235" class="line-dashed" />
+    <text x="1231" y="1240">Optional profile or startup dependency</text>
+  </g>
+
+  <g id="layer-build">
+    <rect x="56" y="132" width="244" height="88" rx="18" class="entity" />
+    <text x="178" y="166" class="center"
+      style="font-weight:700;">UI Builder Stage</text>
+    <text x="178" y="188" class="center small">denoland/deno:2.9.3</text>
+
+    <rect x="344" y="132" width="244" height="88" class="process" />
+    <text x="466" y="166" class="center"
+      style="font-weight:700;">Gateway Image Build</text>
+    <text x="466" y="188"
+      class="center small">copies apps/control-ui/dist into runtime image</text>
+
+    <path d="M300 176 H344" class="line" />
+  </g>
+
+  <g id="layer-sources">
+    <rect x="56" y="294" width="244" height="88" rx="18" class="entity" />
+    <text x="178" y="328" class="center"
+      style="font-weight:700;">Process Environment</text>
+    <text x="178" y="350"
+      class="center small">.env and shell-provided variables</text>
+
+    <rect x="56" y="438" width="244" height="88" rx="18" class="entity" />
+    <text x="178" y="472" class="center"
+      style="font-weight:700;">Clients and Browsers</text>
+    <text x="178" y="494"
+      class="center small">HTTP callers and operator UI users</text>
+  </g>
+
+  <g id="layer-runtime-group">
+    <rect x="332" y="266" width="668" height="360" rx="16" class="group" />
+    <text x="356" y="296"
+      style="font-weight:700;">Core runtime (default compose path)</text>
+
+    <rect x="376" y="330" width="266" height="108" class="process" />
+    <text x="509" y="366" class="center" style="font-weight:700;">gateway</text>
+    <text x="509" y="388"
+      class="center small">port 8080, same-origin API and SPA</text>
+    <text x="509" y="408"
+      class="center small">healthcheck: /healthz via IPv4</text>
+
+    <rect x="714" y="330" width="248" height="108" class="process" />
+    <text x="838" y="366" class="center"
+      style="font-weight:700;">postgres</text>
+    <text x="838" y="388"
+      class="center small">pgvector/pgvector:0.8.5-pg18</text>
+    <text x="838" y="408"
+      class="center small">port 5432, healthcheck with pg_isready</text>
+
+    <rect x="714" y="480" width="248" height="92" class="process" />
+    <text x="838" y="516" class="center"
+      style="font-weight:700;">pgbouncer</text>
+    <text x="838" y="538"
+      class="center small">optional profile, port 6432</text>
+
+    <path d="M642 384 H714" class="line" />
+    <path d="M642 406 H700 V526 H714" class="line-dashed" />
+    <text x="632" y="468" class="label">optional pooled path</text>
+
+    <path d="M300 338 H376" class="line" />
+    <path d="M300 482 H376" class="line" />
+
+    <path d="M838 438 V480" class="line-dashed" />
+    <text x="850" y="462" class="label">profile pgbouncer</text>
+  </g>
+
+  <g id="layer-volumes">
+    <path d="M404 520 L404 620 L614 620 L614 520 Q509 554 404 520 z"
+      class="store" />
+    <path d="M404 520 Q509 486 614 520" class="store" fill="none" />
+    <text x="509" y="570" class="center"
+      style="font-weight:700;">frosty-data</text>
+    <text x="509" y="592" class="center small">/app/data scratch only</text>
+
+    <path d="M732 598 L732 698 L944 698 L944 598 Q838 632 732 598 z"
+      class="store" />
+    <path d="M732 598 Q838 564 944 598" class="store" fill="none" />
+    <text x="838" y="648" class="center"
+      style="font-weight:700;">postgres-data</text>
+    <text x="838" y="670"
+      class="center small">mounted at /var/lib/postgresql</text>
+
+    <path d="M509 438 V520" class="line" />
+    <path d="M838 438 V598" class="line" />
+  </g>
+
+  <g id="layer-observability-group">
+    <rect x="1036" y="266" width="612" height="760" rx="16" class="group" />
+    <text x="1060" y="296" style="font-weight:700;">Observability profile</text>
+
+    <rect x="1080" y="336" width="220" height="92" class="process" />
+    <text x="1190" y="372" class="center"
+      style="font-weight:700;">otel-collector</text>
+    <text x="1190" y="394"
+      class="center small">ports 4318, 4317, 8888, 8889</text>
+
+    <rect x="1362" y="336" width="220" height="92" class="process" />
+    <text x="1472" y="372" class="center"
+      style="font-weight:700;">prometheus</text>
+    <text x="1472" y="394" class="center small">port 9090</text>
+
+    <rect x="1362" y="474" width="220" height="92" class="process" />
+    <text x="1472" y="510" class="center"
+      style="font-weight:700;">grafana</text>
+    <text x="1472" y="532" class="center small">port 3000, healthchecked</text>
+
+    <rect x="1080" y="474" width="220" height="92" class="process" />
+    <text x="1190" y="510" class="center" style="font-weight:700;">minio</text>
+    <text x="1190" y="532" class="center small">ports 9000 and 9001</text>
+
+    <rect x="1080" y="612" width="220" height="92" class="process" />
+    <text x="1190" y="648" class="center"
+      style="font-weight:700;">minio-init</text>
+    <text x="1190" y="670"
+      class="center small">creates Tempo traces bucket</text>
+
+    <rect x="1080" y="750" width="220" height="92" class="process" />
+    <text x="1190" y="786" class="center"
+      style="font-weight:700;">tempo-distributor</text>
+    <text x="1190" y="808"
+      class="center small">receives traces from collector</text>
+
+    <rect x="1362" y="750" width="220" height="92" class="process" />
+    <text x="1472" y="786" class="center"
+      style="font-weight:700;">tempo-ingester</text>
+    <text x="1472" y="808" class="center small">uses tempo-wal volume</text>
+
+    <rect x="1080" y="888" width="220" height="92" class="process" />
+    <text x="1190" y="924" class="center"
+      style="font-weight:700;">tempo-querier</text>
+    <text x="1190" y="946" class="center small">queries trace blocks</text>
+
+    <rect x="1362" y="888" width="220" height="92" class="process" />
+    <text x="1472" y="924" class="center"
+      style="font-weight:700;">tempo-query-frontend</text>
+    <text x="1472" y="946" class="center small">port 3200</text>
+
+    <!-- Sits just below the two tempo query boxes and so crosses the profile
+      frame edge at y=1026. Lifting it clear of the frame puts it on top of
+      tempo-querier and tempo-query-frontend, which is worse; the frame is a
+      grouping hint, the boxes are content. -->
+    <rect x="1222" y="984" width="220" height="92" class="process" />
+    <text x="1332" y="1020" class="center"
+      style="font-weight:700;">tempo-compactor</text>
+    <text x="1332" y="1042"
+      class="center small">retention and block compaction</text>
+
+    <path d="M1300 382 H1362" class="line" />
+    <path d="M1472 428 V474" class="line" />
+    <path d="M1300 520 H1362" class="line" />
+    <path d="M1190 566 V612" class="line-dashed" />
+    <path d="M1190 704 V750" class="line-dashed" />
+    <path d="M1300 796 H1362" class="line-dashed" />
+    <path d="M1190 842 V888" class="line-dashed" />
+    <path d="M1472 842 V888" class="line-dashed" />
+    <path d="M1472 980 H1442 V1030 H1442" class="line-dashed" />
+  </g>
+
+  <g id="layer-observability-volumes">
+    <path d="M1362 594 L1362 684 L1582 684 L1582 594 Q1472 628 1362 594 z"
+      class="store" />
+    <path d="M1362 594 Q1472 560 1582 594" class="store" fill="none" />
+    <text x="1472" y="640" class="center"
+      style="font-weight:700;">prometheus-data</text>
+
+    <path d="M1362 680 V594" class="line" />
+
+    <path d="M1362 1066 L1362 1150 L1582 1150 L1582 1066 Q1472 1100 1362 1066 z"
+      class="store" />
+    <path d="M1362 1066 Q1472 1032 1582 1066" class="store" fill="none" />
+    <text x="1472" y="1108" class="center"
+      style="font-weight:700;">tempo-wal</text>
+
+    <!-- Routed around the right column: a straight V crossed
+      tempo-query-frontend. x=1612 is the clear channel between the boxes
+      (1582) and the frame edge (1648). -->
+    <path d="M1472 842 V860 H1612 V1044 H1472 V1066" class="line" />
+
+    <path d="M1080 1066 L1080 1150 L1300 1150 L1300 1066 Q1190 1100 1080 1066 z"
+      class="store" />
+    <path d="M1080 1066 Q1190 1032 1300 1066" class="store" fill="none" />
+    <text x="1190" y="1108" class="center"
+      style="font-weight:700;">Host bind mount</text>
+    <text x="1190" y="1128"
+      class="center small">${FROSTY_TEMPO_STORAGE_PATH:-./data/tempo}</text>
+
+    <!-- Routed around the left column: a straight V from 566 to 1066 crossed
+      minio-init, tempo-distributor and tempo-querier. x=1058 is the clear
+      channel between the frame edge (1036) and the boxes (1080). -->
+    <path d="M1190 566 V584 H1058 V1044 H1190 V1066" class="line" />
+  </g>
+
+  <g id="layer-cross-cutting-connectors">
+    <path d="M588 176 H690 V330 H376" class="line-dashed" />
+    <text x="604" y="166" class="label">built UI copied into image</text>
+
+    <path d="M300 338 H376" class="line" />
+    <text x="298" y="326" class="label">env and .env</text>
+    <path d="M300 482 H376" class="line" />
+    <text x="306" y="472" class="label">HTTP on :8080</text>
+
+    <path d="M642 360 H1036 V382 H1080" class="line-dashed" />
+    <text x="700" y="322"
+      class="label">OTEL_EXPORTER_OTLP_ENDPOINT optional</text>
+
+    <path d="M962 384 H1036" class="line-dashed" />
+    <text x="1090" y="322" class="label">depends_on postgres:healthy</text>
+
+    <path d="M1472 566 V594" class="line" />
+  </g>
+
+  <g id="layer-notes">
+    <rect x="332" y="712" width="634" height="172" rx="12" fill="#ffffff"
+      stroke="#334155" stroke-width="1.5" />
+    <text x="356" y="744"
+      style="font-weight:700;">Operational notes verified from Compose and runtime code</text>
+    <text x="356" y="770"
+      class="small">1. Health checks are defined for gateway, postgres, pgbouncer, grafana, and minio.</text>
+    <text x="356" y="792"
+      class="small">2. No CPU or memory limits are defined in the checked-in Compose configuration.</text>
+    <text x="356" y="814"
+      class="small">3. Multi-process fan-out is runtime-gated by FROSTY_WORKERS and platform support, not by extra containers.</text>
+    <text x="356" y="836"
+      class="small">4. LISTEN uses the direct PostgreSQL connection; PgBouncer is optional and cannot carry that session-stable path.</text>
+  </g>
+</svg>

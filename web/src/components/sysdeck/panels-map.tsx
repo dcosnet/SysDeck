@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 
 export const PANEL_MAP: Record<string, ComponentType> = {
   overview: lazy(() => import('./panels/overviewPanel')),
+  runbook: lazy(() => import('./panels/runbookPanel')),
   glances: lazy(() => import('./panels/glancesPanel')),
   sensors: lazy(() => import('./panels/sensorsPanel')),
   fleet: lazy(() => import('./panels/fleetPanel')),
@@ -35,4 +36,6 @@ export const PANEL_MAP: Record<string, ComponentType> = {
   photos: lazy(() => import('./panels/photosPanel')),
   monitoring: lazy(() => import('./panels/monitoringPanel')),
   modules: lazy(() => import('./panels/modulesPanel')),
+  klanker: lazy(() => import('./panels/klankerPanel')),
+  cockpit: lazy(() => import('./panels/cockpitModulesPanel').then((m) => ({ default: m.CockpitModulesPanel }))),
 }

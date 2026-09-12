@@ -16,6 +16,13 @@
  * auto-reconnect). The gateway forwards /?XTransformPort=3010 upgrades
  * here; REST is served on the same port for the SysDeck server-side proxy.
  *
+ * v0.3.1 session gate: every request (REST and WS upgrade) must carry a
+ * valid SysDeck web session cookie ('sd_session'), verified against the
+ * SAME HMAC secret the Next.js app uses — read straight out of its
+ * SQLite SdKv table (web.session.secret). Until the web console has
+ * booted once (no secret in the DB yet), the service stays in its
+ * documented standalone mode: unauthenticated, loopback-only.
+ *
  * WebSocket client protocol (all optional, default = full broadcast):
  *   → {type:'debugger', buildId, command:'pause'|'resume'|'step'}
  *   → {type:'subscribe', buildId}    — only receive that build's events
@@ -33,10 +40,87 @@ import { NodeRegistry } from './nodes'
 import { seedHistory } from './seed'
 import { bindLoop, ensureLoop } from './clock'
 import { handleApi } from './api'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { Database } from 'bun:sqlite'
 import type { ServerWebSocket } from 'bun'
 
 const PORT = 3010
 const JOURNAL_CAP = 5000 // max journaled events per build (oldest dropped)
+
+// ── session gate (shared secret with the web console) ────────────────
+// The token format mirrors src/lib/sysdeck/session.ts exactly:
+//   v0.4.0: 'v2.<expMs>.<userB64url>.<hmac-sha256(secret, body)>' —
+//           user-bound, minted after a unix-account (PAM) login
+//   0.3.1 : 'v1.<expMs>.<hmac-sha256(secret, "v1.<expMs>")>' — still
+//           accepted so upgrades don't drop live streams
+// The secret is the web app's SdKv row 'web.session.secret' — opened
+// read-only, cached 60s so the prisma writer never sees lock churn.
+const SYSDECK_DB = fileURLToPath(new URL('../../db/custom.db', import.meta.url))
+let cachedSecret: string | null = null
+let secretReadAt = 0
+
+function readSharedSecret(): string | null {
+  const now = Date.now()
+  if (cachedSecret && now - secretReadAt < 60_000) return cachedSecret
+  try {
+    const sqlite = new Database(SYSDECK_DB, { readonly: true })
+    try {
+      const row = sqlite.query("SELECT value FROM SdKv WHERE key = 'web.session.secret'").get() as
+        | { value: string }
+        | null
+      if (row?.value) {
+        cachedSecret = row.value
+        secretReadAt = now
+        return row.value
+      }
+    } finally {
+      sqlite.close()
+    }
+  } catch {
+    // db absent (web console never booted) or transiently busy — a
+    // stale cached secret still enforces; no secret at all = standalone
+  }
+  return cachedSecret
+}
+
+/** Verify the sd_session cookie against the shared secret.
+ *  v0.4.0: the web console's tokens are user-bound — 'v2.<exp>.<user64>.<hmac>'
+ *  (HMAC over the whole body). v1 (0.3.1 shared-password sessions) still
+ *  verifies so an upgrade across 0.3.1 → 0.4.0 does not drop live streams. */
+function sessionOk(req: Request): boolean {
+  const secret = readSharedSecret()
+  if (!secret) return true // web console never booted → standalone mode
+  const cookie = req.headers.get('cookie') ?? ''
+  const m = /(?:^|;\s*)sd_session=([^;]+)/.exec(cookie)
+  const token = m?.[1]
+  if (!token) return false
+  const parts = token.split('.')
+
+  // v2 — 'v2.<expMs>.<userB64url>.<hmac>'
+  if (parts.length === 4 && parts[0] === 'v2') {
+    const expiresAt = Number(parts[1])
+    if (!Number.isFinite(expiresAt) || String(expiresAt) !== parts[1]) return false
+    if (expiresAt < Date.now()) return false
+    const user = Buffer.from(parts[2], 'base64url').toString('utf8')
+    if (!user || user.length > 64) return false
+    const expected = createHmac('sha256', secret).update(`v2.${parts[1]}.${parts[2]}`).digest('hex')
+    if (parts[3].length !== expected.length || !/^[0-9a-f]+$/.test(parts[3])) return false
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(parts[3]))
+  }
+
+  // v1 — 'v1.<expMs>.<hmac>' (legacy 0.3.1 shared session)
+  if (parts.length === 3 && parts[0] === 'v1') {
+    const expiresAt = Number(parts[1])
+    if (!Number.isFinite(expiresAt) || String(expiresAt) !== parts[1]) return false
+    if (expiresAt < Date.now()) return false
+    const expected = createHmac('sha256', secret).update(`v1.${parts[1]}`).digest('hex')
+    if (parts[2].length !== expected.length || !/^[0-9a-f]+$/.test(parts[2])) return false
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(parts[2]))
+  }
+
+  return false
+}
 
 const bus = new EventBus()
 const store = new Store()
@@ -86,8 +170,23 @@ function broadcast(event: FesterEvent | { type: string; [k: string]: unknown }):
 }
 
 const server = Bun.serve({
+  // v0.3.0 security (audit follow-up): bind loopback only. This service
+  // is unauthenticated by design (a local build orchestrator); the web
+  // console reaches it server-side via 127.0.0.1 and the browser reaches
+  // the live event stream through the local port gateway — never
+  // directly. Bun's default (no hostname) is 0.0.0.0, which put every
+  // REST mutation + the WS event stream on the LAN.
+  hostname: '127.0.0.1',
   port: PORT,
   fetch(req, srv) {
+    // v0.3.1 session gate: REST and WS upgrades alike require the web
+    // console's session cookie (standalone mode until a secret exists).
+    if (!sessionOk(req)) {
+      return Response.json(
+        { ok: false, error: 'authentication required (sign in to the SysDeck web console first)' },
+        { status: 401 },
+      )
+    }
     const url = new URL(req.url)
     // live request context: (re)start the periodic loops if needed (see clock.ts)
     ensureLoop('fester_ambient')

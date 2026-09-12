@@ -1,0 +1,334 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1232"
+  viewBox="0 0 1600 1232" role="img" aria-labelledby="title desc">
+  <title id="title">Frosty Deno Data Flow</title>
+  <desc
+    id="desc">Data-flow diagram for Frosty Deno showing external entities, gateway processes, durable and in-memory stores, provider integrations, and sensitive data paths.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5"
+      orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8" refY="5"
+      orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c" />
+    </marker>
+    <style>
+    text {
+      font-family: Arial, Helvetica, sans-serif;
+      fill: #0f172a;
+      font-size: 14px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .subtitle {
+      font-size: 15px;
+      fill: #334155;
+    }
+    .entity {
+      fill: #eef6d7;
+      stroke: #3f6212;
+      stroke-width: 2;
+    }
+    .process {
+      fill: #e2e8f0;
+      stroke: #334155;
+      stroke-width: 2;
+    }
+    .decision {
+      fill: #fff7ed;
+      stroke: #c2410c;
+      stroke-width: 2;
+    }
+    .store {
+      fill: #dbeafe;
+      stroke: #1d4ed8;
+      stroke-width: 2;
+    }
+    .legend {
+      fill: #ffffff;
+      stroke: #334155;
+      stroke-width: 1.5;
+    }
+    .line {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 2.5;
+      marker-end: url(#arrow);
+    }
+    .line-thin {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 2;
+      marker-end: url(#arrow);
+    }
+    .line-sensitive {
+      fill: none;
+      stroke: #b91c1c;
+      stroke-width: 3;
+      stroke-dasharray: 9 6;
+      marker-end: url(#arrow-red);
+    }
+    .line-async {
+      fill: none;
+      stroke: #64748b;
+      stroke-width: 2;
+      stroke-dasharray: 7 5;
+      marker-end: url(#arrow);
+    }
+    .small {
+      font-size: 12px;
+      fill: #475569;
+    }
+    .label {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #334155;
+      /* Halo so an edge label stays readable where it must cross a
+         connector. Repositioning fixes label-on-box; this fixes
+         label-on-line, which no amount of nudging avoids. */
+      paint-order: stroke;
+      stroke: #f8fafc;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .center {
+      text-anchor: middle;
+    }
+    </style>
+  </defs>
+
+  <g id="layer-background">
+    <rect x="0" y="0" width="1600" height="1232" fill="#f8fafc" />
+  </g>
+
+  <g id="layer-title">
+    <text x="40" y="54" class="title">Frosty Deno Data Flow</text>
+    <text x="40" y="82"
+      class="subtitle">Verified movement of requests, configuration, telemetry, cache entries, counters, and provider traffic across Frosty Deno</text>
+  </g>
+
+  <!-- Legend is a single bottom strip, not a floating block. The previous
+    top-right placement sat on the PostgreSQL State cylinder and the Provider
+    APIs box, and its right-hand column put 14px labels at x=1454, overflowing
+    the legend frame that ended at 1560. Every x below is placed from the
+    measured label width. -->
+  <g id="layer-legend">
+    <rect x="40" y="1132" width="1520" height="84" rx="12" class="legend" />
+    <text x="64" y="1180" class="label" style="font-size:14px;">Legend</text>
+
+    <rect x="146" y="1162" width="44" height="26" rx="13" class="entity" />
+    <text x="200" y="1180">External entity</text>
+
+    <rect x="336" y="1162" width="44" height="26" class="process" />
+    <text x="390" y="1180">Process or service</text>
+
+    <path d="M547 1162 L547 1188 L591 1188 L591 1162 Q569 1172 547 1162 z"
+      class="store" />
+    <text x="601" y="1180">Store</text>
+
+    <path d="M664 1175 L720 1175" class="line-thin" />
+    <text x="730" y="1180">Primary data flow</text>
+
+    <path d="M880 1175 L936 1175" class="line-sensitive" />
+    <text x="946" y="1180">Sensitive data flow</text>
+
+    <path d="M1111 1175 L1167 1175" class="line-async" />
+    <text x="1177" y="1180">Async or derived data</text>
+  </g>
+
+  <g id="layer-entities">
+    <rect x="52" y="144" width="222" height="76" rx="18" class="entity" />
+    <text x="163" y="178" class="center"
+      style="font-weight:700;">API Client</text>
+    <text x="163" y="200"
+      class="center small">Bearer virtual key and prompts</text>
+
+    <rect x="52" y="288" width="222" height="76" rx="18" class="entity" />
+    <text x="163" y="322" class="center"
+      style="font-weight:700;">Operator Browser</text>
+    <text x="163" y="344"
+      class="center small">Admin token and config edits</text>
+
+    <rect x="1318" y="136" width="222" height="76" rx="18" class="entity" />
+    <text x="1429" y="170" class="center"
+      style="font-weight:700;">Provider APIs</text>
+    <text x="1429" y="192"
+      class="center small">OpenAI, Anthropic, Azure, Bedrock, etc.</text>
+
+    <rect x="1318" y="286" width="222" height="76" rx="18" class="entity" />
+    <text x="1429" y="320" class="center"
+      style="font-weight:700;">External MCP Servers</text>
+    <text x="1429" y="342"
+      class="center small">HTTP or optional stdio transports</text>
+
+    <rect x="1318" y="438" width="222" height="76" rx="18" class="entity" />
+    <text x="1429" y="472" class="center"
+      style="font-weight:700;">OTLP Collector</text>
+    <text x="1429" y="494"
+      class="center small">Optional trace export target</text>
+
+    <rect x="1318" y="590" width="222" height="76" rx="18" class="entity" />
+    <text x="1429" y="624" class="center"
+      style="font-weight:700;">LiteLLM Price Feed</text>
+    <text x="1429" y="646"
+      class="center small">Optional pricing sync source</text>
+
+    <rect x="1318" y="742" width="222" height="76" rx="18" class="entity" />
+    <text x="1429" y="776" class="center"
+      style="font-weight:700;">Prometheus Scraper</text>
+    <text x="1429" y="798"
+      class="center small">Reads metrics endpoint data</text>
+  </g>
+
+  <g id="layer-processes">
+    <rect x="354" y="132" width="246" height="88" class="process" />
+    <text x="477" y="168" class="center"
+      style="font-weight:700;">Inference API Surface</text>
+    <text x="477" y="190"
+      class="center small">/v1, compat, advanced, ingress</text>
+
+    <rect x="354" y="274" width="246" height="88" class="process" />
+    <text x="477" y="310" class="center"
+      style="font-weight:700;">Admin API Surface</text>
+    <text x="477" y="332" class="center small">/api/*, /metrics, /mcp</text>
+
+    <rect x="672" y="120" width="252" height="96" class="process" />
+    <text x="798" y="156" class="center"
+      style="font-weight:700;">Governance + Routing</text>
+    <text x="798" y="178"
+      class="center small">auth, budgets, rate limits, route dispatch</text>
+
+    <rect x="672" y="252" width="252" height="96" class="process" />
+    <text x="798" y="288" class="center"
+      style="font-weight:700;">Config and Settings Service</text>
+    <text x="798" y="310"
+      class="center small">providers, settings, proxy, hierarchy</text>
+
+    <rect x="672" y="384" width="252" height="96" class="process" />
+    <text x="798" y="420" class="center"
+      style="font-weight:700;">Semantic Cache</text>
+    <text x="798" y="442"
+      class="center small">L1 memory plus PostgreSQL-backed cache</text>
+
+    <rect x="672" y="516" width="252" height="96" class="process" />
+    <text x="798" y="552" class="center"
+      style="font-weight:700;">Provider Manager</text>
+    <text x="798" y="574"
+      class="center small">accounts, defaults, fallback chain</text>
+
+    <rect x="672" y="648" width="252" height="96" class="process" />
+    <text x="798" y="684" class="center"
+      style="font-weight:700;">Telemetry Pipeline</text>
+    <text x="798" y="706"
+      class="center small">metrics, spans, usage, log enrichment</text>
+
+    <rect x="672" y="780" width="252" height="96" class="process" />
+    <text x="798" y="816" class="center"
+      style="font-weight:700;">MCP Registry</text>
+    <text x="798" y="838"
+      class="center small">client catalog, tool inventory, health</text>
+  </g>
+
+  <g id="layer-stores">
+    <path d="M1000 92 L1000 232 L1238 232 L1238 92 Q1119 126 1000 92 z"
+      class="store" />
+    <path d="M1000 92 Q1119 58 1238 92" class="store" fill="none" />
+    <text x="1119" y="154" class="center"
+      style="font-weight:700;">PostgreSQL State</text>
+    <text x="1119" y="176"
+      class="center small">providers, settings, hierarchy</text>
+
+    <path d="M1000 276 L1000 416 L1238 416 L1238 276 Q1119 310 1000 276 z"
+      class="store" />
+    <path d="M1000 276 Q1119 242 1238 276" class="store" fill="none" />
+    <text x="1119" y="338" class="center"
+      style="font-weight:700;">Counters Store</text>
+    <text x="1119" y="360"
+      class="center small">usage, cost, rate-limit windows</text>
+
+    <path d="M1000 460 L1000 600 L1238 600 L1238 460 Q1119 494 1000 460 z"
+      class="store" />
+    <path d="M1000 460 Q1119 426 1238 460" class="store" fill="none" />
+    <text x="1119" y="522" class="center"
+      style="font-weight:700;">Response Cache</text>
+    <text x="1119" y="544" class="center small">opaque cached responses</text>
+
+    <path d="M1000 644 L1000 784 L1238 784 L1238 644 Q1119 678 1000 644 z"
+      class="store" />
+    <path d="M1000 644 Q1119 610 1238 644" class="store" fill="none" />
+    <text x="1119" y="706" class="center"
+      style="font-weight:700;">pgvector Table</text>
+    <text x="1119" y="728"
+      class="center small">embeddings for semantic lookup</text>
+
+    <path d="M1000 828 L1000 968 L1238 968 L1238 828 Q1119 862 1000 828 z"
+      class="store" />
+    <path d="M1000 828 Q1119 794 1238 828" class="store" fill="none" />
+    <text x="1119" y="890" class="center"
+      style="font-weight:700;">Log Bus and Log Store</text>
+    <text x="1119" y="912"
+      class="center small">live ring plus durable request trail</text>
+  </g>
+
+  <g id="layer-connectors">
+    <path d="M274 182 H354" class="line-sensitive" />
+    <text x="286" y="132" class="label"
+      style="fill:#b91c1c;">virtual key, prompts [sensitive]</text>
+    <path d="M274 326 H354" class="line-sensitive" />
+    <text x="286" y="276" class="label"
+      style="fill:#b91c1c;">admin token, edits [sensitive]</text>
+
+    <path d="M600 176 H672" class="line" />
+    <path d="M600 318 H672" class="line" />
+
+    <path d="M798 216 V252" class="line" />
+    <path d="M798 348 V384" class="line" />
+    <path d="M798 480 V516" class="line" />
+    <path d="M798 612 V648" class="line" />
+
+    <path d="M924 564 H1318 V174" class="line" />
+    <text x="1108" y="68" class="label">requests and translated payloads</text>
+
+    <path d="M924 828 H1318" class="line" />
+    <text x="1026" y="804" class="label">tool discovery and calls</text>
+
+    <path d="M924 696 H1318" class="line-async" />
+    <text x="938" y="690" class="label">spans</text>
+
+    <path d="M924 580 H1000" class="line-sensitive" />
+    <text x="930" y="600" class="label"
+      style="fill:#b91c1c;">provider creds [sensitive]</text>
+    <path d="M924 684 H1000" class="line-async" />
+    <path d="M924 432 H1000" class="line" />
+    <path d="M924 432 H960 V706 H1000" class="line-async" />
+    <path d="M924 300 H1000" class="line-sensitive" />
+    <text x="930" y="264" class="label"
+      style="fill:#b91c1c;">persisted secrets [sensitive]</text>
+    <path d="M924 300 H960 V338 H1000" class="line-async" />
+    <path d="M924 696 H960 V890 H1000" class="line" />
+    <path d="M1238 890 H1318" class="line" />
+    <text x="1248" y="880" class="label">metrics exposition</text>
+
+    <path d="M1318 628 H924" class="line-async" />
+    <text x="1046" y="618" class="label">price catalog refresh</text>
+
+    <path d="M1238 154 H1318" class="line-sensitive" />
+    <text x="1248" y="120" class="label"
+      style="fill:#b91c1c;">operator config [sensitive]</text>
+  </g>
+
+  <g id="layer-annotations">
+    <rect x="48" y="930" width="860" height="130" rx="12" fill="#ffffff"
+      stroke="#334155" stroke-width="1.5" />
+    <text x="72" y="964"
+      style="font-weight:700;">Observed data handling notes</text>
+    <text x="72" y="990"
+      class="small">1. Browser-facing provider and settings views are redacted and use presence markers rather than plaintext secrets.</text>
+    <text x="72" y="1012"
+      class="small">2. Cache flow spans an in-memory L1 plus PostgreSQL-backed response and pgvector tables on the production path.</text>
+    <text x="72" y="1034"
+      class="small">3. Usage, cost, and rate-limit windows are durable when shared PostgreSQL-backed governance is enabled.</text>
+  </g>
+</svg>

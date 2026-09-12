@@ -245,6 +245,28 @@ def cmd_acl_default(args: list[str]) -> dict[str, Any]:
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
+def _cgroup_path_ok(path: Path) -> bool:
+    """v0.1.4 SECURITY: True if (resolved) path stays inside the unified
+    cgroup hierarchy. cmd_cgroup_create has always enforced a prefix
+    check, but the cgroup-* siblings didn't — cgroup-set wrote to
+    `<any-path>/<control-file>` as root (arbitrary file overwrite:
+    `cgroup-set /etc/cron.d x '* * * * * root curl ...'` was a one-prompt
+    persistent-root primitive; found by the 0.3.0 security audit). All
+    cgroup subcommands now resolve + bound-check the same way."""
+    try:
+        path.resolve().relative_to(CGROUP_ROOT.resolve())
+        return True
+    except (ValueError, RuntimeError, OSError):
+        return False
+
+
+# v0.1.4 SECURITY: cgroup control files are a closed vocabulary (cgroup.*
+# + controller knobs). Restricting the filename to this shape blocks
+# using cgroup-set as an arbitrary-named file writer.
+_CGROUP_CTRL_RE = re.compile(r"^(cgroup\.(procs|controllers|subtree_control|type|freeze|kill)|"
+                             r"(memory|cpu|io|pids|rdma|misc|hugetlb)\.[A-Za-z0-9_.-]{1,32})$")
+
+
 def _cgroup_v2_available() -> bool:
     """True if /sys/fs/cgroup/ is a cgroups v2 unified hierarchy."""
     return (CGROUP_ROOT / "cgroup.controllers").is_file()
@@ -315,6 +337,11 @@ def cmd_cgroup_show(args: list[str]) -> dict[str, Any]:
     if not args:
         return {"error": "cgroup path required"}
     path = Path(args[0])
+    # v0.1.4 SECURITY: cgroup paths are client-supplied; every cgroup
+    # subcommand must keep them inside the unified hierarchy — see the
+    # _cgroup_path_ok guard comment below cmd_cgroup_create.
+    if not _cgroup_path_ok(path):
+        return {"error": f"cgroup path must be under {CGROUP_ROOT}"}
     if not path.is_dir():
         return {"error": f"{path} is not a directory"}
     info: dict[str, Any] = {"path": str(path), "name": path.name}
@@ -356,6 +383,8 @@ def cmd_cgroup_procs(args: list[str]) -> dict[str, Any]:
     """List PIDs in a cgroup (just the PIDs, no metadata)."""
     if not args:
         return {"error": "cgroup path required"}
+    if not _cgroup_path_ok(Path(args[0])):
+        return {"error": f"cgroup path must be under {CGROUP_ROOT}"}
     procs_file = Path(args[0]) / "cgroup.procs"
     if not procs_file.is_file():
         return {"error": f"{procs_file} not found"}
@@ -373,7 +402,9 @@ def cmd_cgroup_create(args: list[str]) -> dict[str, Any]:
     path = Path(args[0])
     if not _cgroup_v2_available():
         return {"available": False, "reason": "cgroups v2 not mounted"}
-    if not str(path).startswith(str(CGROUP_ROOT)):
+    # v0.1.4 SECURITY: upgraded from a str().startswith() prefix check
+    # (which "/sys/fs/cgroup-evil" would satisfy) to resolve + bound.
+    if not _cgroup_path_ok(path):
         return {"error": f"cgroup path must be under {CGROUP_ROOT}"}
     try:
         path.mkdir(parents=True, exist_ok=False)
@@ -390,6 +421,8 @@ def cmd_cgroup_move(args: list[str]) -> dict[str, Any]:
     if len(args) < 2:
         return {"error": "usage: cgroup-move <pid> <cgroup-path>"}
     pid, cgrp = args[0], args[1]
+    if not _cgroup_path_ok(Path(cgrp)):
+        return {"error": f"cgroup path must be under {CGROUP_ROOT}"}
     procs_file = Path(cgrp) / "cgroup.procs"
     if not procs_file.is_file():
         return {"error": f"{procs_file} not found"}
@@ -407,6 +440,16 @@ def cmd_cgroup_set(args: list[str]) -> dict[str, Any]:
     if len(args) < 3:
         return {"error": "usage: cgroup-set <path> <control-file> <value>"}
     path, control, value = args[0], args[1], args[2]
+    # v0.1.4 SECURITY: this command writes as root. Both halves of the
+    # target are client-supplied, so BOTH are validated: the cgroup path
+    # must resolve under /sys/fs/cgroup (was missing — arbitrary root
+    # file overwrite, see _cgroup_path_ok) and the control file must be
+    # a real cgroup controller knob name, not a traversal/probe.
+    if not _cgroup_path_ok(Path(path)):
+        return {"error": f"cgroup path must be under {CGROUP_ROOT}"}
+    if not _CGROUP_CTRL_RE.match(control):
+        return {"error": f"'{control}' is not a cgroup control file name "
+                        "(expected e.g. memory.max, cpu.weight, cgroup.procs)"}
     # control is a filename like 'memory.max' or 'cpu.weight'
     target = Path(path) / control
     if not target.parent.is_dir():

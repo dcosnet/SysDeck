@@ -4,7 +4,20 @@
  *
  * Lists LUKS-encrypted block devices via `lsblk -J`. The bridge parser
  * filters to fstype=crypto_LUKS and surfaces device name + size.
+ *
+ * v0.1.4 SECURITY: lsblk fields (names, labels, mountpoints) and spawn
+ * error strings are untrusted output — now escaped before innerHTML
+ * (0.3.0 audit).
  */
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = renderSkeleton();
@@ -26,10 +39,10 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${luks.map((d) => `
                         <tr>
-                            <td class="suite-table-mono">${d.name}</td>
-                            <td><span class="suite-badge warn">${d.fstype}</span></td>
-                            <td class="suite-muted">${d.mountpoint ?? '—'}</td>
-                            <td class="suite-table-mono">${d.size ?? '—'}</td>
+                            <td class="suite-table-mono">${escapeHtml(d.name)}</td>
+                            <td><span class="suite-badge warn">${escapeHtml(d.fstype)}</span></td>
+                            <td class="suite-muted">${escapeHtml(d.mountpoint ?? '—')}</td>
+                            <td class="suite-table-mono">${escapeHtml(d.size ?? '—')}</td>
                         </tr>
                     `).join('') || '<tr><td colspan="4" class="suite-muted">No LUKS volumes found.</td></tr>'}
                 </tbody>
@@ -44,5 +57,5 @@ function renderSkeleton() {
 }
 
 function renderError(err) {
-    return `<div class="suite-card"><h3 class="suite-card-title">lsblk unavailable</h3><p class="suite-card-body suite-muted">${err.message || err}.</p></div>`;
+    return `<div class="suite-card"><h3 class="suite-card-title">lsblk unavailable</h3><p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}.</p></div>`;
 }

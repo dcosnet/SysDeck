@@ -1,0 +1,58 @@
+# Grafana datasource provisioning: wires Prometheus and Tempo in automatically
+# at boot. Mounted at /etc/grafana/provisioning/datasources by the
+# `observability` profile.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Fixed uid so the dashboard's ${DS_PROMETHEUS} variable resolves to it.
+    uid: prometheus
+    # "prometheus" is the Compose service name on the shared network.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      # Match prometheus.yml scrape_interval so $__rate_interval is computed well.
+      timeInterval: 15s
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    uid: tempo
+    # "tempo" is the Compose service name; 3200 is its query API.
+    url: http://tempo-query-frontend:3200
+    editable: true
+    jsonData:
+      httpMethod: GET
+      # Trace -> metrics. From a span in Tempo, jump to the RED metrics the
+      # collector derived from it. The model tag maps to the BOUNDED label
+      # (frosty.metrics.model), because that is what spanmetrics promotes -
+      # mapping gen_ai.request.model here would query a label that never exists.
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        tags:
+          - key: service.name
+            value: service_name
+          - key: frosty.metrics.model
+            value: frosty_metrics_model
+        queries:
+          - name: Span rate
+            query: sum(rate(traces_span_metrics_calls_total{$$__tags}[$$__rate_interval]))
+          - name: Span p95 duration
+            query: histogram_quantile(0.95, sum by (le) (rate(traces_span_metrics_duration_milliseconds_bucket{$$__tags}[$$__rate_interval])))
+      # Service-graph data is not generated (the collector owns metrics and
+      # Tempo's metrics_generator is off), so leave the node graph disabled
+      # rather than pointing it at a datasource with nothing to show.
+      nodeGraph:
+        enabled: false
+      search:
+        hide: false
+      traceQuery:
+        timeShiftEnabled: true
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m

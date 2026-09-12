@@ -1,0 +1,11 @@
+# Docker build context excludes (context root = frosty-deno).
+# The Control UI is built inside the image (multi-stage Dockerfile), so host
+# node_modules (Windows/Linux platform mismatch) and any prebuilt / host-locked
+# dist must never enter the build context. Keeping these out also fixes the
+# Windows "EPERM rm" failure that blocks a clean host `deno task build-ui`.
+**/node_modules
+apps/control-ui/dist
+apps/control-ui/dist_new
+data
+*.log
+.env

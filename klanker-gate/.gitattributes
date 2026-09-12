@@ -1,0 +1,21 @@
+# Force LF line endings in the repository AND on checkout across every platform.
+# `eol=lf` (not just `text=auto`) is what keeps Windows working trees from
+# drifting to CRLF, which `deno fmt` rejects. This is the authoritative codebase
+# line-ending rule; `.editorconfig` mirrors it for editors.
+* text=auto eol=lf
+
+# Shell scripts must always be LF (kept explicit for clarity).
+*.sh text eol=lf
+
+# Binary assets: never normalize EOL, never diff as text.
+*.kv binary
+*.kv-shm binary
+*.kv-wal binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary

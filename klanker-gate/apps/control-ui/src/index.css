@@ -1,0 +1,154 @@
+/* App stylesheet: Tailwind v4 + the canonical Frosty tokens.
+   tokens.css is a verbatim copy of docs/design/tokens.css (canonical source);
+   its @theme inline block maps every token into the Tailwind theme. */
+@import "tailwindcss";
+@import "./styles/tokens.css";
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-base);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible focus everywhere: 2px ring with offset (DESIGN.md). */
+  :focus-visible {
+    outline: var(--ring-w) solid var(--ring);
+    outline-offset: var(--ring-offset);
+  }
+}
+
+@layer base {
+  /* Narrow viewports spend proportionally more of their width on padding, so
+     the gutter tightens rather than staying a fixed 24px. At 768px this
+     returns 16px of usable width per side. */
+  @media (width <= 48rem) {
+    :root {
+      --gutter: 1rem;
+    }
+  }
+}
+
+@layer components {
+  /* Caps a block at a readable measure inside the much wider page container.
+     Applied to prose and single-column form panels so raising --container-max
+     to 110rem does not stretch a label-control pair across a 1760px row. */
+  .measure {
+    max-width: var(--measure-max);
+  }
+
+  /* Form field grid.
+     Replaces the fixed `sm:grid-cols-2`, which sized every field to half the
+     container - so the same "ID" input was 350px in a wide pane and would be
+     560px at the new container width. auto-fit gives as many columns as fit,
+     and the 22rem CAP is the part that matters: a field stops growing at a
+     width appropriate to its content instead of absorbing the whole row.
+     Leftover space stays empty rather than being distributed into the tracks.
+
+     min(100%, 16rem) as the floor keeps a single column from overflowing a
+     narrow phone pane, where 16rem would otherwise exceed the container. */
+  .field-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 22rem));
+    align-items: start;
+  }
+
+  /* A field that needs the full row (JSON blobs, PEM, long descriptions). */
+  .field-grid > .field-wide {
+    grid-column: 1 / -1;
+    max-width: var(--measure-max);
+  }
+
+  /* Extends small controls to the 44px minimum hit area (DESIGN.md). */
+  .hit-target {
+    position: relative;
+  }
+
+  .hit-target::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--tap-target));
+    height: max(100%, var(--tap-target));
+    transform: translate(-50%, -50%);
+  }
+
+  /* Skeleton shimmer, disabled under reduced motion (spec section 2). */
+  .skeleton-pulse {
+    animation: skeleton-pulse 1.6s var(--motion-ease-in-out) infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  /* Live-stream pulse: the one ambient animation allowed (DESIGN.md). */
+  .stream-pulse {
+    animation: stream-pulse 1.6s var(--motion-ease-in-out) infinite;
+  }
+
+  @keyframes stream-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-pulse,
+    .stream-pulse {
+      animation: none;
+    }
+  }
+
+  .sr-only-focusable {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sr-only-focusable:focus-visible {
+    position: fixed;
+    left: var(--space-2);
+    top: var(--space-2);
+    z-index: var(--z-toast);
+    width: auto;
+    height: auto;
+    clip-path: none;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+  }
+}

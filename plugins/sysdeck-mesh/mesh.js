@@ -5,7 +5,22 @@
  * Queries Kubernetes services via `kubectl get svc -A -o json`. Renders
  * the service list with namespaces. Falls back to a hint card when
  * kubectl is absent or the cluster is unreachable.
+ *
+ * v0.1.4 FIX + SECURITY: the table used to read svc.metadata.* /
+ * svc.spec.*, but bridge/mesh.py returns a FLATTENED shape
+ * {name, namespace, type, clusterIP, ports} — any populated cluster
+ * threw a TypeError and the panel died. Names/namespace values come
+ * from kubectl output and are now escaped too (0.3.0 audit).
  */
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = renderSkeleton();
@@ -22,11 +37,11 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${items.map((svc) => `
                         <tr>
-                            <td><span class="suite-badge info">${svc.metadata.namespace}</span></td>
-                            <td>${svc.metadata.name}</td>
-                            <td class="suite-muted">${svc.spec.type ?? '—'}</td>
-                            <td class="suite-table-mono">${svc.spec.clusterIP ?? '—'}</td>
-                            <td class="suite-table-mono suite-muted">${(svc.spec.ports ?? []).map((p) => `${p.port}/${p.protocol}`).join(', ') || '—'}</td>
+                            <td><span class="suite-badge info">${escapeHtml(svc.namespace)}</span></td>
+                            <td>${escapeHtml(svc.name)}</td>
+                            <td class="suite-muted">${escapeHtml(svc.type ?? '—')}</td>
+                            <td class="suite-table-mono">${escapeHtml(svc.clusterIP ?? '—')}</td>
+                            <td class="suite-table-mono suite-muted">${escapeHtml((svc.ports ?? []).join(', ') || '—')}</td>
                         </tr>
                     `).join('') || '<tr><td colspan="5" class="suite-muted">No services. Confirm kubectl is installed and kubeconfig is reachable.</td></tr>'}
                 </tbody>

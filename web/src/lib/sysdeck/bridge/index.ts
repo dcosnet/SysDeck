@@ -30,6 +30,9 @@ import * as jellyfin from './jellyfin'
 import * as photos from './photos'
 import * as monitoring from './monitoring'
 import * as modules from './modules'
+import * as klanker from './klanker'
+import * as cockpitmodules from './cockpitmodules'
+import * as shell from './shell'
 
 export const BRIDGE_MODULES: Record<string, BridgeModule> = {
   overview: overview as unknown as BridgeModule,
@@ -60,4 +63,7 @@ export const BRIDGE_MODULES: Record<string, BridgeModule> = {
   photos: photos as unknown as BridgeModule,
   monitoring: monitoring as unknown as BridgeModule,
   modules: modules as unknown as BridgeModule,
+  klanker: klanker as unknown as BridgeModule,
+  cockpitmodules: cockpitmodules as unknown as BridgeModule,
+  shell: shell as unknown as BridgeModule,
 }

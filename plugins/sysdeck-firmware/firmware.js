@@ -5,6 +5,11 @@
  * Uses fwupdmgr to enumerate firmware devices and tpm2_pcrread to dump
  * the first PCR register (boot chain proof). Both calls fail closed
  * with informative cards when the underlying tools are absent.
+ *
+ * v0.1.4 SECURITY: fwupd device metadata (Name/Vendor/Version/Flags)
+ * comes from the device itself — a malicious peripheral controls those
+ * strings. All interpolations are now escaped (0.3.0 audit); the
+ * escapeHtml map is the full 5-char one the newer panels use.
  */
 
 export async function mount(panel, { bridge, EventBus }) {
@@ -26,10 +31,10 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${deviceList.map((d) => `
                         <tr>
-                            <td>${d.Name}</td>
-                            <td class="suite-muted">${d.Vendor ?? '—'}</td>
-                            <td class="suite-table-mono">${d.Version ?? '—'}</td>
-                            <td class="suite-muted">${(d.Flags ?? []).join(', ') || '—'}</td>
+                            <td>${escapeHtml(d.Name)}</td>
+                            <td class="suite-muted">${escapeHtml(d.Vendor ?? '—')}</td>
+                            <td class="suite-table-mono">${escapeHtml(d.Version ?? '—')}</td>
+                            <td class="suite-muted">${escapeHtml((d.Flags ?? []).join(', ') || '—')}</td>
                         </tr>
                     `).join('') || '<tr><td colspan="4" class="suite-muted">No fwupd devices.</td></tr>'}
                 </tbody>
@@ -44,7 +49,12 @@ export async function mount(panel, { bridge, EventBus }) {
 }
 
 function escapeHtml(s) {
-    return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function renderSkeleton() {

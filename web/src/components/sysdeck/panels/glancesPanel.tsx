@@ -191,7 +191,7 @@ export default function GlancesPanel() {
     <div className="space-y-4 pb-2">
       <PanelHeader
         title="Glances"
-        subtitle="live cross-domain monitor — the web edition ships its own webui (native /proc collectors, no Python dependency)"
+        subtitle="live cross-domain monitor — this console ships its own webui (native /proc collectors, no Python dependency)"
         source="live"
         actions={
           <Button

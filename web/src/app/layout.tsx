@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SysDeck — Web Edition",
+  title: "SysDeck",
   description:
-    "SysDeck v0.2.0 — twenty-six domain modules behind one dashboard. Containers, firewall, integrity, mesh, vaults, fleet, Kata, firmware, image building, Fester DAG orchestration and more.",
+    "SysDeck — every domain module behind one dashboard at dcos.net. Signed in with your Unix account (host PAM, the Cockpit way); detects every installed cockpit module — distro (machines, podman, networking, storage) and addon alike — and loads it into the console. Containers, firewall, integrity, mesh, vaults, fleet, Kata, firmware, image building, Fester DAG orchestration, the klanker-gate AI gateway and more.",
   keywords: [
     "SysDeck",
     "system dashboard",

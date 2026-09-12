@@ -392,3 +392,85 @@
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   v0.4.0 — unix-account login scene (cockpit-style, midnight identity)
+   ════════════════════════════════════════════════════════════════════ */
+
+/* aurora field — two slow-drifting teal blooms behind the login card.
+   All colors ride theme vars so every console theme re-skins it. */
+.sd-login-aurora {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(42% 55% at 24% 38%, color-mix(in oklab, var(--primary) 16%, transparent) 0%, transparent 70%),
+    radial-gradient(38% 48% at 76% 62%, color-mix(in oklab, var(--chart-2, var(--primary)) 11%, transparent) 0%, transparent 70%),
+    radial-gradient(30% 40% at 50% 85%, color-mix(in oklab, var(--chart-4, var(--primary)) 7%, transparent) 0%, transparent 70%);
+  animation: sd-aurora 16s ease-in-out infinite alternate;
+  filter: blur(2px);
+}
+
+@keyframes sd-aurora {
+  0%   { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+  50%  { transform: translate3d(1.5%, 1.5%, 0) scale(1.04); }
+  100% { transform: translate3d(-0.5%, 2%, 0) scale(0.98); }
+}
+
+/* error feedback: one shake, then still — the card re-mounts (key=)
+   so the animation replays on each rejected attempt */
+.sd-shake-once {
+  animation: sd-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes sd-shake {
+  10%, 90%      { transform: translateX(-1px); }
+  20%, 80%      { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60%      { transform: translateX(4px); }
+}
+
+/* user avatar chip (header menu + login previews) */
+.sd-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  background:
+    linear-gradient(
+      135deg,
+      oklch(from var(--primary) calc(l * 0.32) c h / 0.9),
+      oklch(from var(--primary) calc(l * 0.18) c h / 0.95)
+    );
+  color: oklch(from var(--primary) calc(l + 0.24) c h);
+  box-shadow:
+    inset 0 0 0 1px oklch(from var(--primary) calc(l + 0.18) c h / 0.35),
+    0 0 12px color-mix(in oklab, var(--primary) 25%, transparent);
+}
+
+/* session expiry countdown chip in the user menu */
+.sd-session-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+/* panel enter — used with framer-motion variants in the shell */
+.sd-panel-enter {
+  animation: sd-panel-in 0.28s ease-out;
+}
+
+@keyframes sd-panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* reduced motion: kill the scene motion, keep the meaning */
+@media (prefers-reduced-motion: reduce) {
+  .sd-login-aurora,
+  .sd-shake-once,
+  .sd-panel-enter,
+  .sd-live-dot,
+  .sd-flow-edge {
+    animation: none !important;
+  }
+}

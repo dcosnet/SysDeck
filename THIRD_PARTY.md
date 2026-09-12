@@ -6,14 +6,41 @@ integration invokes the external tool as a **separate process** via
 suite (MIT) and the external tools remain independent programs.
 
 This file satisfies the attribution requirements of the licenses listed
-below and documents every external integration point.
+below and documents every external integration point — including the
+one vendored project in the master tarball (klanker-gate, below).
 
 ---
 
-## Bundled Dependencies (shipped with the suite)
+## Vendored Project (master tarball only)
+
+### klanker-gate — the "Frosty Deno" LLM gateway (the AI Gateway module)
+
+**klanker-gate is not SysDeck's code.** All credit belongs to its
+author, **TykoDev**. The master tarball vendors the upstream tree
+unmodified, as a sibling of the suite, under its own Apache-2.0
+license; the suite's modules talk to it as a separate process over
+REST (same no-linking rule as every other entry in this file).
+
+| Field | Value |
+|-------|-------|
+| **Project** | klanker-gate ("Frosty Deno" LLM Gateway) |
+| **Author** | **TykoDev** |
+| **Source** | https://github.com/TykoDev/klanker-gate |
+| **License** | Apache-2.0 (full text kept at `klanker-gate/LICENSE`; notice kept at `klanker-gate/ATTRIBUTION.md`) |
+| **Vendored at** | `klanker-gate/` in the master tarball, own version **0.9.0** (independent from SysDeck's version) |
+| **SysDeck additions** | `klanker-gate/arch/` only (PKGBUILD, systemd unit, sysusers/tmpfiles, run wrapper, runbook) — zero upstream source changes |
+| **Modules** | `sysdeck-klanker` (cockpit edition: `bridge/klanker.py` + `plugins/sysdeck-klanker/`) and the web edition `klanker` bridge + AI Gateway panel — both are thin REST *clients* containing no upstream code |
+| **Integration** | REST against `KLANKER_URL` (default `http://127.0.0.1:8080`), `Authorization: Bearer <KLANKER_ADMIN_TOKEN>` — a separate process invoked over HTTP, never linked or embedded |
+| **License compat** | MIT suite + Apache-2.0 vendored tree redistributed in source form with LICENSE and notices retained — compliant; the two programs remain independent works |
+
+---
+
+## Bundled Dependencies (shipped with the suite itself)
 
 None. The suite is self-contained MIT-licensed code with no vendored
-third-party libraries.
+third-party libraries. (The master tarball separately vendors the
+klanker-gate project — see the section above; it is a sibling tree,
+not part of the suite.)
 
 ---
 
@@ -247,7 +274,7 @@ For MIT/LGPL/BSD/Apache tools: fully compatible with the suite's MIT license.
 
 ---
 
-## v0.0.46 — In-Suite 3rd-Party Module Installer
+### v0.0.46 — In-Suite 3rd-Party Module Installer
 
 Prior to v0.0.46, the only way to install third-party Cockpit modules
 (45Drives Navigator, cockpit-pacman, cockpit-identities, etc.) was the

@@ -1,0 +1,35 @@
+{
+    "version": 0,
+    "name": "sysdeck-klanker",
+    "requires": {
+        "cockpit": "239"
+    },
+    "menu": {
+        "index": {
+            "label": "AI Gateway",
+            "order": 47,
+            "keywords": [
+                {
+                    "matches": [
+                        "ai",
+                        "llm",
+                        "gateway",
+                        "openai",
+                        "anthropic",
+                        "gemini",
+                        "inference",
+                        "tokens",
+                        "virtual keys",
+                        "frosty",
+                        "deno",
+                        "mcp",
+                        "embedding",
+                        "completion",
+                        "chat"
+                    ]
+                }
+            ]
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline'"
+}

@@ -1,0 +1,49 @@
+.env
+.vscode
+.DS_Store
+*_creds*
+**/venv/
+**/__pycache__/**
+private.*
+.venv
+test-coverage-local.sh
+.harness-state/
+skillset-saves/
+.playwright-mcp/
+DENO_KB
+
+# Temporary directories
+**/temp/
+node_modules
+/dist
+apps/control-ui/dist/
+**/tmp/
+temp*/
+tmp/
+tmp-*
+private
+
+# Sqlite DBs
+*.db
+*.db-shm
+*.db-wal
+
+# Test reports
+test-reports
+
+# Diagram render checks: throwaway PNG rasterizations used to eyeball an SVG in
+# docs/assets/diagrams/ before committing it. Root-anchored so it cannot swallow
+# a real asset under docs/.
+/*-check.png
+
+# Editor / assistant
+.claude
+.cursor/
+
+# Build outputs
+build/
+data/
+target/
+
+# Coverage output (deno test --coverage)
+cov_profile/

@@ -1,0 +1,68 @@
+[Unit]
+Description=Frosty Deno LLM gateway (klanker-gate)
+Documentation=file:/usr/share/klanker-gate/docs/index.md
+Documentation=file:/usr/share/klanker-gate/permissions.md
+# The production bootstrap path fails closed without PostgreSQL, so the
+# service wants the local unit up when the state store is local. A remote
+# FROSTY_PG_URL simply ignores it; Restart=on-failure covers the race where
+# postgres is still finishing recovery when the gateway first probes it.
+Wants=network-online.target
+Wants=postgresql.service
+After=network-online.target postgresql.service
+
+[Service]
+Type=exec
+User=klanker
+Group=klanker
+EnvironmentFile=/etc/klanker-gate/env
+# WorkingDirectory is the gateway's write sandbox: the Deno permission
+# contract uses --allow-write=data (relative), so "data" resolves to
+# /var/lib/klanker-gate/data and nowhere else.
+WorkingDirectory=/var/lib/klanker-gate
+StateDirectory=klanker-gate
+RuntimeDirectory=klanker-gate
+
+# ── v0.3.0 security packaging guard (SysDeck arch/ layer) ────────────
+# Upstream binds 0.0.0.0 by default and, when FROSTY_ADMIN_TOKEN is
+# unset, serves the ENTIRE admin API (provider CRUD, key management,
+# /api/config/export?include_secrets=true) unauthenticated in
+# "explicit local-admin mode". That is fine on a loopback-only dev
+# box, but this package binds all interfaces — so the packaging layer
+# fails closed instead: no token, no start. See arch/SECURITY-UPSTREAM.md
+# (finding U-1/U-2). To run the upstream no-token mode anyway (only on
+# a firewall-isolated host), override with a drop-in:
+#   # /etc/systemd/system/klanker-gate.service.d/override.conf
+#   [Service]
+#   ExecStartPre=
+ExecStartPre=/bin/sh -c 'test -n "$FROSTY_ADMIN_TOKEN" || { echo "FROSTY_ADMIN_TOKEN is not set in /etc/klanker-gate/env — refusing to start an unauthenticated admin API on 0.0.0.0 (see /usr/share/klanker-gate/SECURITY-UPSTREAM.md)"; exit 1; }'
+
+ExecStart=/usr/bin/klanker-gate
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+KillSignal=SIGTERM
+
+# ── hardening (kept compatible with Deno/V8: no MemoryDenyWriteExecute,
+#    because the JIT needs W^X pages; no SystemCallFilter until validated
+#    against the Code Mode worker) ─────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+DevicePolicy=closed
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

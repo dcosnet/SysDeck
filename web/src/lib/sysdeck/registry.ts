@@ -6,7 +6,8 @@ import type { ModuleMeta } from './types'
 export const MODULES: ModuleMeta[] = [
   // ── system ──────────────────────────────────────────────
   { id: 'overview', name: 'Overview', group: 'system', order: 15, description: 'Host vitals — CPU, memory, disks, network, load and process summary, plus suite health.', status: 'live' },
-  { id: 'glances', name: 'Glances', group: 'system', order: 34, description: 'Live cross-domain system monitor in the Glances tradition — the web edition ships its own stunning webui.', status: 'live' },
+  { id: 'runbook', name: 'Run without Cockpit', group: 'system', order: 16, description: 'The standalone deployment runbook — run the whole console on the Next.js backend alone: dev, production build, systemd, proxy, troubleshooting.', status: 'live' },
+  { id: 'glances', name: 'Glances', group: 'system', order: 34, description: 'Live cross-domain system monitor in the Glances tradition — this console ships its own stunning webui.', status: 'live' },
   { id: 'sensors', name: 'Sensors', group: 'system', order: 35, description: 'Hardware sensor readings (temperature, fans, voltages) from /sys/class/hwmon.', status: 'live' },
   { id: 'fleet', name: 'Fleet', group: 'system', order: 26, description: 'Fleet compute — node registry and live host metrics.', status: 'hybrid' },
   { id: 'services', name: 'Service / Ports', group: 'system', order: 45, description: 'Enumerates every listening socket, cross-references the SERVICES_REGISTRY and edits service ports atomically.', status: 'live' },
@@ -43,6 +44,8 @@ export const MODULES: ModuleMeta[] = [
   // ── integrations ────────────────────────────────────────
   { id: 'monitoring', name: 'Monitoring', group: 'integrations', order: 43, description: 'Observability stack — Prometheus metrics and Grafana dashboards, with native metrics when absent.', status: 'hybrid' },
   { id: 'modules', name: '3rd-Party Modules', group: 'integrations', order: 44, description: 'In-suite installer for third-party Cockpit modules with inline license disclosure.', interactive: true, status: 'demo' },
+  { id: 'klanker', name: 'AI Gateway', group: 'integrations', order: 47, description: 'klanker-gate ("Frosty Deno") LLM gateway by TykoDev — local stack (ollama, llama.cpp, koboldcpp, LM Studio, SGLang, vLLM) and SaaS providers behind one OpenAI-compatible API, with live local-backend probes.', status: 'hybrid', interactive: true },
+  { id: 'cockpit', name: 'Cockpit Modules', group: 'integrations', order: 48, description: 'Every cockpit module detected on this host — distro modules (machines, podman, networking, storage...) and addons alike, scanned from /usr/share/cockpit manifests and loaded into this console with live backend probes.', status: 'hybrid', interactive: true },
 ]
 
 export const GROUP_LABELS: Record<string, string> = {
@@ -68,4 +71,4 @@ export function modulesByGroup(): { group: string; modules: ModuleMeta[] }[] {
     .filter((g) => g.modules.length > 0)
 }
 
-export const SYSDECK_VERSION = '0.2.0'
+export const SYSDECK_VERSION = '0.4.1'

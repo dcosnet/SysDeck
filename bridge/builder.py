@@ -485,6 +485,34 @@ BUILDER_LOGS_DIR = Path("/var/lib/sysdeck/builder/logs")
 BUILDER_ARTIFACTS_DIR = Path("/var/lib/sysdeck/builder/artifacts")
 
 
+# v0.1.4 SECURITY: build-ids and profile names are used to build paths
+# under the three dirs above (state/<id>.json, logs/<id>.log,
+# artifacts/<profile>/). They arrive as raw argv from the bridge caller,
+# so they must be validated as a single safe path component before any
+# filesystem use — otherwise `build-log ../../etc/foo` reads arbitrary
+# *.log files, `build-delete <traversal>` unlinks arbitrary *.json/*.log,
+# and `artifacts-clear /etc` would rmtree an arbitrary directory as root
+# (found by the 0.3.0 security audit; every one of these now fails closed).
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _valid_id(token: str) -> bool:
+    """True if token is a safe single path component (no separators,
+    no traversal, no leading dash, bounded length)."""
+    if not isinstance(token, str) or not token:
+        return False
+    return bool(_SAFE_ID_RE.match(token)) and ".." not in token
+
+
+def _under_dir(path: Path, root: Path) -> bool:
+    """True if (resolved) path stays inside root (defends symlinks + traversal)."""
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (ValueError, RuntimeError, OSError):
+        return False
+
+
 def _ensure_state_dirs() -> None:
     """Create the state/logs/artifacts dirs. Best-effort; the cockpit
     superuser channel handles root perms when needed."""
@@ -1091,6 +1119,15 @@ def profile_create(args: list[str]) -> dict[str, Any]:
     name = positional[0]
     backend_id = positional[1]
     base = positional[2] if len(positional) > 2 else None
+
+    # v0.1.4 SECURITY: the name becomes /etc/mkosi/profiles/<name>/ (or
+    # /etc/vmdb2/<name>.yaml) and is .format()-ed into the scaffold's
+    # config templates — a name containing '/', '..' or newlines is
+    # directory traversal plus arbitrary config-line injection into
+    # files that mkosi/vmdb2 later execute as root during builds.
+    if not _valid_id(name):
+        return {"error": "profile name must be a single path component "
+                        "(letters, digits, '.', '_', '-'; no slashes, no '..', no newlines)"}
 
     # Validate backend.
     valid_backends = ("mkosi", "vmdb2")
@@ -1870,6 +1907,10 @@ def build_log(args: list[str]) -> dict[str, Any]:
     if not args:
         return {"error": "build-id required"}
     build_id = args[0]
+    # v0.1.4 SECURITY: build-id is used to build the log path under
+    # BUILDER_LOGS_DIR — a traversal id would read arbitrary *.log files.
+    if not _valid_id(build_id):
+        return {"error": "invalid build-id (must be a single path component)"}
     log_path = _build_log_path(build_id)
     if not log_path.is_file():
         return {"error": f"no log file for build {build_id}", "build_id": build_id}
@@ -1893,6 +1934,11 @@ def artifacts(args: list[str]) -> dict[str, Any]:
     if not BUILDER_ARTIFACTS_DIR.is_dir():
         return {"artifacts": [], "by_profile": {}}
     profile_filter = args[0] if args else None
+    # v0.1.4 SECURITY: a traversal profile filter would list an
+    # arbitrary directory's contents (names/sizes/mtimes) to the browser.
+    if profile_filter and (not _valid_id(profile_filter) or
+                           not _under_dir(BUILDER_ARTIFACTS_DIR / profile_filter, BUILDER_ARTIFACTS_DIR)):
+        return {"error": "invalid profile filter (must be a single path component)"}
     by_profile: dict[str, list[dict[str, Any]]] = {}
     if profile_filter:
         profiles_to_scan = [BUILDER_ARTIFACTS_DIR / profile_filter]
@@ -1954,6 +2000,13 @@ def artifacts_clear(args: list[str]) -> dict[str, Any]:
     if not args:
         return {"error": "usage: artifacts-clear <profile>"}
     profile = args[0]
+    # v0.1.4 SECURITY: profile is used to rmtree a directory as root —
+    # an absolute path ('/etc') or traversal ('../..') escapes the
+    # artifacts root. Validate as a single component AND resolve the
+    # target under BUILDER_ARTIFACTS_DIR (same guard artifact-delete
+    # has had since v0.0.31; artifacts-clear missed it).
+    if not _valid_id(profile) or not _under_dir(BUILDER_ARTIFACTS_DIR / profile, BUILDER_ARTIFACTS_DIR):
+        return {"error": f"refusing to clear: '{profile}' is not a profile directory under {BUILDER_ARTIFACTS_DIR}"}
     prof_dir = BUILDER_ARTIFACTS_DIR / profile
     if not prof_dir.is_dir():
         return {"error": f"no artifacts directory for profile '{profile}'"}
@@ -1989,6 +2042,10 @@ def build_delete(args: list[str]) -> dict[str, Any]:
     if not args:
         return {"error": "build-id required"}
     build_id = args[0]
+    # v0.1.4 SECURITY: build-id builds state/log paths that get unlinked
+    # as root — a traversal id would delete arbitrary *.json/*.log files.
+    if not _valid_id(build_id):
+        return {"error": "invalid build-id (must be a single path component)"}
     delete_artifacts = "--artifacts" in args[1:]
     deleted = []
     errors = []
@@ -2018,13 +2075,18 @@ def build_delete(args: list[str]) -> dict[str, Any]:
             errors.append(f"log: {exc}")
     # Optionally delete artifacts.
     if delete_artifacts and profile_name:
-        prof_dir = BUILDER_ARTIFACTS_DIR / profile_name
-        if prof_dir.is_dir():
-            try:
-                shutil.rmtree(prof_dir)
-                deleted.append(str(prof_dir) + "/ (artifacts dir)")
-            except (PermissionError, OSError) as exc:
-                errors.append(f"artifacts: {exc}")
+        # v0.1.4 SECURITY: profile_name comes from the (deleted) state
+        # file's JSON — treat it as untrusted before rmtree'ing with it.
+        if not _valid_id(profile_name) or not _under_dir(BUILDER_ARTIFACTS_DIR / profile_name, BUILDER_ARTIFACTS_DIR):
+            errors.append(f"artifacts: refusing to clear untrusted profile path {profile_name!r}")
+        else:
+            prof_dir = BUILDER_ARTIFACTS_DIR / profile_name
+            if prof_dir.is_dir():
+                try:
+                    shutil.rmtree(prof_dir)
+                    deleted.append(str(prof_dir) + "/ (artifacts dir)")
+                except (PermissionError, OSError) as exc:
+                    errors.append(f"artifacts: {exc}")
     if not deleted and not errors:
         return {"error": f"no build found with id '{build_id}'"}
     return {"deleted": True, "build_id": build_id, "profile": profile_name,

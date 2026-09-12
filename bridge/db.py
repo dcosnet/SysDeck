@@ -288,6 +288,16 @@ def cmd_status(engine_id):
     return {"error": f"Unknown engine: {engine_id}"}
 
 
+def _engine_registered(engine_id):
+    """v0.1.4 SECURITY: True if engine_id is in ENGINE_REGISTRY. The
+    status/connections/query subcommands already resolved engines
+    through the registry, but start/stop/restart passed the raw id into
+    `systemctl <verb> {engine_id}.service` — letting any cockpit
+    session stop/start ARBITRARY system units as root (db stop sshd).
+    All unit-control subcommands now require a registered engine."""
+    return any(e[0] == engine_id for e in ENGINE_REGISTRY)
+
+
 def cmd_start(engine_id):
     # v0.0.32: was `sudo systemctl start` — but sudo shell-out from
     # the bridge fails when the cockpit user has no passwordless sudo
@@ -297,6 +307,9 @@ def cmd_start(engine_id):
     # action. The bridge runs systemctl directly as root (the cockpit
     # superuser channel escalates privileges via polkit when the
     # operator authenticates).
+    # v0.1.4 SECURITY: registry check added (see _engine_registered).
+    if not _engine_registered(engine_id):
+        return {"error": f"Unknown engine: {engine_id}"}
     rc, out, err = run_rc(["systemctl", "start", f"{engine_id}.service"], timeout=30)
     return {"action": "start", "engine": engine_id, "rc": rc,
             "output": out or err or "started", "success": rc == 0,
@@ -304,6 +317,10 @@ def cmd_start(engine_id):
 
 
 def cmd_stop(engine_id):
+    # v0.1.4 SECURITY: registry check added (see _engine_registered) —
+    # without it, `db stop sshd` stopped arbitrary root units.
+    if not _engine_registered(engine_id):
+        return {"error": f"Unknown engine: {engine_id}"}
     rc, out, err = run_rc(["systemctl", "stop", f"{engine_id}.service"], timeout=30)
     return {"action": "stop", "engine": engine_id, "rc": rc,
             "output": out or err or "stopped", "success": rc == 0,
@@ -311,6 +328,9 @@ def cmd_stop(engine_id):
 
 
 def cmd_restart(engine_id):
+    # v0.1.4 SECURITY: registry check added (see _engine_registered).
+    if not _engine_registered(engine_id):
+        return {"error": f"Unknown engine: {engine_id}"}
     rc, out, err = run_rc(["systemctl", "restart", f"{engine_id}.service"], timeout=30)
     return {"action": "restart", "engine": engine_id, "rc": rc,
             "output": out or err or "restarted", "success": rc == 0,
@@ -331,13 +351,30 @@ def cmd_connections(engine_id):
 
 
 def cmd_query(engine_id, sql):
-    """Execute a SQL query against an engine (SQL family only)."""
-    # Safety: refuse DDL/DML for certain contexts
+    """Execute a read-only SQL query against an engine (SQL family only).
+
+    v0.1.4 SECURITY: the old comment said "refuse DDL/DML" but no check
+    existed — any statement (DROP DATABASE, COPY ... TO PROGRAM) ran as
+    root through psql/mysql/sqlite. The guard is now real: only
+    SELECT/WITH/SHOW/EXPLAIN/DESCRIBE/PRAGMA-first-token statements
+    pass. Mutations belong in the engine's own tooling, not in a
+    dashboard query box.
+    """
     for e in ENGINE_REGISTRY:
         if e[0] == engine_id:
             family, cli = e[2], e[5]
             if family != "sql" and engine_id not in ("clickhouse", "timescaledb", "duckdb"):
                 return {"error": "Query only supported for SQL-family engines"}
+            # v0.1.4 SECURITY: read-only statement guard.
+            tokens = (sql or "").lstrip("(\t\r\n ").split(None, 1)
+            first_token = tokens[0].upper() if tokens else ""
+            read_only = first_token in (
+                "SELECT", "WITH", "SHOW", "EXPLAIN", "DESCRIBE", "DESC",
+                "PRAGMA", "TABLE", "ANALYZE",
+            )
+            if not read_only:
+                return {"error": "read-only queries only — DDL/DML is rejected "
+                                "(first token was not a read statement)"}
             if cli == "psql":
                 out = run(["psql", "-tAc", sql], timeout=30)
             elif cli in ("mysql", "mariadb"):

@@ -295,6 +295,34 @@ def info(args: list[str]) -> dict[str, Any]:
     return fn(args) if fn else {}
 
 
+def _pkg_name_ok(pkg: str) -> bool:
+    """v0.1.4 SECURITY: package names are passed to the system package
+    manager as one argv element. A leading dash turns them into manager
+    OPTIONS (pacman --config=…, dnf --setopt=…) and a URL makes dnf
+    fetch a remote RPM — argument injection, not shell injection. One
+    safe component: no leading dash, no whitespace/control chars, no
+    URL scheme, bounded length."""
+    return (
+        isinstance(pkg, str)
+        and 0 < len(pkg) <= 256
+        and not pkg.startswith("-")
+        and "://" not in pkg
+        and not re.search(r"[\s\x00\x1b]", pkg)
+    )
+
+
+def _first_pkg_arg(args: list[str]) -> str | None:
+    """v0.1.4 FIX: firewall.py's install-backend used to call this
+    helper as `packages.py install -- <pkgs…>` (a `--` argv separator,
+    shell convention) — install() read args[0] == '--' and the
+    backend-install path has been broken since it shipped. Skip any
+    leading '--' separators instead of choking on them."""
+    for a in args:
+        if a != "--":
+            return a
+    return None
+
+
 def install(args: list[str]) -> dict[str, str]:
     """Install a package — actually runs the package manager via subprocess.
 
@@ -315,7 +343,14 @@ def install(args: list[str]) -> dict[str, str]:
     """
     if not args:
         return {"error": "No package name provided"}
-    pkg = args[0]
+    pkg = _first_pkg_arg(args)
+    if not pkg:
+        return {"error": "No package name provided"}
+    if not _pkg_name_ok(pkg):
+        return {"error": f"invalid package name: {pkg!r}"}
+    # _pkg_name_ok already rejects leading-dash/URL names (argument
+    # injection), so no '--' end-of-options separator is needed here —
+    # pacman in particular does not accept one.
     cmd_map = {"pacman": ["pacman", "-S", "--noconfirm", pkg],
                "dnf": ["dnf", "install", "-y", pkg],
                "apt": ["apt", "install", "-y", pkg]}
@@ -336,7 +371,11 @@ def remove(args: list[str]) -> dict[str, str]:
     """Remove a package — actually runs the package manager. See install()."""
     if not args:
         return {"error": "No package name provided"}
-    pkg = args[0]
+    pkg = _first_pkg_arg(args)
+    if not pkg:
+        return {"error": "No package name provided"}
+    if not _pkg_name_ok(pkg):
+        return {"error": f"invalid package name: {pkg!r}"}
     cmd_map = {"pacman": ["pacman", "-R", "--noconfirm", pkg],
                "dnf": ["dnf", "remove", "-y", pkg],
                "apt": ["apt", "remove", "-y", pkg]}
@@ -354,7 +393,11 @@ def update(args: list[str]) -> dict[str, str]:
     """Update a package — actually runs the package manager. See install()."""
     if not args:
         return {"error": "No package name provided"}
-    pkg = args[0]
+    pkg = _first_pkg_arg(args)
+    if not pkg:
+        return {"error": "No package name provided"}
+    if not _pkg_name_ok(pkg):
+        return {"error": f"invalid package name: {pkg!r}"}
     cmd_map = {"pacman": ["pacman", "-S", "--noconfirm", pkg],
                "dnf": ["dnf", "upgrade", "-y", pkg],
                "apt": ["apt", "upgrade", "-y", pkg]}

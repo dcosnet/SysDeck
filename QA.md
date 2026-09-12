@@ -1072,3 +1072,135 @@ PASS — guard fails with a clear, actionable message naming the exact file, lin
 ### 11. Honest accounting
 
 The v0.0.27 release notes claimed "each subcommand now verified against the actual COMMANDS dict." That claim was overstated — the verification was hand-done at authoring time and was incomplete. The new `check-bridge-subcommands` guard makes the verification automatic, continuous, and enforced at build time. Hand-verification rots; machine verification doesn't.
+
+# MoE Quality Assurance Pass — v0.4.0 (Unix Login Edition)
+
+## v0.4.0 QA — unix-account login + web console revision
+
+**Scope:** the 0.4.0 revision replaces the 0.3.1 shared-password login
+with Unix-account (PAM) login in the web edition and gives the web
+console a visual revision. The cockpit edition is untouched; guards
+were re-run to prove it.
+
+### 1. Authentication core
+
+- `web/scripts/pam-auth.py` exercised against the live host PAM stack
+  (wrong password → `PAM_AUTH_ERR`, code 7, clean exit 1; malformed
+  JSON → `bad-json`; oversized credentials rejected). The conversation
+  callback allocates replies from libc (strdup/malloc) — verified
+  heap-clean across repeated invocations (no `free(): invalid pointer`
+  after the fix).
+- Login route policy matrix verified by curl:
+  - pre-auth: every `/api/*` → 401; page server-renders login screen.
+  - wrong username and wrong password return the identical generic
+    `incorrect username or password` (no account enumeration).
+  - failure cap: 6th bad attempt within the window → 429 with
+    Retry-After (per-IP AND per-username buckets).
+  - `pam+local` mode: PAM-definitive-failure falls through to the
+    SdUser scrypt store; seeded account authenticates; v2 cookie minted.
+  - wedged helper (timeout/protocol) → fail CLOSED (401), never a
+    silent fallback. pam-only with missing helper → 503 setup error.
+
+### 2. Session integrity
+
+- v2 token format `v2.<expMs>.<userB64url>.<hmac-sha256>`: forged
+  signature rejected by the console route layer AND by the fester
+  service (REST + WS upgrade path) — both derive the HMAC from the
+  shared SQLite secret.
+- v1 (0.3.1) tokens still verify (legacy session, user=null) —
+  upgrade continuity confirmed by code inspection of both verifiers.
+- Logout clears the cookie (maxAge 0) and audits with the unix
+  username as actor; login-failed audits never contain the attempted
+  secret.
+
+### 3. Cockpit edition compatibility (the operator's requirement)
+
+- `make check`: **ALL PASS** — metainfo structure + 26 launchables,
+  28/28 manifests conform, Makefile recipes tab-indented, no broken
+  cockpit imports, no `python3 -m sysdeck.bridge` calls, **218
+  bridge.js calls cross-checked against 28 Python COMMANDS dicts**,
+  version sync across 9 release surfaces, `py_compile` + `node --check`
+  clean, 254/254 unit tests (version-sync test now pins 0.4.0).
+- Zero changes under `bridge/`, `plugins/`, `shared/`, `standalone-plugins/`
+  (except `bridge/__init__.py` version string + packaging metadata).
+
+### 4. Web console revision
+
+- `bun run lint` clean. `tsc --noEmit` clean for every new/modified
+  file (pre-existing strictness complaints in vendored fester and
+  glances remain untouched, build unaffected — `ignoreBuildErrors`).
+- Visual QA (headless browser screenshots reviewed by a vision model):
+  login scene — "polished and premium, no visual bugs"; shell + account
+  menu — "release-quality, dropdown anchors perfectly"; fester and
+  firewall panels render with no error cards or overlaps.
+- prefers-reduced-motion kills the aurora/shake/panel transitions.
+
+### 5. Summary
+
+The 0.4.0 revision does what the operator asked: log in with a Unix
+account the way Cockpit does (host PAM decides), every cockpit module
+keeps working (guards green, tree untouched), and the web console now
+carries its identity — account menu, user@host, session countdown —
+at the fester quality bar. Remaining honest limits are documented in
+QUICKSTART §10.4: pam_unix needs root for arbitrary-user verification
+(use the root systemd unit, or pam+local), and the local scrypt store
+is an escape hatch, not the primary path.
+
+# MoE Quality Assurance Pass — v0.4.1 (cockpit module detection)
+
+## v0.4.1 QA — every installed cockpit module loads into the web console
+
+**Scope:** the console now performs the cockpit shell's own module
+discovery (filesystem manifest scan) and loads every detected module
+into its navigation. UI codenames retired; subtitle is dcos.net.
+
+### 1. Detection correctness
+
+- Live path exercised against a staged cockpit tree via
+  `SYSDECK_COCKPIT_SCAN`: machines + podman detected with correct
+  labels ("Virtual Machines", "Podman Containers"), menu orders, API
+  levels (`requires.cockpit`), real file counts and paths.
+- Exclusion rules match the cockpit shell's own: manifest without a
+  `menu` block (base1, shell) never listed; `sysdeck-*` never listed
+  (native panels exist). Verified with deliberately staged traps for
+  both rules.
+- Demo fallback: with no cockpit tree, the 11-module typical-distro
+  set returns badged DEMO with the honest note; backend `which()`
+  probes still run REAL binaries on that path.
+- `info` returns the full manifest JSON, recursive file listing with
+  sizes, and an on-demand backend version probe only when the binary
+  is present (list stays cheap).
+
+### 2. Console integration
+
+- Sidebar "Cockpit" group renders every detected module with a
+  LIVE/DEMO badge and per-module icons; active state routes as
+  `cm:<name>`; the ⌘K palette searches the same entries; the
+  Cockpit Modules hub table row-click deep-links into detail views.
+- Native-panel jumps (machines/podman → Containers & VMs verified in a
+  real browser click path) ride the same `sysdeck:goto` event the
+  overview callout uses.
+- Visual QA (browser screenshots + vision model): shell, machines
+  detail view, and hub all render clean — no overlaps, no cut-offs, no
+  error cards; sidebar subtitle (dcos.net) judged "clean and minimal".
+
+### 3. Branding sweep
+
+- No "web edition" string remains in any user-visible surface (login
+  banner, sidebar, status bar, overview badge, glances subtitle,
+  services/packages panel texts, page title/metadata). The subtitle is
+  a single URL — dcos.net — on the login banner, sidebar and status
+  bar. README version line dropped the edition codename.
+
+### 4. Cockpit edition + guards
+
+- `make check`: ALL PASS — 218 bridge.js calls / 28 modules, 28
+  manifests, version sync at 0.4.1 across all release surfaces,
+  254/254 unit tests. The cockpit tree itself is untouched.
+
+### 5. Summary
+
+The compatibility loop is closed: whatever cockpit modules the host
+has, the console has — detected from disk, badged honestly, probed
+live, and cross-linked to the native panels. With 0.4.0's unix login
+and this, the console/host pair is 100% aligned.

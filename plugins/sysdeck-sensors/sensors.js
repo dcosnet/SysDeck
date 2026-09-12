@@ -11,7 +11,21 @@
  *
  * Shows temperature, fan speed, and voltage readings grouped by
  * hardware adapter.
+ *
+ * v0.1.4 SECURITY: adapter names and sensor keys come from `sensors -j`
+ * output (driver-controlled chip labels — a malicious/things driver or
+ * SMBus device controls them) and error messages from spawn — all now
+ * escaped before innerHTML (0.3.0 audit).
  */
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 export async function mount(panel, { bridge, EventBus }) {
     panel.innerHTML = renderSkeleton();
@@ -44,10 +58,10 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${Object.entries(temps).flatMap(([adapter, sensors]) =>
                         Object.entries(sensors).map(([key, val]) => `<tr>
-                            <td>${adapter}</td>
-                            <td class="suite-table-mono">${key}</td>
-                            <td>${sensorVal(val, 'temp')}°C</td>
-                            <td class="suite-muted">${sensorCrit(val)}</td>
+                            <td>${escapeHtml(adapter)}</td>
+                            <td class="suite-table-mono">${escapeHtml(key)}</td>
+                            <td>${escapeHtml(sensorVal(val, 'temp'))}°C</td>
+                            <td class="suite-muted">${escapeHtml(sensorCrit(val))}</td>
                         </tr>`)
                     ).join('') || '<tr><td colspan="4" class="suite-muted">No temperature sensors.</td></tr>'}
                 </tbody>
@@ -60,9 +74,9 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${Object.entries(fans).flatMap(([adapter, sensors]) =>
                         Object.entries(sensors).map(([key, val]) => `<tr>
-                            <td>${adapter}</td>
-                            <td class="suite-table-mono">${key}</td>
-                            <td>${sensorVal(val, 'fan')} RPM</td>
+                            <td>${escapeHtml(adapter)}</td>
+                            <td class="suite-table-mono">${escapeHtml(key)}</td>
+                            <td>${escapeHtml(sensorVal(val, 'fan'))} RPM</td>
                         </tr>`)
                     ).join('') || '<tr><td colspan="3" class="suite-muted">No fan sensors.</td></tr>'}
                 </tbody>
@@ -75,9 +89,9 @@ export async function mount(panel, { bridge, EventBus }) {
                 <tbody>
                     ${Object.entries(voltages).flatMap(([adapter, sensors]) =>
                         Object.entries(sensors).map(([key, val]) => `<tr>
-                            <td>${adapter}</td>
-                            <td class="suite-table-mono">${key}</td>
-                            <td>${sensorVal(val, 'in')} V</td>
+                            <td>${escapeHtml(adapter)}</td>
+                            <td class="suite-table-mono">${escapeHtml(key)}</td>
+                            <td>${escapeHtml(sensorVal(val, 'in'))} V</td>
                         </tr>`)
                     ).join('') || '<tr><td colspan="3" class="suite-muted">No voltage sensors.</td></tr>'}
                 </tbody>
@@ -130,7 +144,7 @@ function renderSkeleton() {
 function renderError(err) {
     return `<div class="suite-card">
         <h3 class="suite-card-title">Sensors unavailable</h3>
-        <p class="suite-card-body suite-muted">${err.message || err}. Install lm_sensors (pacman -S lm_sensors) and ensure sensors-detect has been run.</p>
+        <p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}. Install lm_sensors (pacman -S lm_sensors) and ensure sensors-detect has been run.</p>
         <p class="suite-muted">cockpit-sensors (MIT) by ocristopfer — <a href="https://github.com/ocristopfer/cockpit-sensors">https://github.com/ocristopfer/cockpit-sensors</a></p>
     </div>`;
 }

@@ -1,0 +1,2260 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Frosty design system (ds-r2)</title>
+<style>
+/* =====================================================================
+   BEGIN TOKENS: generated from docs/design/tokens.css (ds-r2)
+   (The @theme Tailwind mapping block is omitted here; browsers do not
+   need it. Everything below END TOKENS consumes tokens only.)
+   ===================================================================== */
+:root {
+  color-scheme: light;
+
+  --background: oklch(0.99 0.002 265);             /* #fbfcfd */
+  --foreground: oklch(0.2 0.006 265);              /* #151619 */
+  --card: oklch(1 0 0);                            /* #ffffff */
+  --card-foreground: oklch(0.2 0.006 265);         /* #151619 */
+  --popover: oklch(1 0 0);                         /* #ffffff */
+  --popover-foreground: oklch(0.2 0.006 265);      /* #151619 */
+  --primary: oklch(0.24 0.006 265);                /* #1e1f22 */
+  --primary-foreground: oklch(0.985 0.001 265);    /* #fafafb */
+  --secondary: oklch(0.965 0.003 265);             /* #f2f3f5 */
+  --secondary-foreground: oklch(0.24 0.006 265);   /* #1e1f22 */
+  --muted: oklch(0.965 0.003 265);                 /* #f2f3f5 */
+  --muted-foreground: oklch(0.475 0.008 265);      /* #5a5c61 */
+  --accent: oklch(0.965 0.004 265);                /* #f2f3f6 */
+  --accent-foreground: oklch(0.24 0.006 265);      /* #1e1f22 */
+  --destructive: oklch(0.52 0.2 25);               /* #c21725 */
+  --destructive-foreground: oklch(0.985 0.005 25); /* #fdf9f8 */
+  --success: oklch(0.48 0.13 155);                 /* #00723b */
+  --success-foreground: oklch(0.985 0.005 155);    /* #f8fbf9 */
+  --warning: oklch(0.52 0.11 70);                  /* #8f5d14 */
+  --warning-foreground: oklch(0.985 0.005 80);     /* #fcfaf6 */
+  --info: oklch(0.5 0.15 255);                     /* #1762b6 */
+  --info-foreground: oklch(0.985 0.005 250);       /* #f8fafd */
+  --border: oklch(0.92 0.004 265);                 /* #e3e4e7 */
+  --input: oklch(0.89 0.004 265);                  /* #d9dbdd */
+  --ring: oklch(0.55 0.15 255);                    /* #2971c6 */
+  --chart-1: oklch(0.52 0.15 255);                 /* #1f68bc */
+  --chart-2: oklch(0.52 0.14 155);                 /* #007f43 */
+  --chart-3: oklch(0.6 0.12 70);                   /* #ad721c */
+  --chart-4: oklch(0.52 0.2 25);                   /* #c21725 */
+  --chart-5: oklch(0.5 0.18 300);                  /* #7541b8 */
+  --sidebar: oklch(0.975 0.003 265);               /* #f6f7f9 */
+  --sidebar-foreground: oklch(0.24 0.006 265);     /* #1e1f22 */
+  --sidebar-primary: oklch(0.52 0.15 255);         /* #1f68bc */
+  --sidebar-primary-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --sidebar-accent: oklch(0.955 0.005 265);        /* #eef0f4 */
+  --sidebar-accent-foreground: oklch(0.24 0.006 265);   /* #1e1f22 */
+  --sidebar-border: oklch(0.91 0.004 265);         /* #e0e1e4 */
+  --sidebar-ring: oklch(0.55 0.15 255);            /* #2971c6 */
+
+  --shadow-sm: 0 1px 2px 0 oklch(0.2 0.01 265 / 0.06);
+  --shadow-md: 0 2px 8px -1px oklch(0.2 0.01 265 / 0.1),
+               0 1px 2px 0 oklch(0.2 0.01 265 / 0.06);
+  --shadow-lg: 0 8px 24px -4px oklch(0.2 0.01 265 / 0.16),
+               0 2px 6px 0 oklch(0.2 0.01 265 / 0.08);
+
+  --font-family-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-family-mono: "JetBrains Mono", ui-monospace, "Cascadia Code",
+    "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --font-size-2xs: 0.6875rem;   --line-height-2xs: 1rem;
+  --font-size-xs: 0.75rem;      --line-height-xs: 1rem;
+  --font-size-sm: 0.8125rem;    --line-height-sm: 1.125rem;
+  --font-size-base: 0.84375rem; --line-height-base: 1.25rem;
+  --font-size-lg: 1rem;         --line-height-lg: 1.375rem;
+  --font-size-xl: 1.125rem;     --line-height-xl: 1.5rem;
+  --font-size-2xl: 1.3125rem;   --line-height-2xl: 1.625rem;
+  --font-size-3xl: 1.6875rem;   --line-height-3xl: 2rem;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.02em;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius: 0.375rem;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-full: 9999px;
+
+  --border-w: 1px;
+  --ring-w: 2px;
+  --ring-offset: 2px;
+  --control-h-sm: 1.875rem;
+  --control-h: 2.125rem;
+  --control-h-lg: 2.625rem;
+  --tap-target: 2.75rem;
+  --sidebar-width: 15rem;
+  --sidebar-width-icon: 3rem;
+  --container-max: 110rem;
+  --measure-max: 60rem;
+  --gutter: 1.5rem;
+  --opacity-disabled: 0.5;
+
+  --motion-fast: 100ms;
+  --motion-default: 150ms;
+  --motion-slow: 220ms;
+  --motion-spin: 800ms;
+  --motion-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-rise: -2px;
+  --motion-enter: 8px;
+
+  --z-sticky: 20;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.15 0.004 265);             /* #0a0b0d */
+  --foreground: oklch(0.985 0.001 265);            /* #fafafb */
+  --card: oklch(0.185 0.004 265);                  /* #121314 */
+  --card-foreground: oklch(0.985 0.001 265);       /* #fafafb */
+  --popover: oklch(0.205 0.004 265);               /* #161719 */
+  --popover-foreground: oklch(0.985 0.001 265);    /* #fafafb */
+  --primary: oklch(0.92 0.004 265);                /* #e3e4e7 */
+  --primary-foreground: oklch(0.205 0.006 265);    /* #16171a */
+  --secondary: oklch(0.255 0.004 265);             /* #222325 */
+  --secondary-foreground: oklch(0.985 0.001 265);  /* #fafafb */
+  --muted: oklch(0.235 0.004 265);                 /* #1d1e20 */
+  --muted-foreground: oklch(0.712 0.008 265);      /* #a0a2a7 */
+  --accent: oklch(0.255 0.006 265);                /* #212326 */
+  --accent-foreground: oklch(0.985 0.001 265);     /* #fafafb */
+  --destructive: oklch(0.665 0.19 25);             /* #f25855 */
+  --destructive-foreground: oklch(0.205 0.04 25);  /* #280e0c */
+  --success: oklch(0.72 0.15 155);                 /* #43c07a */
+  --success-foreground: oklch(0.18 0.04 155);      /* #021709 */
+  --warning: oklch(0.8 0.13 82);                   /* #e7b551 */
+  --warning-foreground: oklch(0.24 0.04 82);       /* #291d07 */
+  --info: oklch(0.68 0.13 250);                    /* #549de5 */
+  --info-foreground: oklch(0.17 0.04 250);         /* #021020 */
+  --border: oklch(0.27 0.006 265);                 /* #252629 */
+  --input: oklch(0.3 0.006 265);                   /* #2c2e31 */
+  --ring: oklch(0.62 0.13 252);                    /* #4589d2 */
+  --chart-1: oklch(0.66 0.14 252);                 /* #4b95e5 */
+  --chart-2: oklch(0.72 0.15 155);                 /* #43c07a */
+  --chart-3: oklch(0.8 0.13 82);                   /* #e7b551 */
+  --chart-4: oklch(0.665 0.19 25);                 /* #f25855 */
+  --chart-5: oklch(0.62 0.16 300);                 /* #966cd7 */
+  --sidebar: oklch(0.13 0.004 265);                /* #070709 */
+  --sidebar-foreground: oklch(0.8 0.006 265);      /* #bcbec2 */
+  --sidebar-primary: oklch(0.62 0.13 252);         /* #4589d2 */
+  --sidebar-primary-foreground: oklch(0.985 0.001 265); /* #fafafb */
+  --sidebar-accent: oklch(0.235 0.006 265);        /* #1d1e21 */
+  --sidebar-accent-foreground: oklch(0.985 0.001 265);  /* #fafafb */
+  --sidebar-border: oklch(0.24 0.006 265);         /* #1e1f22 */
+  --sidebar-ring: oklch(0.62 0.13 252);            /* #4589d2 */
+
+  --shadow-sm: 0 1px 2px 0 oklch(0.03 0.006 265 / 0.5);
+  --shadow-md: 0 2px 8px -1px oklch(0.03 0.006 265 / 0.6),
+               0 1px 2px 0 oklch(0.03 0.006 265 / 0.5);
+  --shadow-lg: 0 10px 30px -5px oklch(0.03 0.006 265 / 0.7),
+               0 4px 8px -2px oklch(0.03 0.006 265 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-default: 0ms;
+    --motion-slow: 0ms;
+    --motion-rise: 0px;
+    --motion-enter: 0px;
+  }
+}
+
+/* Doc-only layout tokens (this page's own measurements) */
+:root {
+  --swatch-min: 14rem;
+  --tile-min: 10rem;
+  --field-max: 20rem;
+  --dialog-max: 26rem;
+  --sheet-max: 24rem;
+  --toast-w: 20rem;
+  --frame-h: 34rem;
+  --frame-min: 52rem;
+  --dot-size: 0.5rem;
+  --statusbar-w: 3px;
+  --spec-col: 8rem;
+  --bar-h: 0.75rem;
+  --demo-box: 5rem;
+  --chart-h: 9rem;
+  --palette-w: 30rem;
+  --facet-w: 15rem;
+  --ico: 1rem;
+  --ico-sm: 0.875rem;
+}
+/* =====================================================================
+   END TOKENS
+   ===================================================================== */
+
+/* ---- base ---- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--background); }
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  min-height: 100dvh;
+}
+code, .mono { font-family: var(--font-family-mono); }
+a { color: var(--ring); text-underline-offset: 2px; }
+
+/* inline icons (self-contained SVG, stroke = currentColor) */
+.ico { width: var(--ico); height: var(--ico); flex-shrink: 0; display: inline-block; vertical-align: middle; }
+.ico-sm { width: var(--ico-sm); height: var(--ico-sm); }
+.ico svg, .ico-sm svg { width: 100%; height: 100%; display: block; }
+
+/* ---- page chrome ---- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  background: color-mix(in oklab, var(--background) 92%, transparent);
+  border-bottom: var(--border-w) solid var(--border);
+}
+.wordmark {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+.wordmark-tag {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--muted-foreground);
+  margin-left: var(--space-2);
+}
+main {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding: var(--space-8) var(--space-6) var(--space-16);
+  display: grid;
+  gap: var(--space-12);
+}
+.site-footer {
+  border-top: var(--border-w) solid var(--border);
+  padding: var(--space-4) var(--space-6);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}
+section { display: grid; gap: var(--space-4); align-content: start; }
+h2 {
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-2xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+h3 {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-lg);
+  font-weight: var(--font-weight-semibold);
+  margin-top: var(--space-4);
+}
+.lede { color: var(--muted-foreground); max-width: 62ch; }
+.note { font-size: var(--font-size-xs); color: var(--muted-foreground); max-width: 72ch; }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.row-top { align-items: flex-start; }
+.stack-2 { display: grid; gap: var(--space-2); }
+.w-sheet { max-width: var(--sheet-max); }
+h1 {
+  font-size: var(--font-size-3xl);
+  line-height: var(--line-height-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+.scroll-x { overflow-x: auto; padding-bottom: var(--space-2); }
+.scroll-x, .table-wrap, .frame-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll-x:hover, .table-wrap:hover, .frame-wrap:hover {
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-x::-webkit-scrollbar, .table-wrap::-webkit-scrollbar,
+.frame-wrap::-webkit-scrollbar { height: var(--space-2); }
+.scroll-x::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb,
+.frame-wrap::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-full);
+}
+.scroll-x:hover::-webkit-scrollbar-thumb, .table-wrap:hover::-webkit-scrollbar-thumb,
+.frame-wrap:hover::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ---- color swatches ---- */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--swatch-min), 100%), 1fr));
+  gap: var(--space-3);
+}
+.swatch {
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.chip { height: var(--space-10); border-bottom: var(--border-w) solid var(--border); }
+.swatch-meta { padding: var(--space-3); display: grid; gap: var(--space-1); }
+.swatch-name {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+.swatch-line {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-2xs);
+  color: var(--muted-foreground);
+}
+.chip-background { background: var(--background); }
+.chip-card { background: var(--card); }
+.chip-popover { background: var(--popover); }
+.chip-secondary { background: var(--secondary); }
+.chip-muted { background: var(--muted); }
+.chip-accent { background: var(--accent); }
+.chip-sidebar { background: var(--sidebar); }
+.chip-sidebar-accent { background: var(--sidebar-accent); }
+.chip-foreground { background: var(--foreground); }
+.chip-muted-foreground { background: var(--muted-foreground); }
+.chip-sidebar-foreground { background: var(--sidebar-foreground); }
+.chip-primary { background: var(--primary); }
+.chip-primary-foreground { background: var(--primary-foreground); }
+.chip-ring { background: var(--ring); }
+.chip-destructive { background: var(--destructive); }
+.chip-destructive-foreground { background: var(--destructive-foreground); }
+.chip-success { background: var(--success); }
+.chip-success-foreground { background: var(--success-foreground); }
+.chip-warning { background: var(--warning); }
+.chip-warning-foreground { background: var(--warning-foreground); }
+.chip-info { background: var(--info); }
+.chip-info-foreground { background: var(--info-foreground); }
+.chip-border { background: var(--border); }
+.chip-input { background: var(--input); }
+.chip-sidebar-border { background: var(--sidebar-border); }
+.chip-chart-1 { background: var(--chart-1); }
+.chip-chart-2 { background: var(--chart-2); }
+.chip-chart-3 { background: var(--chart-3); }
+.chip-chart-4 { background: var(--chart-4); }
+.chip-chart-5 { background: var(--chart-5); }
+
+/* ---- typography ---- */
+.type-row {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-w) solid var(--border);
+}
+.type-spec {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--muted-foreground);
+}
+.t-3xl { font-size: var(--font-size-3xl); line-height: var(--line-height-3xl); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight); }
+.t-2xl { font-size: var(--font-size-2xl); line-height: var(--line-height-2xl); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight); }
+.t-xl { font-size: var(--font-size-xl); line-height: var(--line-height-xl); font-weight: var(--font-weight-semibold); }
+.t-lg { font-size: var(--font-size-lg); line-height: var(--line-height-lg); font-weight: var(--font-weight-medium); }
+.t-base { font-size: var(--font-size-base); line-height: var(--line-height-base); }
+.t-sm { font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
+.t-xs { font-size: var(--font-size-xs); line-height: var(--line-height-xs); }
+.t-2xs { font-size: var(--font-size-2xs); line-height: var(--line-height-2xs); font-weight: var(--font-weight-medium); letter-spacing: var(--tracking-wide); }
+.mono-specimen {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  overflow-x: auto;
+}
+.mono-specimen .dim { color: var(--muted-foreground); }
+
+/* ---- spacing ---- */
+.space-row { display: flex; align-items: center; gap: var(--space-4); }
+.space-label {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+  width: var(--spec-col);
+  flex-shrink: 0;
+}
+.space-bar { height: var(--bar-h); background: var(--primary); border-radius: var(--radius-sm); }
+.bar-1 { width: var(--space-1); }
+.bar-2 { width: var(--space-2); }
+.bar-3 { width: var(--space-3); }
+.bar-4 { width: var(--space-4); }
+.bar-5 { width: var(--space-5); }
+.bar-6 { width: var(--space-6); }
+.bar-8 { width: var(--space-8); }
+.bar-10 { width: var(--space-10); }
+.bar-12 { width: var(--space-12); }
+.bar-16 { width: var(--space-16); }
+
+/* ---- radius + shadow ---- */
+.demo-box {
+  width: var(--demo-box);
+  height: var(--demo-box);
+  background: var(--muted);
+  border: var(--border-w) solid var(--input);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+}
+.r-sm { border-radius: var(--radius-sm); }
+.r-md { border-radius: var(--radius-md); }
+.r-lg { border-radius: var(--radius-lg); }
+.r-xl { border-radius: var(--radius-xl); }
+.r-full { border-radius: var(--radius-full); }
+.shadow-box {
+  width: calc(var(--demo-box) * 2);
+  padding: var(--space-4);
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+}
+.sh-sm { box-shadow: var(--shadow-sm); }
+.sh-md { box-shadow: var(--shadow-md); }
+.sh-lg { box-shadow: var(--shadow-lg); }
+
+/* ---- spec tables ---- */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+}
+table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+th {
+  text-align: left;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-wide);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+}
+td { padding: var(--space-2) var(--space-3); border-top: var(--border-w) solid var(--border); vertical-align: middle; }
+.cell-mono { font-family: var(--font-family-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cell-num { text-align: right; }
+.log-table tbody tr, .data-table tbody tr { transition: background-color var(--motion-fast) var(--motion-ease-out); }
+.log-table tbody tr:hover, .data-table tbody tr:hover { background: var(--accent); }
+.status-cell { display: flex; align-items: center; gap: var(--space-2); }
+.status-bar { width: var(--statusbar-w); align-self: stretch; border-radius: var(--radius-full); flex-shrink: 0; }
+.sb-success { background: var(--success); }
+.sb-destructive { background: var(--destructive); }
+.sb-info { background: var(--info); }
+/* sortable header */
+.th-sort { cursor: pointer; }
+.th-sort .th-inner { display: inline-flex; align-items: center; gap: var(--space-1); }
+.th-sort[aria-sort="ascending"], .th-sort[aria-sort="descending"] { color: var(--foreground); }
+.sort-ico { opacity: var(--opacity-disabled); }
+.th-sort[aria-sort="ascending"] .sort-ico, .th-sort[aria-sort="descending"] .sort-ico { opacity: 1; }
+/* icon actions in rows */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  position: relative;
+  transition: background-color var(--motion-fast) var(--motion-ease-out),
+              color var(--motion-fast) var(--motion-ease-out);
+}
+.icon-btn::after { content: ""; position: absolute; inset: 50% auto auto 50%; width: var(--tap-target); height: var(--tap-target); transform: translate(-50%, -50%); }
+.icon-btn:hover, .icon-btn.sim-hover { background: var(--accent); color: var(--foreground); }
+.icon-btn:focus-visible { outline: var(--ring-w) solid var(--ring); outline-offset: calc(-1 * var(--border-w)); }
+.icon-btn.danger:hover { color: var(--destructive); }
+.row-actions { display: inline-flex; gap: var(--space-1); }
+.secret-cell { display: inline-flex; align-items: center; gap: var(--space-1); }
+.secret-mask { font-family: var(--font-family-mono); letter-spacing: 0.1em; color: var(--muted-foreground); }
+/* pagination footer */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: var(--border-w) solid var(--border);
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}
+.pagination .mono { font-variant-numeric: tabular-nums; }
+.pagination-btns { display: flex; gap: var(--space-2); }
+
+/* ---- motion demo ---- */
+.motion-demo {
+  width: calc(var(--demo-box) * 3);
+  padding: var(--space-4);
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: transform var(--motion-fast) var(--motion-ease-out),
+              box-shadow var(--motion-fast) var(--motion-ease-out);
+}
+.motion-demo:hover {
+  transform: translateY(var(--motion-rise));
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-h);
+  padding-inline: var(--space-4);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--foreground);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: background-color var(--motion-fast) var(--motion-ease-out),
+              border-color var(--motion-fast) var(--motion-ease-out),
+              color var(--motion-fast) var(--motion-ease-out);
+}
+.btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--tap-target);
+  transform: translateY(-50%);
+}
+.btn:focus-visible, .sim-focus {
+  outline: var(--ring-w) solid var(--ring);
+  outline-offset: var(--ring-offset);
+}
+.btn:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
+.btn-sm { height: var(--control-h-sm); padding-inline: var(--space-3); }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover, .btn-primary.sim-hover {
+  background: color-mix(in oklab, var(--primary) 90%, var(--background));
+}
+.btn-secondary { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
+.btn-secondary:hover, .btn-secondary.sim-hover { background: var(--accent); }
+.btn-ghost { color: var(--foreground); }
+.btn-ghost:hover, .btn-ghost.sim-hover { background: var(--accent); color: var(--accent-foreground); }
+.btn-ghost.is-danger { color: var(--destructive); }
+.btn-ghost.is-danger:hover, .btn-ghost.is-danger.sim-hover {
+  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+.btn-destructive { background: var(--destructive); color: var(--destructive-foreground); }
+.btn-destructive:hover, .btn-destructive.sim-hover {
+  background: color-mix(in oklab, var(--destructive) 90%, var(--background));
+}
+.spinner {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: var(--ring-w) solid color-mix(in oklab, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--radius-full);
+  animation: spin var(--motion-spin) linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+.btn-matrix {
+  display: grid;
+  grid-template-columns: var(--spec-col) repeat(5, max-content);
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+}
+.matrix-label {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+/* ---- forms ---- */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--field-max), 100%), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.field { display: grid; gap: var(--space-1); }
+.field-label { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.input, .select, .textarea {
+  min-height: var(--control-h);
+  padding: var(--space-2) var(--space-3);
+  background: var(--card);
+  border: var(--border-w) solid var(--input);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  width: 100%;
+  transition: border-color var(--motion-fast) var(--motion-ease-out);
+}
+.textarea { font-family: var(--font-family-mono); font-size: var(--font-size-sm); line-height: var(--line-height-sm); resize: vertical; min-height: calc(var(--control-h) * 3); white-space: pre; overflow-x: auto; }
+.input::placeholder, .textarea::placeholder { color: var(--muted-foreground); }
+.input:focus-visible, .select:focus-visible, .textarea:focus-visible, .check:focus-visible,
+.switch input:focus-visible ~ .switch-track {
+  outline: var(--ring-w) solid var(--ring);
+  outline-offset: var(--ring-offset);
+}
+.input:disabled, .select:disabled { opacity: var(--opacity-disabled); background: var(--muted); }
+.field-help { font-size: var(--font-size-xs); color: var(--muted-foreground); }
+.field-error .input { border-color: var(--destructive); }
+.field-error .field-msg { font-size: var(--font-size-xs); color: var(--destructive); }
+.check-row { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap-target); }
+.check {
+  width: var(--space-4);
+  height: var(--space-4);
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+.check:disabled { opacity: var(--opacity-disabled); }
+.check-label { font-size: var(--font-size-sm); }
+.switch { position: relative; display: inline-flex; align-items: center; min-height: var(--tap-target); }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch-track {
+  width: var(--space-8);
+  height: var(--space-4);
+  background: var(--input);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: background-color var(--motion-default) var(--motion-ease-in-out);
+  pointer-events: none;
+}
+.switch-thumb {
+  position: absolute;
+  top: var(--ring-offset);
+  left: var(--ring-offset);
+  width: var(--space-3);
+  height: var(--space-3);
+  background: var(--card);
+  border-radius: var(--radius-full);
+  transition: transform var(--motion-default) var(--motion-ease-in-out);
+}
+.switch input:checked ~ .switch-track { background: var(--primary); }
+.switch input:checked ~ .switch-track .switch-thumb { transform: translateX(var(--space-4)); }
+.switch input:disabled ~ .switch-track { opacity: var(--opacity-disabled); }
+
+/* input with trailing affordance (search box, key field) */
+.input-affix { position: relative; display: flex; align-items: center; }
+.input-affix .input { padding-right: var(--space-12); }
+.input-affix .affix-lead { position: absolute; left: var(--space-3); color: var(--muted-foreground); pointer-events: none; }
+.input-affix .affix-lead ~ .input { padding-left: var(--space-8); }
+.kbd {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  line-height: var(--space-4);
+}
+.affix-kbd { position: absolute; right: var(--space-2); display: inline-flex; gap: var(--space-1); }
+
+/* ---- badges ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  min-height: var(--space-5);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+.badge-solid-success { background: var(--success); color: var(--success-foreground); }
+.badge-solid-warning { background: var(--warning); color: var(--warning-foreground); }
+.badge-solid-destructive { background: var(--destructive); color: var(--destructive-foreground); }
+.badge-solid-info { background: var(--info); color: var(--info-foreground); }
+.badge-solid-primary { background: var(--primary); color: var(--primary-foreground); }
+.badge-solid-neutral { background: var(--secondary); color: var(--secondary-foreground); }
+.badge-success {
+  color: var(--success);
+  background: color-mix(in oklab, var(--success) 16%, transparent);
+  border-color: color-mix(in oklab, var(--success) 32%, transparent);
+}
+.badge-warning {
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 16%, transparent);
+  border-color: color-mix(in oklab, var(--warning) 32%, transparent);
+}
+.badge-destructive {
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 16%, transparent);
+  border-color: color-mix(in oklab, var(--destructive) 32%, transparent);
+}
+.badge-info {
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 16%, transparent);
+  border-color: color-mix(in oklab, var(--info) 32%, transparent);
+}
+.badge-neutral {
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted-foreground) 16%, transparent);
+  border-color: color-mix(in oklab, var(--muted-foreground) 32%, transparent);
+}
+.pulse-dot {
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: var(--radius-full);
+  background: currentColor;
+  animation: pulse calc(var(--motion-spin) * 2) var(--motion-ease-in-out) infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse { 50% { opacity: var(--opacity-disabled); } }
+
+/* ---- chips / tags ---- */
+.chip-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  border: var(--border-w) solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+.chip-tag.mono { font-family: var(--font-family-mono); }
+.chip-tag .chip-x {
+  display: inline-grid; place-items: center;
+  width: var(--space-4); height: var(--space-4);
+  border-radius: var(--radius-full);
+  color: var(--muted-foreground); cursor: pointer;
+  position: relative;
+}
+.chip-tag .chip-x::after { content: ""; position: absolute; inset: 50% auto auto 50%; width: var(--tap-target); height: var(--tap-target); transform: translate(-50%, -50%); }
+.chip-tag .chip-x:hover { color: var(--foreground); }
+.tag-custom {
+  font-family: var(--font-family-mono);
+  letter-spacing: var(--tracking-wide);
+  text-transform: none;
+  background: color-mix(in oklab, var(--info) 16%, transparent);
+  border-color: color-mix(in oklab, var(--info) 32%, transparent);
+  color: var(--info);
+}
+
+/* ---- stat tiles ---- */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--tile-min), 100%), 1fr));
+  gap: var(--space-3);
+}
+.tile {
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+}
+.tile-label { font-size: var(--font-size-xs); color: var(--muted-foreground); }
+.tile-value {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-3xl);
+  line-height: var(--line-height-3xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+.tile-sub {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+}
+.tile-sub.up { color: var(--success); }
+.tile-sub.down { color: var(--destructive); }
+
+/* ---- chart cards ---- */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: var(--space-4);
+}
+.chart-card {
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.chart-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.chart-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.seg {
+  display: inline-flex;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.seg button {
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-2);
+  min-height: var(--control-h-sm);
+  cursor: pointer;
+}
+.seg button + button { border-left: var(--border-w) solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--secondary); color: var(--foreground); }
+.seg button:focus-visible { outline: var(--ring-w) solid var(--ring); outline-offset: calc(-1 * var(--ring-w)); }
+.plot { height: var(--chart-h); display: flex; align-items: flex-end; gap: var(--space-2); padding-top: var(--space-2); border-bottom: var(--border-w) solid var(--border); }
+.bar-col { flex: 1; border-radius: var(--radius-sm) var(--radius-sm) 0 0; min-width: var(--space-2); }
+.bc1 { background: var(--chart-1); }
+.bc2 { background: var(--chart-2); }
+.bc3 { background: var(--chart-3); }
+.line-plot { height: var(--chart-h); width: 100%; display: block; }
+.line-plot .grid-line { stroke: var(--border); stroke-width: 1; }
+.line-plot .series-1 { stroke: var(--chart-1); }
+.line-plot .series-2 { stroke: var(--chart-2); }
+.line-plot .series { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.line-plot .series-dot { fill: var(--card); stroke-width: 2; }
+.axis-row { display: flex; justify-content: space-between; font-family: var(--font-family-mono); font-size: var(--font-size-2xs); color: var(--muted-foreground); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.legend-item { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--muted-foreground); }
+.legend-dot { width: var(--space-2); height: var(--space-2); border-radius: var(--radius-full); flex-shrink: 0; }
+.ld1 { background: var(--chart-1); }
+.ld2 { background: var(--chart-2); }
+.ld3 { background: var(--chart-3); }
+.chart-empty {
+  height: var(--chart-h);
+  display: grid;
+  place-items: center;
+  gap: var(--space-1);
+  border: var(--border-w) dashed var(--input);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+  text-align: center;
+}
+.chart-empty .ce-title { font-size: var(--font-size-sm); color: var(--muted-foreground); }
+.chart-empty .ce-sub { font-size: var(--font-size-xs); color: var(--muted-foreground); }
+
+/* ---- sidebar nav ---- */
+.nav-demo {
+  width: var(--sidebar-width);
+  max-width: 100%;
+  background: var(--sidebar);
+  border: var(--border-w) solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+}
+.nav-search { margin-bottom: var(--space-1); }
+.nav-search .input {
+  height: var(--control-h-sm);
+  min-height: var(--control-h-sm);
+  background: color-mix(in oklab, var(--sidebar-accent) 60%, transparent);
+  border-color: var(--sidebar-border);
+  font-size: var(--font-size-sm);
+}
+.nav-label {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--muted-foreground);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-h-sm);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--sidebar-foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  transition: background-color var(--motion-fast) var(--motion-ease-out);
+}
+.nav-item .nav-grow { flex: 1; }
+.nav-item .chevron { transition: transform var(--motion-default) var(--motion-ease-out); color: var(--muted-foreground); }
+.nav-item.open .chevron { transform: rotate(90deg); }
+.nav-item .ext { color: var(--muted-foreground); }
+.nav-item:hover, .nav-item.sim-hover {
+  background: color-mix(in oklab, var(--sidebar-accent) 60%, transparent);
+}
+.nav-item:focus-visible {
+  outline: var(--ring-w) solid var(--sidebar-ring);
+  outline-offset: calc(-1 * var(--border-w));
+}
+.nav-item.active {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: var(--ring-w);
+  border-radius: var(--radius-full);
+  background: var(--sidebar-primary);
+}
+.nav-sub { display: grid; gap: var(--space-1); padding-left: var(--space-4); margin-left: var(--space-2); border-left: var(--border-w) solid var(--sidebar-border); }
+.nav-subitem {
+  display: flex; align-items: center; gap: var(--space-2);
+  min-height: var(--control-h-sm);
+  padding: var(--space-1) var(--space-3);
+  border: none; border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-family-sans); font-size: var(--font-size-sm);
+  text-align: left; cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease-out), background-color var(--motion-fast) var(--motion-ease-out);
+}
+.nav-subitem:hover { color: var(--sidebar-foreground); background: color-mix(in oklab, var(--sidebar-accent) 45%, transparent); }
+.nav-subitem:focus-visible { outline: var(--ring-w) solid var(--sidebar-ring); outline-offset: calc(-1 * var(--border-w)); }
+
+/* ---- command palette ---- */
+.palette {
+  width: var(--palette-w);
+  max-width: 100%;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.palette-input-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: var(--border-w) solid var(--border); }
+.palette-input-row .search-ico { color: var(--muted-foreground); }
+.palette-input {
+  flex: 1; border: none; background: transparent; color: var(--foreground);
+  font-family: var(--font-family-sans); font-size: var(--font-size-base); outline: none;
+}
+.palette-input::placeholder { color: var(--muted-foreground); }
+.palette-list { padding: var(--space-2); display: grid; gap: var(--space-1); max-height: 18rem; overflow-y: auto; }
+.palette-group { font-family: var(--font-family-mono); font-size: var(--font-size-2xs); letter-spacing: var(--tracking-wide); color: var(--muted-foreground); padding: var(--space-2) var(--space-2) var(--space-1); }
+.palette-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--foreground); font-size: var(--font-size-sm);
+}
+.palette-item .pi-grow { flex: 1; }
+.palette-item .pi-ico { color: var(--muted-foreground); }
+.palette-item.active { background: var(--accent); }
+
+/* ---- tabs + config panel ---- */
+.tabs { display: flex; gap: var(--space-1); border-bottom: var(--border-w) solid var(--border); }
+.tab {
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-h-sm);
+  border: none;
+  border-bottom: var(--ring-w) solid transparent;
+  margin-bottom: calc(-1 * var(--border-w));
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease-out);
+}
+.tab:hover, .tab.sim-hover { color: var(--foreground); }
+.tab:focus-visible { outline: var(--ring-w) solid var(--ring); outline-offset: var(--ring-offset); }
+.tab.active { color: var(--foreground); border-bottom-color: var(--primary); }
+.config-panel {
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.config-body { padding: var(--space-4); display: grid; gap: var(--space-4); }
+.config-footer {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  border-top: var(--border-w) solid var(--border);
+}
+.config-footer .foot-note { margin-right: auto; font-size: var(--font-size-xs); color: var(--muted-foreground); }
+
+/* ---- facet sidebar ---- */
+.facet {
+  width: var(--facet-w);
+  max-width: 100%;
+  background: var(--card);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.facet-group { display: grid; gap: var(--space-2); }
+.facet-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-family-mono); font-size: var(--font-size-2xs);
+  letter-spacing: var(--tracking-wide); color: var(--muted-foreground);
+  background: transparent; border: none; cursor: pointer; padding: 0; text-align: left;
+}
+.facet-head .chevron { transition: transform var(--motion-default) var(--motion-ease-out); }
+.facet-head[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
+.facet-list { display: grid; gap: var(--space-1); }
+.facet-opt { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); min-height: var(--control-h-sm); }
+.facet-opt .count { margin-left: auto; font-family: var(--font-family-mono); font-size: var(--font-size-2xs); color: var(--muted-foreground); }
+
+/* ---- toggle grid (custom-provider modal) ---- */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-2);
+}
+.toggle-cell {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  font-size: var(--font-size-sm);
+}
+
+/* ---- overlays ---- */
+.dialog-demo {
+  max-width: var(--dialog-max);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-4);
+}
+.dialog-wide { max-width: 34rem; }
+.dialog-title { font-size: var(--font-size-xl); line-height: var(--line-height-xl); font-weight: var(--font-weight-semibold); }
+.dialog-body { font-size: var(--font-size-sm); color: var(--muted-foreground); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.sheet-demo {
+  max-width: var(--sheet-max);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  display: grid;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.sheet-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--border-w) solid var(--border);
+  font-size: var(--font-size-sm);
+}
+.kv dt { color: var(--muted-foreground); }
+.kv dd { font-family: var(--font-family-mono); font-variant-numeric: tabular-nums; }
+.toast {
+  width: var(--toast-w);
+  max-width: 100%;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: var(--border-w) solid var(--border);
+  border-left: var(--statusbar-w) solid var(--success);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+}
+.toast-destructive { border-left-color: var(--destructive); }
+.toast-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.toast-body { font-size: var(--font-size-xs); color: var(--muted-foreground); }
+.alert {
+  border: var(--border-w) solid color-mix(in oklab, var(--destructive) 32%, transparent);
+  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+/* ---- empty state + skeleton ---- */
+.empty {
+  border: var(--border-w) dashed var(--input);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-6);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  text-align: center;
+}
+.empty-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.empty-body { font-size: var(--font-size-sm); color: var(--muted-foreground); max-width: 44ch; }
+.skeleton {
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, transparent,
+    color-mix(in oklab, var(--foreground) 8%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: shimmer calc(var(--motion-spin) * 2) linear infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+.sk-line { height: var(--space-3); }
+.sk-w-40 { width: 40%; }
+.sk-w-65 { width: 65%; }
+.sk-w-85 { width: 85%; }
+.sk-tile { height: var(--space-16); }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after, .pulse-dot, .spinner { animation: none; }
+}
+
+/* ---- application frame ---- */
+.frame-wrap { overflow-x: auto; }
+.frame {
+  display: flex;
+  min-width: var(--frame-min);
+  height: var(--frame-h);
+  background: var(--background);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.frame-side {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--sidebar);
+  border-right: var(--border-w) solid var(--sidebar-border);
+  padding: var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow: hidden;
+}
+.frame-brand {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--sidebar-foreground);
+}
+.frame-spacer { flex: 1; }
+.frame-version {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+  border-top: var(--border-w) solid var(--sidebar-border);
+}
+.frame-main {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  overflow: auto;
+}
+.frame-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div>
+    <span class="wordmark">Frosty</span><span class="wordmark-tag">design system / ds-r2</span>
+  </div>
+  <button type="button" class="btn btn-secondary" id="theme-toggle" aria-pressed="true">Switch to light theme</button>
+</header>
+
+<main>
+
+<section id="intro">
+  <h1>Frosty design system</h1>
+  <p class="lede">
+    Tokens and component rules for the Frosty Control Plane, a Deno-native LLM
+    gateway console. Revision ds-r2: a dense, near-neutral monochrome developer
+    console. Dark is the default theme; every value on this page is a token, and
+    this page is styled by the system it documents.
+  </p>
+  <p class="note">
+    Source of truth: docs/design/DESIGN.md and tokens.css. ds-r2 supersedes
+    ds-r1 (glacier-blue). Contrast figures below are computed (WCAG 2.x); each
+    shows dark, then light.
+  </p>
+</section>
+
+<section id="color">
+  <h2>Color</h2>
+  <p class="note">
+    Near-neutral monochrome (hue 265, chroma at or below 0.006). Primary is the
+    shadcn-neutral inversion: near-white in dark, near-black in light. One accent
+    blue (hue 252 to 255) is reserved for focus, links, and the active-nav
+    indicator, never a fill. Four semantic status hues plus a five-color chart
+    family.
+  </p>
+
+  <h3>Surfaces</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-background"></div><div class="swatch-meta">
+      <span class="swatch-name">--background</span>
+      <span class="swatch-line">dark oklch(0.15 0.004 265) #0a0b0d</span>
+      <span class="swatch-line">light oklch(0.99 0.002 265) #fbfcfd</span>
+      <span class="swatch-line">fg on it 18.84:1 AAA / 17.59:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-card"></div><div class="swatch-meta">
+      <span class="swatch-name">--card</span>
+      <span class="swatch-line">dark oklch(0.185 0.004 265) #121314</span>
+      <span class="swatch-line">light oklch(1 0 0) #ffffff</span>
+      <span class="swatch-line">fg on it 17.85:1 AAA / 18.10:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-popover"></div><div class="swatch-meta">
+      <span class="swatch-name">--popover</span>
+      <span class="swatch-line">dark oklch(0.205 0.004 265) #161719</span>
+      <span class="swatch-line">light oklch(1 0 0) #ffffff</span>
+      <span class="swatch-line">fg on it 17.16:1 AAA / 18.10:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-secondary"></div><div class="swatch-meta">
+      <span class="swatch-name">--secondary</span>
+      <span class="swatch-line">dark oklch(0.255 0.004 265) #222325</span>
+      <span class="swatch-line">light oklch(0.965 0.003 265) #f2f3f5</span>
+      <span class="swatch-line">label on it 15.10:1 AAA / 16.36:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-muted"></div><div class="swatch-meta">
+      <span class="swatch-name">--muted</span>
+      <span class="swatch-line">dark oklch(0.235 0.004 265) #1d1e20</span>
+      <span class="swatch-line">light oklch(0.965 0.003 265) #f2f3f5</span>
+      <span class="swatch-line">muted fg on it 6.52:1 AA / 6.04:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-accent"></div><div class="swatch-meta">
+      <span class="swatch-name">--accent</span>
+      <span class="swatch-line">dark oklch(0.255 0.006 265) #212326</span>
+      <span class="swatch-line">light oklch(0.965 0.004 265) #f2f3f6</span>
+      <span class="swatch-line">label on it 15.11:1 AAA / 14.86:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-sidebar"></div><div class="swatch-meta">
+      <span class="swatch-name">--sidebar</span>
+      <span class="swatch-line">dark oklch(0.13 0.004 265) #070709</span>
+      <span class="swatch-line">light oklch(0.975 0.003 265) #f6f7f9</span>
+      <span class="swatch-line">nav label 10.77:1 AAA / 15.31:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-sidebar-accent"></div><div class="swatch-meta">
+      <span class="swatch-name">--sidebar-accent</span>
+      <span class="swatch-line">dark oklch(0.235 0.006 265) #1d1e21</span>
+      <span class="swatch-line">light oklch(0.955 0.005 265) #eef0f4</span>
+      <span class="swatch-line">active label 15.97:1 AAA / 14.43:1 AAA</span>
+    </div></div>
+  </div>
+
+  <h3>Text</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--foreground</span>
+      <span class="swatch-line">dark oklch(0.985 0.001 265) #fafafb</span>
+      <span class="swatch-line">light oklch(0.2 0.006 265) #151619</span>
+      <span class="swatch-line">on canvas 18.84:1 AAA / 17.59:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-muted-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--muted-foreground</span>
+      <span class="swatch-line">dark oklch(0.712 0.008 265) #a0a2a7</span>
+      <span class="swatch-line">light oklch(0.475 0.008 265) #5a5c61</span>
+      <span class="swatch-line">on canvas 7.70:1 AAA / 6.49:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-sidebar-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--sidebar-foreground</span>
+      <span class="swatch-line">dark oklch(0.8 0.006 265) #bcbec2</span>
+      <span class="swatch-line">light oklch(0.24 0.006 265) #1e1f22</span>
+      <span class="swatch-line">on sidebar 10.77:1 AAA / 15.31:1 AAA</span>
+    </div></div>
+  </div>
+
+  <h3>Primary and accent</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-primary"></div><div class="swatch-meta">
+      <span class="swatch-name">--primary</span>
+      <span class="swatch-line">dark oklch(0.92 0.004 265) #e3e4e7</span>
+      <span class="swatch-line">light oklch(0.24 0.006 265) #1e1f22</span>
+      <span class="swatch-line">label on it 14.14:1 AAA / 15.76:1 AAA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-primary-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--primary-foreground</span>
+      <span class="swatch-line">dark oklch(0.205 0.006 265) #16171a</span>
+      <span class="swatch-line">light oklch(0.985 0.001 265) #fafafb</span>
+      <span class="swatch-line">ink label on primary fill</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-ring"></div><div class="swatch-meta">
+      <span class="swatch-name">--ring (accent blue)</span>
+      <span class="swatch-line">dark oklch(0.62 0.13 252) #4589d2</span>
+      <span class="swatch-line">light oklch(0.55 0.15 255) #2971c6</span>
+      <span class="swatch-line">vs canvas 5.41:1 / 4.76:1 (link AA, UI 3:1)</span>
+    </div></div>
+  </div>
+
+  <h3>Semantic status</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-success"></div><div class="swatch-meta">
+      <span class="swatch-name">--success</span>
+      <span class="swatch-line">dark oklch(0.72 0.15 155) #43c07a</span>
+      <span class="swatch-line">light oklch(0.48 0.13 155) #00723b</span>
+      <span class="swatch-line">as text on canvas 8.45:1 AAA / 5.89:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-success-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--success-foreground</span>
+      <span class="swatch-line">dark oklch(0.18 0.04 155) #021709</span>
+      <span class="swatch-line">light oklch(0.985 0.005 155) #f8fbf9</span>
+      <span class="swatch-line">on success 8.01:1 AAA / 5.82:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-warning"></div><div class="swatch-meta">
+      <span class="swatch-name">--warning</span>
+      <span class="swatch-line">dark oklch(0.8 0.13 82) #e7b551</span>
+      <span class="swatch-line">light oklch(0.52 0.11 70) #8f5d14</span>
+      <span class="swatch-line">as text on canvas 10.42:1 AAA / 5.49:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-warning-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--warning-foreground</span>
+      <span class="swatch-line">dark oklch(0.24 0.04 82) #291d07</span>
+      <span class="swatch-line">light oklch(0.985 0.005 80) #fcfaf6</span>
+      <span class="swatch-line">on warning 8.74:1 AAA / 5.40:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-destructive"></div><div class="swatch-meta">
+      <span class="swatch-name">--destructive</span>
+      <span class="swatch-line">dark oklch(0.665 0.19 25) #f25855</span>
+      <span class="swatch-line">light oklch(0.52 0.2 25) #c21725</span>
+      <span class="swatch-line">label on it 5.43:1 AA / 5.85:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-destructive-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--destructive-foreground</span>
+      <span class="swatch-line">dark oklch(0.205 0.04 25) #280e0c</span>
+      <span class="swatch-line">light oklch(0.985 0.005 25) #fdf9f8</span>
+      <span class="swatch-line">ink label dark, paper label light</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-info"></div><div class="swatch-meta">
+      <span class="swatch-name">--info</span>
+      <span class="swatch-line">dark oklch(0.68 0.13 250) #549de5</span>
+      <span class="swatch-line">light oklch(0.5 0.15 255) #1762b6</span>
+      <span class="swatch-line">as text on canvas 6.86:1 AA / 5.89:1 AA</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-info-foreground"></div><div class="swatch-meta">
+      <span class="swatch-name">--info-foreground</span>
+      <span class="swatch-line">dark oklch(0.17 0.04 250) #021020</span>
+      <span class="swatch-line">light oklch(0.985 0.005 250) #f8fafd</span>
+      <span class="swatch-line">on info 6.67:1 AA / 5.81:1 AA</span>
+    </div></div>
+  </div>
+
+  <h3>Chart family</h3>
+  <p class="note">
+    Five data-mark colors (blue, green, amber, red, violet) derived from the
+    accent blue and the semantic hues. Each verified at 3:1 or better as a
+    non-text mark on the card surface, in both themes.
+  </p>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-chart-1"></div><div class="swatch-meta">
+      <span class="swatch-name">--chart-1 blue</span>
+      <span class="swatch-line">dark oklch(0.66 0.14 252) #4b95e5</span>
+      <span class="swatch-line">light oklch(0.52 0.15 255) #1f68bc</span>
+      <span class="swatch-line">vs card 6.00:1 / 5.56:1 (3:1 pass)</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-chart-2"></div><div class="swatch-meta">
+      <span class="swatch-name">--chart-2 green</span>
+      <span class="swatch-line">dark oklch(0.72 0.15 155) #43c07a</span>
+      <span class="swatch-line">light oklch(0.52 0.14 155) #007f43</span>
+      <span class="swatch-line">vs card 8.00:1 / 5.09:1 (3:1 pass)</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-chart-3"></div><div class="swatch-meta">
+      <span class="swatch-name">--chart-3 amber</span>
+      <span class="swatch-line">dark oklch(0.8 0.13 82) #e7b551</span>
+      <span class="swatch-line">light oklch(0.6 0.12 70) #ad721c</span>
+      <span class="swatch-line">vs card 9.88:1 / 4.05:1 (3:1 pass)</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-chart-4"></div><div class="swatch-meta">
+      <span class="swatch-name">--chart-4 red</span>
+      <span class="swatch-line">dark oklch(0.665 0.19 25) #f25855</span>
+      <span class="swatch-line">light oklch(0.52 0.2 25) #c21725</span>
+      <span class="swatch-line">vs card 5.59:1 / 6.12:1 (3:1 pass)</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-chart-5"></div><div class="swatch-meta">
+      <span class="swatch-name">--chart-5 violet</span>
+      <span class="swatch-line">dark oklch(0.62 0.16 300) #966cd7</span>
+      <span class="swatch-line">light oklch(0.5 0.18 300) #7541b8</span>
+      <span class="swatch-line">vs card 4.80:1 / 6.55:1 (3:1 pass)</span>
+    </div></div>
+  </div>
+
+  <h3>Lines</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip chip-border"></div><div class="swatch-meta">
+      <span class="swatch-name">--border</span>
+      <span class="swatch-line">dark oklch(0.27 0.006 265) #252629</span>
+      <span class="swatch-line">light oklch(0.92 0.004 265) #e3e4e7</span>
+      <span class="swatch-line">decorative hairline, not a text pair</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-input"></div><div class="swatch-meta">
+      <span class="swatch-name">--input</span>
+      <span class="swatch-line">dark oklch(0.3 0.006 265) #2c2e31</span>
+      <span class="swatch-line">light oklch(0.89 0.004 265) #d9dbdd</span>
+      <span class="swatch-line">field border; identity via fill, label, ring</span>
+    </div></div>
+    <div class="swatch"><div class="chip chip-sidebar-border"></div><div class="swatch-meta">
+      <span class="swatch-name">--sidebar-border</span>
+      <span class="swatch-line">dark oklch(0.24 0.006 265) #1e1f22</span>
+      <span class="swatch-line">light oklch(0.91 0.004 265) #e0e1e4</span>
+      <span class="swatch-line">decorative hairline, not a text pair</span>
+    </div></div>
+  </div>
+</section>
+
+<section id="typography">
+  <h2>Typography</h2>
+  <p class="note">
+    System sans for UI, mono for telemetry. JetBrains Mono (OFL) is an optional
+    local enhancement; no font files ship. Compact scale, px-snapped, 13.5px
+    body. Small labels, large stat values.
+  </p>
+  <div>
+    <div class="type-row">
+      <span class="type-spec">3xl / 27px / 32px / 600 / tracking -0.01em / display, stat value</span>
+      <span class="t-3xl">Frosty Control Plane</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">2xl / 21px / 26px / 600 / tracking -0.01em / page title</span>
+      <span class="t-2xl">Configured providers</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">xl / 18px / 24px / 600 / section title</span>
+      <span class="t-xl">Gateway health</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">lg / 16px / 22px / 500 / emphasized body</span>
+      <span class="t-lg">Everything is a token; nothing is a guess.</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">base / 13.5px / 20px / 400 / body</span>
+      <span class="t-base">Frosty routes chat, embedding, image, and audio requests through one gateway, with budgets, virtual keys, and a live request log.</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">sm / 13px / 18px / 400 / secondary, nav</span>
+      <span class="t-sm">Helper text and secondary explanations sit at thirteen pixels.</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">xs / 12px / 16px / 400 / caption</span>
+      <span class="t-xs">Captions, badge labels, timestamps.</span>
+    </div>
+    <div class="type-row">
+      <span class="type-spec">2xs / 11px / 16px / 500 / tracking 0.02em / micro label</span>
+      <span class="t-2xs mono">p50 latency</span>
+    </div>
+  </div>
+  <h3>Mono telemetry specimens</h3>
+  <div class="mono-specimen">
+    <span>142 ms <span class="dim">latency</span>&nbsp;&nbsp; $0.0038 <span class="dim">cost</span>&nbsp;&nbsp; 1,204 <span class="dim">tokens</span></span>
+    <span>openai/gpt-4o&nbsp;&nbsp; anthropic/claude-sonnet&nbsp;&nbsp; ollama/llama3.3</span>
+    <span>gateway v0.9.0 on Deno 2.9.2&nbsp;&nbsp; sk-frosty-...a91c&nbsp;&nbsp; vk-team-42</span>
+    <span><span class="dim">07:41:23</span> POST /v1/chat/completions 200 (612 ms)</span>
+  </div>
+</section>
+
+<section id="spacing">
+  <h2>Spacing</h2>
+  <p class="note">Base unit 4px. Stay on the scale; when in doubt, round down.</p>
+  <div class="stack-2">
+    <div class="space-row"><span class="space-label">--space-1 &middot; 4px</span><div class="space-bar bar-1"></div></div>
+    <div class="space-row"><span class="space-label">--space-2 &middot; 8px</span><div class="space-bar bar-2"></div></div>
+    <div class="space-row"><span class="space-label">--space-3 &middot; 12px</span><div class="space-bar bar-3"></div></div>
+    <div class="space-row"><span class="space-label">--space-4 &middot; 16px</span><div class="space-bar bar-4"></div></div>
+    <div class="space-row"><span class="space-label">--space-5 &middot; 20px</span><div class="space-bar bar-5"></div></div>
+    <div class="space-row"><span class="space-label">--space-6 &middot; 24px</span><div class="space-bar bar-6"></div></div>
+    <div class="space-row"><span class="space-label">--space-8 &middot; 32px</span><div class="space-bar bar-8"></div></div>
+    <div class="space-row"><span class="space-label">--space-10 &middot; 40px</span><div class="space-bar bar-10"></div></div>
+    <div class="space-row"><span class="space-label">--space-12 &middot; 48px</span><div class="space-bar bar-12"></div></div>
+    <div class="space-row"><span class="space-label">--space-16 &middot; 64px</span><div class="space-bar bar-16"></div></div>
+  </div>
+</section>
+
+<section id="radius-shadow">
+  <h2>Radius and shadow</h2>
+  <p class="note">One radius family from a 6px base. Three shadow steps, near-neutral; dark theme leans on borders first. No glassmorphism.</p>
+  <div class="row">
+    <div class="demo-box r-sm">sm 4px</div>
+    <div class="demo-box r-md">md 6px</div>
+    <div class="demo-box r-lg">lg 8px</div>
+    <div class="demo-box r-xl">xl 12px</div>
+    <div class="demo-box r-full">full</div>
+  </div>
+  <div class="row">
+    <div class="shadow-box sh-sm">--shadow-sm</div>
+    <div class="shadow-box sh-md">--shadow-md</div>
+    <div class="shadow-box sh-lg">--shadow-lg</div>
+  </div>
+</section>
+
+<section id="motion">
+  <h2>Motion</h2>
+  <p class="note">
+    Motion is feedback, not decoration. Enter toward rest, exit away. Under
+    reduced motion every duration and travel distance collapses to zero.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>token</th><th>value</th><th>use</th></tr></thead>
+      <tbody>
+        <tr><td class="cell-mono">--motion-fast</td><td class="cell-mono">100ms</td><td>hover, focus, pressed feedback</td></tr>
+        <tr><td class="cell-mono">--motion-default</td><td class="cell-mono">150ms</td><td>menus, popovers, switches, tabs</td></tr>
+        <tr><td class="cell-mono">--motion-slow</td><td class="cell-mono">220ms</td><td>dialogs, sheets, command palette</td></tr>
+        <tr><td class="cell-mono">--motion-spin</td><td class="cell-mono">800ms</td><td>loading spinner rotation</td></tr>
+        <tr><td class="cell-mono">--motion-ease-out</td><td class="cell-mono">cubic-bezier(0.2, 0, 0, 1)</td><td>enters and hovers</td></tr>
+        <tr><td class="cell-mono">--motion-ease-in-out</td><td class="cell-mono">cubic-bezier(0.4, 0, 0.2, 1)</td><td>exits, reversible toggles</td></tr>
+        <tr><td class="cell-mono">--motion-rise</td><td class="cell-mono">-2px</td><td>hover lift distance</td></tr>
+        <tr><td class="cell-mono">--motion-enter</td><td class="cell-mono">8px</td><td>enter-toward travel</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="motion-demo">
+    <span class="t-sm">Hover this card: state feedback at motion-fast with ease-out. With reduced motion it stays put.</span>
+  </div>
+</section>
+
+<section id="components">
+  <h2>Components</h2>
+  <p class="note">Every state below is built purely from tokens. shadcn/ui is the one kit; these are its Frosty ds-r2 specimens.</p>
+
+  <h3>Buttons</h3>
+  <div class="scroll-x">
+    <div class="btn-matrix">
+      <span class="matrix-label"></span>
+      <span class="matrix-label">default</span>
+      <span class="matrix-label">hover</span>
+      <span class="matrix-label">focus-visible</span>
+      <span class="matrix-label">disabled</span>
+      <span class="matrix-label">loading</span>
+
+      <span class="matrix-label">primary</span>
+      <button type="button" class="btn btn-primary">Add provider</button>
+      <button type="button" class="btn btn-primary sim-hover">Add provider</button>
+      <button type="button" class="btn btn-primary sim-focus">Add provider</button>
+      <button type="button" class="btn btn-primary" disabled>Add provider</button>
+      <button type="button" class="btn btn-primary" disabled><span class="spinner"></span>Saving</button>
+
+      <span class="matrix-label">secondary</span>
+      <button type="button" class="btn btn-secondary">Refresh models</button>
+      <button type="button" class="btn btn-secondary sim-hover">Refresh models</button>
+      <button type="button" class="btn btn-secondary sim-focus">Refresh models</button>
+      <button type="button" class="btn btn-secondary" disabled>Refresh models</button>
+      <button type="button" class="btn btn-secondary" disabled><span class="spinner"></span>Syncing</button>
+
+      <span class="matrix-label">ghost</span>
+      <button type="button" class="btn btn-ghost">Cancel</button>
+      <button type="button" class="btn btn-ghost sim-hover">Cancel</button>
+      <button type="button" class="btn btn-ghost sim-focus">Cancel</button>
+      <button type="button" class="btn btn-ghost" disabled>Cancel</button>
+      <button type="button" class="btn btn-ghost" disabled><span class="spinner"></span>Closing</button>
+
+      <span class="matrix-label">destructive</span>
+      <button type="button" class="btn btn-destructive">Delete</button>
+      <button type="button" class="btn btn-destructive sim-hover">Delete</button>
+      <button type="button" class="btn btn-destructive sim-focus">Delete</button>
+      <button type="button" class="btn btn-destructive" disabled>Delete</button>
+      <button type="button" class="btn btn-destructive" disabled><span class="spinner"></span>Deleting</button>
+    </div>
+  </div>
+  <p class="note">
+    Primary is the monochrome emphasis surface (near-white in dark, near-black in
+    light). Visual height is 34px; a pseudo-element extends every button's hit
+    area to the 44px minimum. Hover and focus columns are simulated for the doc.
+  </p>
+
+  <h3>Inputs</h3>
+  <div class="field-grid">
+    <div class="field">
+      <label class="field-label" for="f-id">ID</label>
+      <input class="input" id="f-id" type="text" placeholder="openai">
+      <span class="field-help">Lowercase identifier, unique per provider.</span>
+    </div>
+    <div class="field">
+      <label class="field-label" for="f-url">URL</label>
+      <input class="input sim-focus" id="f-url" type="text" value="https://api.openai.com/v1">
+      <span class="field-help">Focused state: 2px ring, 2px offset.</span>
+    </div>
+    <div class="field">
+      <label class="field-label" for="f-key">API key</label>
+      <input class="input" id="f-key" type="password" value="0123456789abcdef">
+      <span class="field-help">Write-only; keeps the sk- prefix; never rendered back.</span>
+    </div>
+    <div class="field field-error">
+      <label class="field-label" for="f-base">Base URL</label>
+      <input class="input" id="f-base" type="text" value="not a url" aria-invalid="true">
+      <span class="field-msg" role="alert">Enter an absolute http or https URL.</span>
+    </div>
+    <div class="field">
+      <label class="field-label" for="f-dis">ID</label>
+      <input class="input" id="f-dis" type="text" value="openai" disabled>
+      <span class="field-help">Disabled while the provider is syncing.</span>
+    </div>
+    <div class="field">
+      <label class="field-label" for="f-type">Type</label>
+      <select class="select" id="f-type">
+        <option>openai</option><option>anthropic</option><option>azure</option>
+        <option>gemini</option><option>openrouter</option>
+      </select>
+      <span class="field-help">Native select, styled by tokens.</span>
+    </div>
+  </div>
+  <div class="field" style="max-width: 34rem">
+    <label class="field-label" for="f-pem">TLS certificate (PEM)</label>
+    <textarea class="textarea" id="f-pem" rows="4">-----BEGIN CERTIFICATE-----
+MIIC7TCCAdWgAwIBAgIUFrosty...
+-----END CERTIFICATE-----</textarea>
+    <span class="field-help">Monospace textarea for PEM blocks; identity carried by fill, label, and focus ring.</span>
+  </div>
+
+  <h3>Checkbox and switch</h3>
+  <div class="row">
+    <label class="check-row"><input class="check" type="checkbox"><span class="check-label">Enable streaming</span></label>
+    <label class="check-row"><input class="check" type="checkbox" checked><span class="check-label">Auto-refresh models</span></label>
+    <label class="check-row"><input class="check" type="checkbox" checked disabled><span class="check-label">Managed by environment</span></label>
+  </div>
+  <div class="row">
+    <label class="check-row"><span class="switch"><input type="checkbox" checked><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Enabled</span></label>
+    <label class="check-row"><span class="switch"><input type="checkbox"><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Code mode</span></label>
+    <label class="check-row"><span class="switch"><input type="checkbox" disabled><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Auto-execute (locked)</span></label>
+  </div>
+
+  <h3>Badges</h3>
+  <p class="note">Soft is the default shape for tables and lists; solid is reserved for the single most important state in a region.</p>
+  <div class="row">
+    <span class="badge badge-solid-success">success</span>
+    <span class="badge badge-solid-warning">warning</span>
+    <span class="badge badge-solid-destructive">error</span>
+    <span class="badge badge-solid-info">info</span>
+    <span class="badge badge-solid-primary">default</span>
+    <span class="badge badge-solid-neutral">neutral</span>
+  </div>
+  <p class="note">Application status vocabulary (locked D-CONTRACT strings). ds-r2: default is now a solid primary chip.</p>
+  <div class="row">
+    <span class="badge badge-success">set</span>
+    <span class="badge badge-warning">missing</span>
+    <span class="badge badge-solid-primary">default</span>
+    <span class="badge badge-success">enabled</span>
+    <span class="badge badge-neutral">disabled</span>
+    <span class="badge badge-info">http-sse</span>
+    <span class="badge badge-info">streamable-http</span>
+    <span class="badge badge-info">auto</span>
+    <span class="badge badge-info">read-only</span>
+    <span class="badge badge-warning">needs confirmation</span>
+    <span class="badge badge-success"><span class="pulse-dot"></span>streaming</span>
+    <span class="badge badge-destructive">disconnected</span>
+    <span class="badge badge-success">healthy</span>
+    <span class="badge badge-destructive">unhealthy</span>
+    <span class="badge badge-success">ok</span>
+    <span class="badge badge-destructive">error</span>
+  </div>
+  <p class="note">The pulse dot appears only on streaming (a real live-connection state), at most once per view.</p>
+
+  <h3>Chips and tags</h3>
+  <p class="note">Model chips (removable) and the CUSTOM provider tag.</p>
+  <div class="row">
+    <span class="chip-tag mono">gpt-4o<span class="chip-x" role="button" aria-label="Remove gpt-4o"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></span>
+    <span class="chip-tag mono">claude-sonnet<span class="chip-x" role="button" aria-label="Remove claude-sonnet"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></span>
+    <span class="chip-tag mono">llama-3.3-70b<span class="chip-x" role="button" aria-label="Remove llama-3.3-70b"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></span>
+    <span class="badge tag-custom">CUSTOM</span>
+  </div>
+
+  <h3>Stat tiles</h3>
+  <p class="note">Small xs label, large 3xl mono value, xs mono delta. Four-up on the dashboard.</p>
+  <div class="tile-grid">
+    <div class="tile"><span class="tile-label">Total requests</span><span class="tile-value">12,847</span><span class="tile-sub up">+312 last hour</span></div>
+    <div class="tile"><span class="tile-label">Success rate</span><span class="tile-value">98.4%</span><span class="tile-sub down">31 errors</span></div>
+    <div class="tile"><span class="tile-label">Avg latency</span><span class="tile-value">142 ms</span><span class="tile-sub">p95 611 ms</span></div>
+    <div class="tile"><span class="tile-label">Total cost</span><span class="tile-value">$3.82</span><span class="tile-sub">4.2M tokens</span></div>
+  </div>
+
+  <h3>Chart cards</h3>
+  <p class="note">Bar/line toggle, legend keyed to --chart-1..5, and a graceful empty state. Axes and gridlines use --muted-foreground and --border.</p>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-head">
+        <span class="chart-title">Requests per hour</span>
+        <div class="seg" role="group" aria-label="Chart type">
+          <button type="button" aria-pressed="true">Bar</button>
+          <button type="button" aria-pressed="false">Line</button>
+        </div>
+      </div>
+      <div class="plot" role="img" aria-label="Requests per hour, bar chart">
+        <div class="bar-col bc1" style="height:42%"></div>
+        <div class="bar-col bc1" style="height:58%"></div>
+        <div class="bar-col bc1" style="height:71%"></div>
+        <div class="bar-col bc1" style="height:64%"></div>
+        <div class="bar-col bc1" style="height:88%"></div>
+        <div class="bar-col bc1" style="height:76%"></div>
+        <div class="bar-col bc1" style="height:95%"></div>
+        <div class="bar-col bc1" style="height:69%"></div>
+      </div>
+      <div class="axis-row"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span></div>
+      <div class="legend"><span class="legend-item"><span class="legend-dot ld1"></span>requests</span></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-head">
+        <span class="chart-title">Latency p50 vs p95</span>
+        <div class="seg" role="group" aria-label="Chart type">
+          <button type="button" aria-pressed="false">Bar</button>
+          <button type="button" aria-pressed="true">Line</button>
+        </div>
+      </div>
+      <svg class="line-plot" viewBox="0 0 300 130" preserveAspectRatio="none" role="img" aria-label="Latency p50 and p95, line chart">
+        <line class="grid-line" x1="0" y1="32" x2="300" y2="32"></line>
+        <line class="grid-line" x1="0" y1="65" x2="300" y2="65"></line>
+        <line class="grid-line" x1="0" y1="98" x2="300" y2="98"></line>
+        <polyline class="series series-2" points="0,96 43,88 86,92 129,72 172,80 215,58 258,64 300,46"></polyline>
+        <polyline class="series series-1" points="0,60 43,50 86,58 129,36 172,44 215,26 258,34 300,18"></polyline>
+        <circle class="series-dot series-1" cx="300" cy="18" r="3"></circle>
+        <circle class="series-dot series-2" cx="300" cy="46" r="3"></circle>
+      </svg>
+      <div class="axis-row"><span>-6h</span><span>-3h</span><span>now</span></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot ld1"></span>p95 latency</span>
+        <span class="legend-item"><span class="legend-dot ld2"></span>p50 latency</span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-head">
+        <span class="chart-title">Cost by provider</span>
+        <div class="seg" role="group" aria-label="Chart type">
+          <button type="button" aria-pressed="true">Bar</button>
+          <button type="button" aria-pressed="false">Line</button>
+        </div>
+      </div>
+      <div class="chart-empty">
+        <span class="ce-title">No data available</span>
+        <span class="ce-sub">No requests recorded in this window.</span>
+      </div>
+      <div class="legend"><span class="legend-item"><span class="legend-dot ld3"></span>cost</span></div>
+    </div>
+  </div>
+
+  <h3>Data table (resources)</h3>
+  <p class="note">Sortable headers, inline secret reveal and copy, row edit and delete actions, status pills, pagination.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th class="th-sort" aria-sort="ascending"><span class="th-inner">id <svg class="ico-sm sort-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M5 6l3-3 3 3"/></svg></span></th>
+          <th class="th-sort" aria-sort="none"><span class="th-inner">type <svg class="ico-sm sort-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l3-3 3 3M5 10l3 3 3-3"/></svg></span></th>
+          <th>key</th>
+          <th>status</th>
+          <th class="cell-num">actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cell-mono">openai</td>
+          <td class="cell-mono">openai</td>
+          <td>
+            <span class="secret-cell">
+              <span class="secret-mask">sk-...............</span>
+              <button type="button" class="icon-btn" aria-label="Reveal key"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg></button>
+              <button type="button" class="icon-btn" aria-label="Copy key"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H3.5A1.5 1.5 0 0 0 2 4v5.5A1.5 1.5 0 0 0 3.5 11H5"/></svg></button>
+            </span>
+          </td>
+          <td><span class="status-cell"><span class="badge badge-solid-primary">default</span> <span class="badge badge-success">enabled</span></span></td>
+          <td class="cell-num"><span class="row-actions">
+            <button type="button" class="icon-btn" aria-label="Edit openai"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"/></svg></button>
+            <button type="button" class="icon-btn danger" aria-label="Delete openai"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.5 8h5l.5-8"/></svg></button>
+          </span></td>
+        </tr>
+        <tr>
+          <td class="cell-mono">anthropic</td>
+          <td class="cell-mono">anthropic</td>
+          <td>
+            <span class="secret-cell">
+              <span class="secret-mask">sk-...............</span>
+              <button type="button" class="icon-btn" aria-label="Reveal key"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg></button>
+              <button type="button" class="icon-btn" aria-label="Copy key"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H3.5A1.5 1.5 0 0 0 2 4v5.5A1.5 1.5 0 0 0 3.5 11H5"/></svg></button>
+            </span>
+          </td>
+          <td><span class="badge badge-success">enabled</span></td>
+          <td class="cell-num"><span class="row-actions">
+            <button type="button" class="icon-btn" aria-label="Edit anthropic"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"/></svg></button>
+            <button type="button" class="icon-btn danger" aria-label="Delete anthropic"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.5 8h5l.5-8"/></svg></button>
+          </span></td>
+        </tr>
+        <tr>
+          <td class="cell-mono">azure-eu <span class="badge tag-custom">CUSTOM</span></td>
+          <td class="cell-mono">azure</td>
+          <td><span class="secret-mask">not set</span></td>
+          <td><span class="status-cell"><span class="badge badge-warning">missing</span> <span class="badge badge-neutral">disabled</span></span></td>
+          <td class="cell-num"><span class="row-actions">
+            <button type="button" class="icon-btn" aria-label="Edit azure-eu"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"/></svg></button>
+            <button type="button" class="icon-btn danger" aria-label="Delete azure-eu"><svg class="ico-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.5 8h5l.5-8"/></svg></button>
+          </span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span class="mono">Showing 1-3 of 3</span>
+      <span class="pagination-btns">
+        <button type="button" class="btn btn-secondary btn-sm" disabled>Previous</button>
+        <button type="button" class="btn btn-secondary btn-sm" disabled>Next</button>
+      </span>
+    </div>
+  </div>
+
+  <h3>Log table</h3>
+  <div class="table-wrap">
+    <table class="log-table">
+      <thead>
+        <tr><th>time</th><th>status</th><th>request</th><th>model</th><th class="cell-num">latency</th><th class="cell-num">tokens</th><th class="cell-num">cost</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cell-mono">07:41:23</td>
+          <td><span class="status-cell"><span class="status-bar sb-success"></span><span class="badge badge-success">200</span></span></td>
+          <td class="cell-mono">POST /v1/chat/completions</td>
+          <td class="cell-mono">openai/gpt-4o</td>
+          <td class="cell-mono cell-num">612 ms</td>
+          <td class="cell-mono cell-num">1,204</td>
+          <td class="cell-mono cell-num">$0.0038</td>
+        </tr>
+        <tr>
+          <td class="cell-mono">07:41:19</td>
+          <td><span class="status-cell"><span class="status-bar sb-success"></span><span class="badge badge-success">200</span></span></td>
+          <td class="cell-mono">POST /v1/messages</td>
+          <td class="cell-mono">anthropic/claude-sonnet</td>
+          <td class="cell-mono cell-num">1,847 ms</td>
+          <td class="cell-mono cell-num">2,388</td>
+          <td class="cell-mono cell-num">$0.0121</td>
+        </tr>
+        <tr>
+          <td class="cell-mono">07:41:12</td>
+          <td><span class="status-cell"><span class="status-bar sb-destructive"></span><span class="badge badge-destructive">500</span></span></td>
+          <td class="cell-mono">POST /v1/embeddings</td>
+          <td class="cell-mono">openai/text-embedding-3</td>
+          <td class="cell-mono cell-num">93 ms</td>
+          <td class="cell-mono cell-num">0</td>
+          <td class="cell-mono cell-num">$0.0000</td>
+        </tr>
+        <tr>
+          <td class="cell-mono">07:41:08</td>
+          <td><span class="status-cell"><span class="status-bar sb-info"></span><span class="badge badge-info">processing</span></span></td>
+          <td class="cell-mono">POST /v1/chat/completions</td>
+          <td class="cell-mono">groq/llama-3.3-70b</td>
+          <td class="cell-mono cell-num">&hellip;</td>
+          <td class="cell-mono cell-num">&hellip;</td>
+          <td class="cell-mono cell-num">&hellip;</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Sidebar navigation</h3>
+  <div class="row row-top">
+    <nav class="nav-demo" aria-label="Sections">
+      <div class="nav-search input-affix">
+        <span class="affix-lead ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/></svg></span>
+        <input class="input" type="search" placeholder="Search" aria-label="Search">
+        <span class="affix-kbd" aria-hidden="true"><span class="kbd">Ctrl</span><span class="kbd">K</span></span>
+      </div>
+      <span class="nav-label">platform</span>
+      <button type="button" class="nav-item active">Providers</button>
+      <button type="button" class="nav-item">Virtual keys</button>
+      <button type="button" class="nav-item open" aria-expanded="true">
+        <span class="nav-grow">Extensions</span>
+        <span class="chevron ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg></span>
+      </button>
+      <div class="nav-sub">
+        <button type="button" class="nav-subitem">MCP servers</button>
+        <button type="button" class="nav-subitem">Cache</button>
+      </div>
+      <span class="nav-label">observe</span>
+      <button type="button" class="nav-item sim-hover">Logs</button>
+      <button type="button" class="nav-item">Status</button>
+      <button type="button" class="nav-item">
+        <span class="nav-grow">Docs</span>
+        <span class="ext ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3.5v9.5H13V10M9.5 3H13v3.5M13 3l-5 5"/></svg></span>
+      </button>
+    </nav>
+    <p class="note">
+      Top search box carries a Ctrl K / Cmd K affordance and opens the command
+      palette. Groups are nested-expandable (rotating chevron); an external-link
+      glyph marks items that leave the app. Active item: sidebar-accent fill,
+      sidebar-accent-foreground text, 2px sidebar-primary inset bar. Section
+      labels are 2xs mono muted.
+    </p>
+  </div>
+
+  <h3>Command palette</h3>
+  <div class="palette" role="dialog" aria-label="Command palette">
+    <div class="palette-input-row">
+      <span class="search-ico ico" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/></svg></span>
+      <input class="palette-input" type="text" placeholder="Type a command or search..." aria-label="Command input">
+      <span class="kbd">Esc</span>
+    </div>
+    <div class="palette-list">
+      <span class="palette-group">navigate</span>
+      <div class="palette-item active"><span class="pi-ico ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M6 2.5v11"/></svg></span><span class="pi-grow">Go to Providers</span><span class="kbd">G P</span></div>
+      <div class="palette-item"><span class="pi-ico ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M6 2.5v11"/></svg></span><span class="pi-grow">Go to Logs</span><span class="kbd">G L</span></div>
+      <span class="palette-group">actions</span>
+      <div class="palette-item"><span class="pi-ico ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg></span><span class="pi-grow">Add provider</span></div>
+      <div class="palette-item"><span class="pi-ico ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2.5h-2.5"/></svg></span><span class="pi-grow">Refresh models</span></div>
+    </div>
+  </div>
+  <p class="note">Opened by Cmd K / Ctrl K. Popover surface, shadow-lg, radius-xl. Highlighted row uses the accent wash; each row may carry a trailing mono shortcut hint.</p>
+
+  <h3>Tabs and configuration panel</h3>
+  <div class="config-panel">
+    <div class="tabs" style="padding: 0 var(--space-2)">
+      <button type="button" class="tab active">Overview</button>
+      <button type="button" class="tab">Keys</button>
+      <button type="button" class="tab sim-hover">Network</button>
+      <button type="button" class="tab">Models</button>
+    </div>
+    <div class="config-body">
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="c-id">Provider ID</label>
+          <input class="input" id="c-id" type="text" value="openai">
+        </div>
+        <div class="field">
+          <label class="field-label" for="c-base">Base URL</label>
+          <input class="input" id="c-base" type="text" value="https://api.openai.com/v1">
+        </div>
+      </div>
+      <div class="row">
+        <label class="check-row"><span class="switch"><input type="checkbox" checked><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Enabled</span></label>
+        <label class="check-row"><span class="switch"><input type="checkbox" checked><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Streaming</span></label>
+        <label class="check-row"><span class="switch"><input type="checkbox"><span class="switch-track"><span class="switch-thumb"></span></span></span><span class="check-label">Set as default</span></label>
+      </div>
+    </div>
+    <div class="config-footer">
+      <span class="foot-note mono">Unsaved changes</span>
+      <button type="button" class="btn btn-ghost is-danger">Remove</button>
+      <button type="button" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+  <p class="note">Horizontal tabs over a dense field grid with toggles and a sticky Save/Remove footer on the card surface.</p>
+
+  <h3>Filter and facet sidebar</h3>
+  <div class="row row-top">
+    <aside class="facet" aria-label="Filters">
+      <div class="input-affix">
+        <span class="affix-lead ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/></svg></span>
+        <input class="input" type="search" placeholder="Filter models" aria-label="Filter models" style="height: var(--control-h-sm); min-height: var(--control-h-sm)">
+      </div>
+      <div class="facet-group">
+        <button type="button" class="facet-head" aria-expanded="true"><span class="chevron ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg></span>provider</button>
+        <div class="facet-list">
+          <label class="facet-opt"><input class="check" type="checkbox" checked>openai<span class="count">42</span></label>
+          <label class="facet-opt"><input class="check" type="checkbox">anthropic<span class="count">18</span></label>
+          <label class="facet-opt"><input class="check" type="checkbox">groq<span class="count">7</span></label>
+        </div>
+      </div>
+      <div class="facet-group">
+        <button type="button" class="facet-head" aria-expanded="true"><span class="chevron ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg></span>modality</button>
+        <div class="facet-list">
+          <label class="facet-opt"><input class="check" type="checkbox" checked>chat<span class="count">51</span></label>
+          <label class="facet-opt"><input class="check" type="checkbox">embedding<span class="count">9</span></label>
+          <label class="facet-opt"><input class="check" type="checkbox">audio<span class="count">4</span></label>
+        </div>
+      </div>
+    </aside>
+    <p class="note">
+      Collapsible facet groups with a searchable list, checkbox groups, and mono
+      counts. Group headers are 2xs mono muted with a rotating chevron. Selected
+      facets echo as removable soft-neutral chips above the results.
+    </p>
+  </div>
+
+  <h3>Dialog</h3>
+  <div class="dialog-demo" role="dialog" aria-labelledby="dlg-t">
+    <span class="dialog-title" id="dlg-t">Delete provider</span>
+    <span class="dialog-body">
+      This removes openai-eu and its stored key from the gateway. Requests
+      already in flight are not interrupted.
+    </span>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost">Cancel</button>
+      <button type="button" class="btn btn-destructive">Delete</button>
+    </div>
+  </div>
+
+  <h3>Custom-provider modal</h3>
+  <div class="dialog-demo dialog-wide" role="dialog" aria-labelledby="cp-t">
+    <span class="dialog-title" id="cp-t">Add custom provider</span>
+    <div class="field-grid">
+      <div class="field">
+        <label class="field-label" for="cp-id">Provider ID</label>
+        <input class="input" id="cp-id" type="text" placeholder="my-gateway">
+      </div>
+      <div class="field">
+        <label class="field-label" for="cp-url">Base URL</label>
+        <input class="input" id="cp-url" type="text" placeholder="https://...">
+      </div>
+    </div>
+    <div>
+      <span class="field-label">Supported request types</span>
+      <div class="toggle-grid" style="margin-top: var(--space-2)">
+        <span class="toggle-cell">chat <span class="switch"><input type="checkbox" checked aria-label="chat"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+        <span class="toggle-cell">embedding <span class="switch"><input type="checkbox" checked aria-label="embedding"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+        <span class="toggle-cell">image <span class="switch"><input type="checkbox" aria-label="image"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+        <span class="toggle-cell">audio <span class="switch"><input type="checkbox" aria-label="audio"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+        <span class="toggle-cell">rerank <span class="switch"><input type="checkbox" aria-label="rerank"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+        <span class="toggle-cell">moderation <span class="switch"><input type="checkbox" aria-label="moderation"><span class="switch-track"><span class="switch-thumb"></span></span></span></span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost">Cancel</button>
+      <button type="button" class="btn btn-primary">Create provider</button>
+    </div>
+  </div>
+
+  <h3>Sheet (detail panel)</h3>
+  <div class="sheet-demo">
+    <div class="sheet-head">
+      <span class="sheet-title">Request details</span>
+      <button type="button" class="btn btn-ghost btn-sm">Close</button>
+    </div>
+    <dl>
+      <div class="kv"><dt>Request id</dt><dd>req_8f3ka92</dd></div>
+      <div class="kv"><dt>Model</dt><dd>openai/gpt-4o</dd></div>
+      <div class="kv"><dt>Latency</dt><dd>612 ms</dd></div>
+      <div class="kv"><dt>Prompt tokens</dt><dd>1,204</dd></div>
+      <div class="kv"><dt>Completion tokens</dt><dd>356</dd></div>
+      <div class="kv"><dt>Cost</dt><dd>$0.0038</dd></div>
+    </dl>
+  </div>
+
+  <h3>Toast</h3>
+  <div class="row row-top">
+    <div class="toast" role="status">
+      <span class="toast-title">Provider added</span>
+      <span class="toast-body">openai-eu is now serving requests.</span>
+    </div>
+    <div class="toast toast-destructive" role="status">
+      <span class="toast-title">Sync failed</span>
+      <span class="toast-body">MCP server weather did not respond within 30s.</span>
+    </div>
+  </div>
+
+  <h3>Error banner</h3>
+  <div class="alert" role="alert">
+    Could not reach the gateway: request to /api/config failed with 401.
+    Check the admin token and try again.
+  </div>
+
+  <h3>Empty state</h3>
+  <div class="empty">
+    <span class="empty-title">No providers configured</span>
+    <span class="empty-body">Add your first provider to start routing requests through the gateway.</span>
+    <button type="button" class="btn btn-primary">Add provider</button>
+  </div>
+
+  <h3>Loading skeleton</h3>
+  <div class="tile w-sheet">
+    <div class="skeleton sk-line sk-w-40"></div>
+    <div class="skeleton sk-tile"></div>
+    <div class="skeleton sk-line sk-w-85"></div>
+    <div class="skeleton sk-line sk-w-65"></div>
+  </div>
+
+  <h3>Focus ring</h3>
+  <div class="row">
+    <button type="button" class="btn btn-secondary sim-focus">Focused control</button>
+    <p class="note">
+      Every interactive element shows a 2px ring at 2px offset in the accent
+      blue; the ring passes 3:1 against both canvases and 4.5:1 as link text.
+    </p>
+  </div>
+</section>
+
+<section id="frame">
+  <h2>Application frame</h2>
+  <p class="note">
+    Component preview of the app shell built from tokens: sidebar with a search
+    box and nested nav, content region with a page header, stat tiles, a chart
+    card, and a paginated resource table.
+  </p>
+  <div class="frame-wrap">
+    <div class="frame">
+      <div class="frame-side">
+        <span class="frame-brand"><span class="wordmark" style="font-size: var(--font-size-lg)">Frosty</span></span>
+        <div class="nav-search input-affix">
+          <span class="affix-lead ico-sm" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/></svg></span>
+          <input class="input" type="search" placeholder="Search" aria-label="Search">
+          <span class="affix-kbd" aria-hidden="true"><span class="kbd">Ctrl</span><span class="kbd">K</span></span>
+        </div>
+        <button type="button" class="nav-item active">Providers</button>
+        <button type="button" class="nav-item">Virtual keys</button>
+        <button type="button" class="nav-item">Logs</button>
+        <button type="button" class="nav-item">Extensions</button>
+        <button type="button" class="nav-item">Status</button>
+        <span class="frame-spacer"></span>
+        <span class="frame-version">gateway v0.9.0 on Deno 2.9.2</span>
+      </div>
+      <div class="frame-main">
+        <div class="frame-header">
+          <span class="t-2xl">Configured providers</span>
+          <button type="button" class="btn btn-primary">Add provider</button>
+        </div>
+        <div class="tile-grid">
+          <div class="tile"><span class="tile-label">Providers</span><span class="tile-value">4</span><span class="tile-sub">1 disabled</span></div>
+          <div class="tile"><span class="tile-label">Requests today</span><span class="tile-value">12,847</span><span class="tile-sub up">98.4% ok</span></div>
+          <div class="tile"><span class="tile-label">Cost today</span><span class="tile-value">$3.82</span><span class="tile-sub">4.2M tokens</span></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <span class="chart-title">Requests per hour</span>
+            <div class="seg" role="group" aria-label="Chart type">
+              <button type="button" aria-pressed="true">Bar</button>
+              <button type="button" aria-pressed="false">Line</button>
+            </div>
+          </div>
+          <div class="plot" role="img" aria-label="Requests per hour">
+            <div class="bar-col bc1" style="height:48%"></div>
+            <div class="bar-col bc1" style="height:62%"></div>
+            <div class="bar-col bc1" style="height:55%"></div>
+            <div class="bar-col bc1" style="height:80%"></div>
+            <div class="bar-col bc1" style="height:70%"></div>
+            <div class="bar-col bc1" style="height:92%"></div>
+            <div class="bar-col bc1" style="height:66%"></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th class="th-sort" aria-sort="ascending"><span class="th-inner">id</span></th><th>type</th><th>key</th><th>status</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="cell-mono">openai</td><td class="cell-mono">openai</td>
+                <td><span class="badge badge-success">set</span></td>
+                <td><span class="badge badge-solid-primary">default</span> <span class="badge badge-success">enabled</span></td>
+              </tr>
+              <tr>
+                <td class="cell-mono">anthropic</td><td class="cell-mono">anthropic</td>
+                <td><span class="badge badge-success">set</span></td>
+                <td><span class="badge badge-success">enabled</span></td>
+              </tr>
+              <tr>
+                <td class="cell-mono">azure-eu</td><td class="cell-mono">azure</td>
+                <td><span class="badge badge-warning">missing</span></td>
+                <td><span class="badge badge-neutral">disabled</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <span class="mono">Showing 1-3 of 4</span>
+            <span class="pagination-btns">
+              <button type="button" class="btn btn-secondary btn-sm" disabled>Previous</button>
+              <button type="button" class="btn btn-secondary btn-sm">Next</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  Frosty design system, revision ds-r2 (supersedes ds-r1). Generated from
+  docs/design/DESIGN.md and tokens.css. 0 contrast failures across 64 checked
+  pairs in both themes.
+</footer>
+
+<script>
+(function () {
+  var btn = document.getElementById("theme-toggle");
+  var root = document.documentElement;
+  function sync() {
+    var dark = root.classList.contains("dark");
+    btn.textContent = dark ? "Switch to light theme" : "Switch to dark theme";
+    btn.setAttribute("aria-pressed", String(dark));
+  }
+  btn.addEventListener("click", function () {
+    root.classList.toggle("dark");
+    sync();
+  });
+  sync();
+})();
+</script>
+</body>
+</html>

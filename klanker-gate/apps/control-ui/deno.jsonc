@@ -1,0 +1,15 @@
+{
+  "tasks": {
+    "dev": "deno run -A npm:vite",
+    "build": "deno run -A npm:typescript@7.0.2/tsc && deno run -A npm:vite build",
+    "preview": "deno run -A npm:vite preview",
+    "check": "deno run -A npm:typescript@7.0.2/tsc",
+    "test": "deno run -A npm:vitest run"
+  },
+  "fmt": {
+    "exclude": ["node_modules", "dist"]
+  },
+  "lint": {
+    "exclude": ["node_modules", "dist"]
+  }
+}

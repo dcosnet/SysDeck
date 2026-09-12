@@ -21,6 +21,7 @@ Usage:
 """
 
 import json
+import re
 import subprocess
 import sys
 from typing import Any
@@ -96,6 +97,13 @@ def run_test(args: list[str]) -> dict[str, Any]:
             "error": "no test name provided",
         }
     test_name = args[0]
+    # v0.1.4 SECURITY: the test name is passed to `sysbench <name> run`
+    # as one argv element — a leading dash makes it an OPTION (e.g.
+    # --config=…), so validate it as a plain identifier (the sysbench
+    # builtin test vocabulary is cpu/memory/threads/mutex/fileio/oltp_*).
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", test_name) or test_name.startswith("-"):
+        return {"raw": "", "events_per_sec": None, "latency_ms": None,
+                "error": f"invalid sysbench test name: {test_name!r}"}
     # Some sysbench tests (fileio) require a prepare step before run.
     # We deliberately keep this simple — for arbitrary test names, just
     # invoke ``sysbench <name> run``. If the user wants fileio with

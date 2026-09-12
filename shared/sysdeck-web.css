@@ -1,0 +1,348 @@
+/*
+ * SysDeck — shared/sysdeck-web.css (v0.3.0)
+ *
+ * THE WEB-EDITION SKIN. Ports the design language of the SysDeck Web
+ * Edition 0.3.0 (the Next.js console — midnight theme, teal accent,
+ * soft-tinted badges, 10px radii, tabular numerals) onto the classic
+ * Cockpit plugin pages.
+ *
+ * How it loads: every plugin's index.html links BOTH stylesheets,
+ * in this order:
+ *
+ *     <link rel="stylesheet" href="../sysdeck-common/sysdeck.css" />
+ *     <link rel="stylesheet" href="../sysdeck-common/sysdeck-web.css" />
+ *
+ * Because this file loads second, its rules win at equal specificity —
+ * it only overrides what the web edition changed, and inherits the
+ * rest of the v0.0.20+ component vocabulary (.sysdeck-* and the
+ * .suite-* compatibility aliases).
+ *
+ * Reverting to the classic 0.1.x skin:
+ *     sudo rm /usr/share/cockpit/sysdeck-common/sysdeck-web.css
+ * (pages 404 the missing link and fall back to base sysdeck.css).
+ *
+ * Palette provenance — web edition globals.css [data-sd-theme=midnight]:
+ *     background #1e1e1e · card #2a2f38 · foreground #f0f0f0
+ *     muted #8a8f98 · primary #3fc9b0 (teal) · border rgba(255,255,255,.10)
+ *     success #34d399 · warn #f59e0b · danger #ef4444
+ */
+
+/* ── 1. design tokens ─────────────────────────────────────────────── */
+
+:root {
+    --sysdeck-bg:             #1e1e1e;
+    --sysdeck-fg:             #f0f0f0;
+    --sysdeck-muted:          #8a8f98;
+    --sysdeck-accent:         #3fc9b0;   /* teal — the web edition primary */
+    --sysdeck-accent-success: #34d399;   /* emerald */
+    --sysdeck-accent-warn:    #f59e0b;   /* amber */
+    --sysdeck-accent-danger:  #ef4444;   /* red */
+    --sysdeck-border:         rgba(255, 255, 255, 0.10);
+    --sysdeck-card-bg:        #2a2f38;
+
+    /* web-edition derived tokens (not in base sysdeck.css) */
+    --sysdeck-card-bg-2:      #232830;   /* nested / hover surfaces */
+    --sysdeck-ring:           rgba(63, 201, 176, 0.28);
+    --sysdeck-hover:          rgba(255, 255, 255, 0.06);
+    --sysdeck-hover-teal:     rgba(63, 201, 176, 0.07);
+    --sysdeck-radius:         10px;      /* web --radius .625rem */
+    --sysdeck-radius-sm:      6px;       /* buttons / inputs / badges */
+    --sysdeck-font-mono:      ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+/* ── 2. base typography + chrome ──────────────────────────────────── */
+
+body {
+    background: var(--sysdeck-bg);
+    color: var(--sysdeck-fg);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+::selection { background: rgba(63, 201, 176, 0.28); color: #f0f0f0; }
+
+a { color: var(--sysdeck-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+:focus-visible { outline: 2px solid var(--sysdeck-accent); outline-offset: 2px; border-radius: 2px; }
+
+/* thin dark scrollbars with a teal hover edge (matches sd-scroll) */
+* { scrollbar-width: thin; scrollbar-color: #3a4150 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: #3fc9b0; }
+
+.sysdeck-mono, .sysdeck-table-mono,
+.suite-mono, .suite-table-mono {
+    font-family: var(--sysdeck-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── 3. cards ─────────────────────────────────────────────────────── */
+
+.sysdeck-card, .suite-card {
+    background: var(--sysdeck-card-bg);
+    border: 1px solid var(--sysdeck-border);
+    border-radius: var(--sysdeck-radius);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.sysdeck-card-header, .suite-card-header { margin-bottom: 0.625rem; }
+
+.sysdeck-card-title, .suite-card-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.sysdeck-panel-title, .suite-panel-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+}
+
+.sysdeck-panel-subtitle, .suite-panel-subtitle {
+    margin: 0 0 1rem 0;
+    color: var(--sysdeck-muted);
+    font-size: 0.9rem;
+}
+
+/* ── 4. tables ────────────────────────────────────────────────────── */
+
+.sysdeck-table, .suite-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.sysdeck-table th, .suite-table th {
+    color: var(--sysdeck-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--sysdeck-border);
+}
+
+.sysdeck-table td, .suite-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--sysdeck-border);
+}
+
+.sysdeck-table tr:hover td, .suite-table tr:hover td {
+    background: var(--sysdeck-hover-teal);
+}
+
+/* ── 5. badges — soft-tinted, the web edition StateBadge look ─────── */
+
+.sysdeck-badge, .suite-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 5px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--sysdeck-fg);
+    border: 1px solid transparent;
+}
+
+.sysdeck-badge.success, .suite-badge.success {
+    background: rgba(52, 211, 153, 0.14);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.30);
+}
+
+.sysdeck-badge.warn, .suite-badge.warn {
+    background: rgba(245, 158, 11, 0.14);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.30);
+}
+
+.sysdeck-badge.danger, .suite-badge.danger {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.30);
+}
+
+.suite-badge.info {
+    background: rgba(63, 201, 176, 0.14);
+    color: #3fc9b0;
+    border-color: rgba(63, 201, 176, 0.30);
+}
+
+/* ── 6. buttons ───────────────────────────────────────────────────── */
+
+.sysdeck-btn, .suite-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: var(--sysdeck-fg);
+    border-radius: var(--sysdeck-radius-sm);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.sysdeck-btn:hover:not(:disabled), .suite-btn:hover:not(:disabled) {
+    background: var(--sysdeck-hover);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.sysdeck-btn:focus-visible, .suite-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--sysdeck-ring);
+}
+
+.sysdeck-btn:disabled, .suite-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.sysdeck-btn-ghost, .suite-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--sysdeck-muted);
+}
+
+/* primary — teal with dark text, exactly like the web edition button */
+.suite-btn-primary, .sysdeck-btn-primary {
+    background: var(--sysdeck-accent);
+    color: #0d1512;
+    border-color: var(--sysdeck-accent);
+    font-weight: 600;
+}
+
+.suite-btn-primary:hover:not(:disabled), .sysdeck-btn-primary:hover:not(:disabled) {
+    background: #2fb59e;                 /* darker teal, not blue */
+    border-color: #2fb59e;
+    color: #0d1512;
+}
+
+/* ── 7. forms ─────────────────────────────────────────────────────── */
+
+.suite-input, .sysdeck-input, input, select, textarea {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--sysdeck-border);
+    color: var(--sysdeck-fg);
+    padding: 0.4rem 0.625rem;
+    border-radius: var(--sysdeck-radius-sm);
+    font-family: inherit;
+    font-size: 0.875rem;
+}
+
+.suite-input:focus, .sysdeck-input:focus, input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--sysdeck-accent);
+    box-shadow: 0 0 0 3px var(--sysdeck-ring);
+}
+
+.suite-input::placeholder, input::placeholder, textarea::placeholder {
+    color: var(--sysdeck-muted);
+}
+
+input[type="checkbox"], input[type="radio"] { accent-color: var(--sysdeck-accent); }
+
+/* ── 8. stats + progress ──────────────────────────────────────────── */
+
+.suite-stat-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.15;
+    margin: 0.25rem 0;
+    font-family: var(--sysdeck-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.suite-stat-value.suite-warn { color: #fbbf24; }
+
+.suite-stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sysdeck-muted);
+    margin-bottom: 0.5rem;
+}
+
+.suite-progress, .sysdeck-progress {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.suite-progress-bar {
+    height: 100%;
+    background: var(--sysdeck-accent);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+.suite-progress-fill {
+    height: 100%;
+    background: var(--sysdeck-accent-success);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+/* ── 9. skeletons — teal-tinted shimmer ───────────────────────────── */
+
+.sysdeck-skeleton-line, .suite-skeleton-line {
+    background: linear-gradient(90deg,
+        rgba(63, 201, 176, 0.08) 0%,
+        rgba(255, 255, 255, 0.07) 50%,
+        rgba(63, 201, 176, 0.08) 100%);
+    background-size: 200% 100%;
+    animation: sysdeck-skeleton-pulse 1.5s ease-in-out infinite;
+    border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sysdeck-skeleton-line, .suite-skeleton-line { animation: none; }
+    .suite-progress-bar, .suite-progress-fill { transition: none; }
+}
+
+/* ── 10. misc refinements ─────────────────────────────────────────── */
+
+.sysdeck-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+
+.sysdeck-loading, .suite-loading {
+    color: var(--sysdeck-muted);
+    padding: 2rem;
+    text-align: center;
+    font-family: var(--sysdeck-font-mono);
+    font-size: 0.85rem;
+}
+
+/* pre / code blocks — dark wells like the web edition CodeBlock */
+pre, code.block {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--sysdeck-border);
+    border-radius: var(--sysdeck-radius-sm);
+    padding: 0.5rem 0.75rem;
+    font-family: var(--sysdeck-font-mono);
+    font-size: 0.8125rem;
+    overflow-x: auto;
+}
+
+/* alert-ish utility the v0.0.19 JS uses in some panels */
+.suite-alert {
+    border-radius: var(--sysdeck-radius-sm);
+    border: 1px solid var(--sysdeck-border);
+    background: var(--sysdeck-card-bg-2);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.85rem;
+}

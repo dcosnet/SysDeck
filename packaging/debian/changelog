@@ -1,3 +1,76 @@
+sysdeck (0.4.1-1) unstable; urgency=medium
+
+  * v0.4.1: cockpit module detection for the web console — every
+    installed cockpit module (distro modules like cockpit-machines and
+    cockpit-podman, addons, anything with a manifest menu entry) is
+    scanned from /usr/share/cockpit and loaded into the console
+    navigation: a "Cockpit" sidebar group with per-module detail views
+    (manifest, shipped files, backend version probes) and jumps to the
+    native panels covering each domain. SYSDECK_COCKPIT_SCAN adds
+    extra scan roots for staged trees. UI codenames retired — the
+    console subtitle is now dcos.net (login banner, sidebar, status
+    bar); page title is "SysDeck".
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 12 Sep 2026 18:00:00 -0400
+
+sysdeck (0.4.0-1) unstable; urgency=medium
+
+  * v0.4.0: Unix-account login for the web edition, the Cockpit way.
+    Username + password verified by the host PAM stack
+    (web/scripts/pam-auth.py, stdlib ctypes client of libpam; service
+    "sysdeck" when /etc/pam.d/sysdeck exists, else the stock "login"
+    stack; credentials over stdin, never argv). Session cookies are
+    v2 user-bound tokens (v1 still verifies — upgrades keep sessions).
+    Cockpit-style shell identity: account menu with avatar,
+    user@host, PAM/local provenance, wheel "Administrative access"
+    badge, live session-expiry countdown; status bar carries
+    user@host. Auth modes: pam (default, run as root), pam+local
+    (SdUser scrypt fallback for unprivileged installs), local
+    (console accounts, managed by scripts/manage-users.mjs). Login
+    failures rate limited per-IP AND per-username; audited with the
+    unix username as actor. Fester gates REST+WS on the same v2
+    token. Cockpit edition untouched — all modules keep working.
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 12 Sep 2026 12:00:00 -0400
+
+sysdeck (0.3.1-1) unstable; urgency=medium
+
+  * v0.3.1: cockpit-style login for the web edition — shared password
+    (SYSDECK_WEB_PASSWORD, default 'sysdeck' with an on-screen nag),
+    HMAC-signed 12h session cookie, page-level server gate, all /api/*
+    routes 401 until signed in, login/logout audited, per-IP login
+    rate limit. The fester mini-service verifies the identical session
+    token against the shared SQLite secret, so the direct WebSocket
+    event stream (port-gateway path) is gated too. LAN-side posture
+    unchanged: loopback binds stay the outer boundary.
+  * Version surfaces bumped 0.3.0 -> 0.3.1.
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 13 Sep 2026 12:00:00 -0400
+
+sysdeck (0.3.0-1) unstable; urgency=medium
+
+  * v0.3.0 AI GATEWAY EDITION: klanker-gate (the Frosty Deno LLM gateway,
+    Deno 2 + TypeScript, own independent version 0.9.0) is vendored at
+    /klanker-gate with complete Arch Linux packaging (arch/: PKGBUILD,
+    hardened systemd unit, sysusers/tmpfiles, run wrapper, INSTALL-ARCH.md
+    runbook). The Arch port needed ZERO upstream source changes — the
+    codebase is Linux-first, not Windows-first, as commonly believed.
+  * NEW klanker module (AI Gateway) in both editions: bridge/klanker.py
+    (9 subcommands: status/providers/models/vkeys/logs/analytics/runtime/
+    service/journal — stdlib REST client against the gateway on
+    KLANKER_URL, Bearer KLANKER_ADMIN_TOKEN, graceful offline JSON) and
+    the fully-built plugins/sysdeck-klanker panel; web edition gets the
+    hybrid AI Gateway panel (live REST when the gateway runs, badged demo
+    data otherwise, KLANKER_URL env).
+  * bridge.js klanker surface: 10 methods; check-bridge-subcommands now
+    verifies 215 calls across 28 bridge modules (was 206/27); 28 plugin
+    manifests (was 27).
+  * Version surfaces bumped 0.2.0 -> 0.3.0 (Makefile, bridge/__init__.py,
+    setup.py, PKGBUILD, spec, debian/changelog, compat-manifest,
+    metainfo, version-sync test).
+
+ -- Jeremy Anderson <info@dcos.net>  Fri, 11 Sep 2026 12:00:00 -0400
+
 sysdeck (0.2.0-1) unstable; urgency=medium
 
   * v0.2.0 MASTER EDITION: one tarball bundling the cockpit edition, the

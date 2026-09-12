@@ -125,7 +125,7 @@ function renderBackendCard(b) {
                 <div class="suite-card-body">
                     <p class="suite-muted" style="font-size:0.85rem">
                         Not installed. ${escapeHtml(b.name)} is <strong>${escapeHtml(b.license)}</strong>
-                        licensed — <a href="${escapeHtml(b.homepage)}" target="_blank" style="color:var(--sysdeck-accent)">${escapeHtml(b.homepage)}</a>
+                        licensed — <a href="${escapeHtml(b.homepage)}" target="_blank" rel="noopener noreferrer" style="color:var(--sysdeck-accent)">${escapeHtml(b.homepage)}</a>
                     </p>
                     <p class="suite-muted suite-mono" style="margin-top:0.5rem;font-size:0.8rem">${escapeHtml(b.installHint)}</p>
                 </div>
@@ -151,8 +151,8 @@ function renderBackendCard(b) {
                         <tr><th>Status</th><td>${statusBadge(b.status)}</td></tr>
                         <tr><th>Service</th><td class="suite-table-mono">${escapeHtml(b.serviceUnit || '—')}</td></tr>
                         <tr><th>Port</th><td class="suite-table-mono">${b.port}</td></tr>
-                        <tr><th>URL</th><td class="suite-table-mono">${running ? `<a href="${escapeHtml(b.url)}" target="_blank" style="color:var(--sysdeck-accent)">${escapeHtml(b.url)}</a>` : '— (service stopped)'}</td></tr>
-                        <tr><th>License</th><td class="suite-muted">${escapeHtml(b.license)} · <a href="${escapeHtml(b.homepage)}" target="_blank" style="color:var(--sysdeck-accent)">${escapeHtml(b.homepage)}</a></td></tr>
+                        <tr><th>URL</th><td class="suite-table-mono">${running ? `<a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--sysdeck-accent)">${escapeHtml(b.url)}</a>` : '— (service stopped)'}</td></tr>
+                        <tr><th>License</th><td class="suite-muted">${escapeHtml(b.license)} · <a href="${escapeHtml(b.homepage)}" target="_blank" rel="noopener noreferrer" style="color:var(--sysdeck-accent)">${escapeHtml(b.homepage)}</a></td></tr>
                     </tbody>
                 </table>
                 ${running ? renderWebIframe(b) : `<p class="suite-muted" style="font-size:0.85rem;margin-top:0.5rem">Click <strong>▶ Start</strong> to launch ${escapeHtml(b.name)}. The admin UI will load in an iframe below.</p>`}

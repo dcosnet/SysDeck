@@ -1,0 +1,11 @@
+{
+  "model": "gpt-4-turbo",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, world!"
+    }
+  ],
+  "temperature": 0.7,
+  "stream": false
+}

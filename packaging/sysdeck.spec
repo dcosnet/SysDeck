@@ -7,7 +7,7 @@
 #       Debian/Ubuntu users: see packaging/debian/
 
 Name:           sysdeck
-Version:        0.2.0
+Version:        0.4.1
 Release:        1%{?dist}
 Summary:        Unified operations surface for Linux infrastructure
 
@@ -84,6 +84,38 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.1-1
+- v0.4.1: cockpit module detection for the web console — every
+  installed cockpit module (distro modules like cockpit-machines and
+  cockpit-podman, addons, anything with a manifest menu entry) is
+  scanned from /usr/share/cockpit and loaded into the console
+  navigation with live backend probes. Codenames retired from the UI;
+  the console subtitle is dcos.net.
+
+* Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.0-1
+- v0.4.0: Unix-account login for the web edition, the Cockpit way —
+  host PAM verification (scripts/pam-auth.py ctypes client), v2
+  user-bound session tokens, cockpit-style account menu + user@host
+  status bar, SdUser local-account fallback (SYSDECK_AUTH_MODE),
+  per-IP and per-username lockout, legacy v1 token acceptance.
+
+* Sun Sep 13 2026 Jeremy Anderson <info@dcos.net> - 0.3.1-1
+- v0.3.1: cockpit-style login for the web edition (shared password,
+  HMAC session cookie, gated API routes, fester WS session check,
+  audited logins) — the 0.3.0 audit follow-through.
+
+%changelog
+* Fri Sep 11 2026 Jeremy Anderson <info@dcos.net> - 0.3.0-1
+- v0.3.0 AI GATEWAY EDITION: klanker-gate (Frosty Deno LLM gateway,
+  independent version 0.9.0) vendored at /klanker-gate with full Arch
+  Linux packaging (arch/: PKGBUILD, hardened systemd unit, run wrapper,
+  INSTALL-ARCH.md). The Arch port required zero upstream source changes.
+- NEW klanker module in both editions: bridge/klanker.py (9 subcommands,
+  stdlib REST client, KLANKER_URL + KLANKER_ADMIN_TOKEN, graceful
+  offline) + plugins/sysdeck-klanker full panel; web edition gets the
+  hybrid AI Gateway panel.
+- bridge.js klanker surface 10 methods; bridge guard now 215 calls
+  across 28 modules; 28 plugin manifests.
 * Thu Aug 20 2026 Jeremy Anderson <info@dcos.net> - 0.2.0-1
 - v0.2.0 MASTER EDITION: master tarball bundling the cockpit edition, the
   new SysDeck Web Edition (web/), and Fester pre-integrated (vendored at

@@ -1,9 +1,13 @@
 # SysDeck - Makefile
 # Author: Jeremy Anderson (https://dcos.net)
 #
-# v0.2.0 MASTER EDITION: two distributions in one tree —
-#   /        the cockpit edition: 26 standalone Cockpit plugins + shared bridge
-#   /web     the SysDeck Web Edition (Next.js console, 28 bridge modules)
+# v0.3.0 AI GATEWAY EDITION: two distributions in one tree —
+#   /        the cockpit edition: 27 standalone Cockpit plugins + shared bridge
+#   /web     the SysDeck Web Edition (Next.js console, 29 bridge modules)
+#   /klanker-gate — the Frosty Deno LLM gateway, vendored + pre-integrated
+#                  (by TykoDev, https://github.com/TykoDev/klanker-gate,
+#                  Apache-2.0 — not SysDeck code; own version 0.9.0, with
+#                  arch/ packaging for Arch Linux)
 #   /web/mini-services/fester — Fester, vendored + pre-integrated (own version 0.2.1)
 # Each plugin ships to /usr/share/cockpit/sysdeck-<name>/ and appears as
 # its own sidebar entry in Cockpit. The Python bridge helpers stay at
@@ -26,7 +30,7 @@
 # Distro support: Arch Linux, Debian/Ubuntu, Fedora/RHEL/CentOS.
 
 PACKAGE := sysdeck
-VERSION := 0.2.0
+VERSION := 0.4.1
 LIB_DIR := $(DESTDIR)/usr/lib/$(PACKAGE)
 PYTHON_DIR := $(LIB_DIR)/bridge
 SHARE_DIR := $(DESTDIR)/usr/share/$(PACKAGE)
@@ -55,7 +59,7 @@ SMOKE_TEST_SCRIPT := cockpit-smoke-test.sh
 # Generator script (regenerates plugins/ and shared/).
 GENERATOR := scripts/generate-plugins.py
 
-.PHONY: install uninstall check clean dist distcheck plugins fester-start web-install web-dev master
+.PHONY: install uninstall check clean dist distcheck plugins fester-start web-install web-dev master install-branding uninstall-branding
 
 # ─── plugins: regenerate from generator ──────────────────────────────
 plugins:
@@ -86,6 +90,10 @@ install:
 	install -m 0644 shared/manifest.json $(DESTDIR)/usr/share/cockpit/sysdeck-common/manifest.json
 	install -m 0644 shared/bridge.js   $(DESTDIR)/usr/share/cockpit/sysdeck-common/bridge.js
 	install -m 0644 shared/sysdeck.css $(DESTDIR)/usr/share/cockpit/sysdeck-common/sysdeck.css
+	# v0.3.0: the web-edition skin (midnight/teal design of the Next.js
+	# console) — every plugin index.html links it after base sysdeck.css.
+	# Remove the file to revert plugin pages to the classic 0.1.x skin.
+	install -m 0644 shared/sysdeck-web.css $(DESTDIR)/usr/share/cockpit/sysdeck-common/sysdeck-web.css
 	# Python bridge helpers: /usr/lib/sysdeck/bridge/
 	# v0.0.27: install each helper as an executable script (0755, not 0644)
 	# so they can be invoked by absolute path:
@@ -385,7 +393,7 @@ distcheck: dist
 	@rm -rf /tmp/sysdeck-distcheck-$$
 	@echo ">>> Distcheck passed: tarball is self-sufficient and structurally correct."
 
-# ─── v0.2.0 master edition: web + fester ─────────────────────────────
+# ─── v0.3.0 master edition: web + fester + klanker-gate ─────────────────────────────
 # Run these from an extracted master tarball (where web/ sits alongside
 # this Makefile) or the canonical dev tree with web/ present.
 
@@ -403,6 +411,35 @@ web-install:
 	cd $(FESTER_DIR) && bun install
 
 web-dev: web-install
+
+# ─── branding: theme the Cockpit SHELL chrome to the web-edition look ────
+# /usr/share/cockpit/branding.css is Cockpit's documented override point
+# for the shell (sidebar, header, login). shared/branding.css ports the
+# web edition 0.3.0 midnight/teal design onto it. Any pre-existing
+# branding.css (shipped by the distro) is backed up first and restored
+# by `make uninstall-branding`.
+install-branding:
+	@echo ">>> Theming the Cockpit shell to the web-edition look"
+	-@if test -f $(DESTDIR)/usr/share/cockpit/branding.css; then \
+	    cp -a $(DESTDIR)/usr/share/cockpit/branding.css $(DESTDIR)/usr/share/cockpit/branding.css.sysdeck-bak; \
+	    echo "    existing branding.css backed up (branding.css.sysdeck-bak)"; \
+	fi
+	install -d $(DESTDIR)/usr/share/cockpit
+	install -m 0644 shared/branding.css $(DESTDIR)/usr/share/cockpit/branding.css
+	@echo "    installed /usr/share/cockpit/branding.css"
+	@echo "    reload the Cockpit page (hard refresh) to see the shell skin"
+
+uninstall-branding:
+	@echo ">>> Restoring the Cockpit shell branding"
+	rm -f $(DESTDIR)/usr/share/cockpit/branding.css
+	-@if test -f $(DESTDIR)/usr/share/cockpit/branding.css.sysdeck-bak; then \
+	    mv $(DESTDIR)/usr/share/cockpit/branding.css.sysdeck-bak $(DESTDIR)/usr/share/cockpit/branding.css; \
+	    echo "    restored original branding.css from backup"; \
+	else \
+	    echo "    no backup found — the distro package owns branding.css"; \
+	    echo "    reinstall the cockpit-bridge package to restore defaults"; \
+	fi
+
 	@echo ">>> Starting fester in the background (log: /tmp/fester.log)"
 	cd $(FESTER_DIR) && nohup bun run dev >/tmp/fester.log 2>&1 &
 	@echo ">>> Starting SysDeck Web Edition on :3000 (Ctrl+C stops next; fester keeps running)"

@@ -1,0 +1,44 @@
+# Prometheus scrape config. Mounted read-only by the root docker-compose.yml.
+# Service names resolve over the shared Compose network's DNS.
+# Development defaults: no auth, no TLS, no remote_write, no alerting.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    monitor: frosty-deno
+
+scrape_configs:
+  # The gateway's own counters.
+  - job_name: frosty-gateway
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - "gateway:8080"
+          # Running the gateway on the host instead? Swap in one of:
+          #   "host.docker.internal:8080"  Docker Desktop (macOS / Windows)
+          #   "localhost:8080"             network_mode: host, or no Docker
+        labels:
+          service: frosty-gateway
+
+  # Collector health: spans accepted vs refused, exporter queues. Distinguishes
+  # "gateway is not exporting" from "collector is dropping".
+  - job_name: otel-collector
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - "otel-collector:8888"
+        labels:
+          service: otel-collector
+
+  # RED metrics the spanmetrics connector derives from spans.
+  - job_name: otel-spanmetrics
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - "otel-collector:8889"
+        labels:
+          service: frosty-gateway

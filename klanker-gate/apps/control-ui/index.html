@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Klanker Gateway Manager</title>
+    <script>
+    // Theme before first paint: dark default, honor prefers-color-scheme
+    // when no stored preference exists (localStorage key frosty.theme).
+    (function () {
+      try {
+        var stored = localStorage.getItem("frosty.theme");
+        var dark = stored
+          ? stored === "dark"
+          : !window.matchMedia("(prefers-color-scheme: light)").matches;
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (_e) {
+        /* storage unavailable: keep the dark default */
+      }
+    })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

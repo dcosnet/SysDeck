@@ -87,7 +87,13 @@ function netDev(): { rxMb: number; txMb: number; ifaces: string[] } {
 
 async function festerOnline(): Promise<boolean> {
   try {
-    const res = await fetch('http://127.0.0.1:3010/api/health', { signal: AbortSignal.timeout(1500) })
+    // server-to-server hop: mint the short-lived session cookie (fester
+    // verifies the same HMAC token the web console issues)
+    const { mintServerCookie } = await import('../session')
+    const res = await fetch('http://127.0.0.1:3010/api/health', {
+      headers: { Cookie: await mintServerCookie() },
+      signal: AbortSignal.timeout(1500),
+    })
     return res.ok
   } catch {
     return false
@@ -108,6 +114,7 @@ export const commands = {
       /* ignore */
     }
     const t: HostTicker = {
+      hostname: os.hostname(),
       cpuPct: cpuPct(),
       memPct: totalMb > 0 ? Math.round(((totalMb - availMb) / totalMb) * 1000) / 10 : 0,
       memUsedMb: totalMb - availMb,

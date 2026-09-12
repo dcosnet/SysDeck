@@ -102,7 +102,7 @@ function SetPortDialog({
         <DialogHeader>
           <DialogTitle className="font-mono">Set port — {row.label}</DialogTitle>
           <DialogDescription>
-            Records the new listen port in the registry. The config file ({row.configPath}, key <span className="font-mono">{row.configKey}</span>) is written by the cockpit bridge on a managed host, not from the web edition.
+            Records the new listen port in the registry. The config file ({row.configPath}, key <span className="font-mono">{row.configKey}</span>) is written by the cockpit bridge on a managed host, not from this console.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

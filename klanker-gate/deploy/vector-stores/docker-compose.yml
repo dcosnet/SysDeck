@@ -1,0 +1,83 @@
+# The gateway's single stateful dependency: one PostgreSQL holding structured
+# state, the pgvector embedding index, and the L2 response cache.
+#
+# This replaces the old pair of `live-pgvector` + `live-redis` services. Redis
+# was provisioned by this file and never contacted by a single request - the
+# gateway only reached it when FROSTY_VECTOR_STORE=redis, which no shipped
+# configuration set (decision-log 60).
+#
+#   docker compose up -d                          # gateway + postgres
+#   docker compose --profile pgbouncer up -d      # + transaction pooler
+#   deno task test:live                           # drives this file itself
+#
+# Included by the root docker-compose.yml; also usable standalone with
+# `docker compose -f deploy/vector-stores/docker-compose.yml up -d`.
+services:
+  # FROSTY_PG_URL=postgres://frosty:frosty@localhost:5432/frosty
+  postgres:
+    # The pgvector image, not plain postgres: the semantic cache's embedding
+    # index needs the `vector` extension and it lives in this same database.
+    # Exact release, not the floating `pg18` tag, so the extension version
+    # cannot drift between pulls (decision-log 47).
+    image: pgvector/pgvector:0.8.5-pg18
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: frosty
+      POSTGRES_PASSWORD: frosty
+      POSTGRES_DB: frosty
+    command:
+      # N gateway processes x a per-process pool, plus one session connection
+      # each for LISTEN, plus operator tooling. The default 100 covers a handful
+      # of replicas; raise it or put PgBouncer in front beyond that.
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+    volumes:
+      # Mount the PARENT, not /var/lib/postgresql/data: PostgreSQL 18+ images
+      # refuse to boot against a mount on the data dir, because they keep data
+      # in a major-version subdirectory so `pg_upgrade --link` never crosses a
+      # mount boundary (docker-library/postgres#1259).
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frosty -d frosty"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Optional transaction pooler. Not required at a handful of replicas - each
+  # gateway process holds only FROSTY_PG_POOL_SIZE (default 8) connections, so
+  # four processes use 32 of the 200 above. Turn it on when the replica count
+  # grows past what max_connections comfortably covers.
+  #
+  # Point FROSTY_PG_URL at :6432 and keep FROSTY_PG_DIRECT_URL on :5432. LISTEN
+  # is session state: routed through transaction pooling it stops delivering
+  # SILENTLY, and cross-process cache invalidation dies with it.
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    profiles: ["pgbouncer"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "6432:6432"
+    environment:
+      DB_USER: frosty
+      DB_PASSWORD: frosty
+      DB_HOST: postgres
+      DB_NAME: frosty
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "20"
+      LISTEN_PORT: "6432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U frosty"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

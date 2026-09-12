@@ -1,0 +1,149 @@
+/*
+ * SysDeck — branding.css (v0.3.0)
+ *
+ * THE COCKPIT SHELL SKIN. Cockpit documents /usr/share/cockpit/branding.css
+ * as the official override point for the shell chrome (sidebar, header,
+ * login screen). This file restyles that chrome to the SysDeck Web
+ * Edition 0.3.0 look — midnight surfaces, teal accent, soft-tinted
+ * states — so the shell matches the plugin pages (which wear
+ * shared/sysdeck-web.css since 0.3.0).
+ *
+ * Install:
+ *     sudo make install-branding     (backs up any existing branding.css)
+ * Revert:
+ *     sudo make uninstall-branding   (restores the backup, if any)
+ *
+ * Selector strategy: Cockpit ≥ 300 uses PatternFly v5 (pf-v5-*), older
+ * releases use PatternFly v4 (pf-c-*). Both are covered below via raw
+ * property overrides plus the PatternFly component CSS variables; rules
+ * that miss on an older/newer release simply no-op. This file cannot
+ * break the shell — worst case some selectors don't match.
+ */
+
+/* ── brand tokens (affect all PatternFly components in the shell) ──── */
+
+:root {
+    --pf-v5-global--primary-color--100: #3fc9b0;
+    --pf-v5-global--primary-color--200: #2fb59e;
+    --pf-v5-global--primary-color--300: #26a08c;
+    --pf-v5-global--link--Color: #3fc9b0;
+    --pf-v5-global--link--Color--hover: #2fb59e;
+    --pf-v5-global--link--Color--visited: #3fc9b0;
+
+    --pf-c-global--primary-color--100: #3fc9b0;   /* PatternFly v4 shells */
+    --pf-c-global--link--Color: #3fc9b0;
+    --pf-c-global--link--Color--hover: #2fb59e;
+}
+
+/* ── page header ──────────────────────────────────────────────────── */
+
+.pf-v5-c-page__header, .pf-c-page__header {
+    background-color: #1e1e1e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.pf-v5-c-page__header-brand, .pf-c-page__header-brand,
+.pf-v5-c-page__header-brand-link, .pf-c-page__header-brand-link {
+    color: #f0f0f0;
+}
+
+/* ── the nav sidebar — the big visual win ─────────────────────────── */
+
+.pf-v5-c-page__sidebar, .pf-c-page__sidebar {
+    background-color: #1a1c22;                 /* web edition --sidebar */
+    border-right: 1px solid rgba(255, 255, 255, 0.10);
+    --pf-v5-c-page__sidebar--BackgroundColor: #1a1c22;
+}
+
+.pf-v5-c-page__sidebar-body, .pf-c-page__sidebar-body {
+    background-color: transparent;
+}
+
+.pf-v5-c-nav, .pf-c-nav {
+    --pf-v5-c-nav__link--Color: #8a8f98;
+    --pf-v5-c-nav__link--hover--Color: #f0f0f0;
+    --pf-v5-c-nav__link--hover--BackgroundColor: #262b33;
+    --pf-v5-c-nav__link--focus--BackgroundColor: #262b33;
+    --pf-v5-c-nav__link--m-current--Color: #3fc9b0;
+    --pf-v5-c-nav__link--m-current--BackgroundColor: rgba(63, 201, 176, 0.15);
+    --pf-v5-c-nav__section-title--Color: #6a7078;
+    --pf-v5-c-nav__item--BackgroundColor: transparent;
+}
+
+.pf-v5-c-nav__link, .pf-c-nav__link {
+    color: #8a8f98;
+    border-left: 3px solid transparent;
+}
+
+.pf-v5-c-nav__link:hover, .pf-c-nav__link:hover {
+    background-color: #262b33;
+    color: #f0f0f0;
+}
+
+.pf-v5-c-nav__link.pf-m-current, .pf-c-nav__link.pf-m-current,
+li.pf-v5-c-nav__item.pf-m-current .pf-v5-c-nav__link {
+    background-color: rgba(63, 201, 176, 0.15);
+    color: #3fc9b0;
+    border-left-color: #3fc9b0;
+    font-weight: 600;
+}
+
+.pf-v5-c-nav__section-title, .pf-c-nav__section-title {
+    color: #6a7078;
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+}
+
+/* ── main canvas + cards inside the shell (about page, dashboards) ── */
+
+.pf-v5-c-page__main, .pf-c-page__main { background-color: #1e1e1e; }
+
+.pf-v5-c-page__main-section, .pf-c-page__main-section { background-color: #1e1e1e; }
+.pf-v5-c-page__main-section.pf-m-dark-100,
+.pf-v5-c-page__main-section.pf-m-dark-200 { background-color: #1a1c22; }
+
+.pf-v5-c-card, .pf-c-card {
+    background-color: #2a2f38;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    --pf-v5-c-card--BackgroundColor: #2a2f38;
+}
+
+.pf-v5-c-card__title, .pf-c-card__title { color: #f0f0f0; }
+.pf-v5-c-card__body, .pf-c-card__body { color: #d5d8dd; }
+
+/* ── the login screen ─────────────────────────────────────────────── */
+
+#login {
+    background-color: #1e1e1e;
+    background-image: radial-gradient(ellipse at 50% -20%, rgba(63, 201, 176, 0.10), transparent 60%);
+}
+
+#login .container, #login .form-group, #login label { color: #d5d8dd; }
+
+#login h1, #login .brand { color: #f0f0f0; }
+
+#login input, #login .form-control {
+    background-color: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #f0f0f0;
+}
+
+#login .btn-primary, #login button[type="submit"] {
+    background-color: #3fc9b0;
+    border-color: #3fc9b0;
+    color: #0d1512;
+    font-weight: 600;
+}
+
+#login .btn-primary:hover { background-color: #2fb59e; }
+
+/* crossfade / spinner accents (older shells) */
+.spinner, .pf-v5-c-spinner { --pf-v5-c-spinner--Color: #3fc9b0; }
+
+/* thin dark scrollbars to match the plugin pages */
+* { scrollbar-width: thin; scrollbar-color: #3a4150 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: #3fc9b0; }
