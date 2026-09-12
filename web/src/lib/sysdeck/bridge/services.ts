@@ -1,25 +1,37 @@
 // SysDeck bridge — services (listening sockets + SERVICES_REGISTRY)
 // Port of bridge/firewall.py's service/port editor subcommands (v0.0.38+):
-// `services` ran `ss -tlnp` (with a /proc/net/tcp fallback) and
-// cross-referined the static SERVICES_REGISTRY to build the inventory;
-// `set-service-port` edited the config file. The web edition parses
-// /proc/net/tcp + /proc/net/tcp6 directly (the kernel source of truth,
-// same as the python fallback path), maps inodes to processes via
-// /proc/<pid>/fd readlinks (works for this user's processes; others →
-// null — honest), and cross-references the ServicePort table (seeded
-// from the same 9 services). setPort records the change but does NOT
-// write config files — that requires the cockpit bridge on a managed
-// host. restartService fails honestly (no systemd in this container)
-// but records the attempt in the audit log.
-import { readFileSync, readdirSync, readlinkSync } from 'fs'
+// the python ran `ss -tlnp` with a /proc/net/tcp fallback and
+// cross-referenced the static SERVICES_REGISTRY; `set-service-port`
+// edited the config file. The web edition keeps the same step-down:
+//   sockets: `ss -H -tlnp` (one spawn, kernel-fresh) → /proc/net/tcp{,6}
+//   parse + inode→pid walk (works for this user's processes; others →
+//   null — honest)
+// setPort records the change in the registry (the config-file write is
+// the cockpit bridge's job on a managed host — labeled hybrid, never
+// claimed as applied). restartService runs the REAL
+// `systemctl restart <unit>` under the privilege chain
+// (root / sudo -n) and fails honestly otherwise.
+import { readdir, readlink } from 'fs/promises'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, run, which, cached, readText } from './shared'
 
-/** fail() + source → the dispatcher spreads this into a top-level
- *  {ok:false, error, source} envelope. (A bare fail() lacks data/source
- *  keys, so the dispatcher would wrap it as {ok:true, data:{ok:false}}.) */
-function failE(error: string, source: 'live' | 'demo' | 'hybrid' = 'hybrid') {
+/** fail() + source — keeps the source badge on error envelopes. (A bare
+ *  fail() also passes through the dispatcher top-level, but without a
+ *  source the panel cannot tell live-vs-hybrid when a command fails.) */
+function failE(error: string, source: 'live' | 'hybrid' = 'hybrid') {
   return { ...fail(error), source }
+}
+
+function isRoot(): boolean {
+  return typeof process.geteuid === 'function' && process.geteuid() === 0
+}
+
+function havePasswordlessSudo(): Promise<boolean> {
+  return cached('sudo:-n:true', 60_000, async () => (await run('sudo', ['-n', 'true'], 3000)).rc === 0)
+}
+
+async function audit(action: string, detail: string): Promise<void> {
+  await db.auditLog.create({ data: { module: 'services', action, detail } })
 }
 
 // ── SERVICES_REGISTRY seed (mirrors firewall.py's static allowlist) ──
@@ -42,20 +54,74 @@ async function ensureSeeded(): Promise<void> {
   await db.servicePort.createMany({ data: SERVICES_SEED })
 }
 
-// ── /proc/net/tcp{,6} parsing ────────────────────────────────────────
+// ── listener inventory ────────────────────────────────────────────────
 
-interface Listener {
+interface SocketRow {
   port: number
   proto: 'tcp' | 'tcp6'
   addr: string
-  inode: string
+  pid: number | null
+  process: string | null
+}
+
+/** Preferred rung: `ss -H -tlnp` — one spawn, kernel-fresh, pid/process
+ *  columns included for sockets this uid may see. Returns null when ss
+ *  is absent or unusable so the /proc rung takes over. */
+async function ssListeners(): Promise<SocketRow[] | null> {
+  if (!(await which('ss'))) return null
+  const r = await run('ss', ['-H', '-tlnp'], 5000)
+  if (r.rc !== 0) return null
+  const out: SocketRow[] = []
+  for (const line of r.stdout.split('\n')) {
+    const parts = line.trim().split(/\s+/)
+    if (parts.length < 4) continue
+    const local = parts[3] ?? ''
+    const m = local.match(/^(?:\[([^\]]+)\]|([^:]+)):([0-9]+)$/)
+    if (!m) continue
+    const addr = (m[1] ?? m[2] ?? '').replace(/^0\.0\.0\.0$/, '0.0.0.0')
+    const isV6 = local.startsWith('[') || (m[1] ?? '').includes(':')
+    const proc = line.match(/users:\(\("([^"]+)",pid=(\d+)/)
+    out.push({
+      port: Number(m[3]),
+      proto: isV6 ? 'tcp6' : 'tcp',
+      addr: addr || (isV6 ? '::' : '0.0.0.0'),
+      pid: proc ? Number(proc[2]) : null,
+      process: proc ? proc[1] : null,
+    })
+  }
+  return out
+}
+
+/** Fallback rung: /proc/net/tcp{,6} LISTEN rows. */
+async function procListeners(): Promise<{ port: number; proto: 'tcp' | 'tcp6'; addr: string; inode: string }[]> {
+  const out: { port: number; proto: 'tcp' | 'tcp6'; addr: string; inode: string }[] = []
+  for (const [file, proto] of [
+    ['/proc/net/tcp', 'tcp'],
+    ['/proc/net/tcp6', 'tcp6'],
+  ] as const) {
+    const text = await readText(file)
+    if (!text) continue
+    for (const line of text.split('\n').slice(1)) {
+      const parts = line.trim().split(/\s+/)
+      if (parts.length < 10) continue
+      if (parts[3] !== '0A') continue // LISTEN only
+      const [ipHex, portHex] = (parts[1] ?? '').split(':')
+      out.push({
+        port: parseInt(portHex ?? '0', 16),
+        proto,
+        addr: decodeHexAddr(ipHex ?? ''),
+        inode: parts[9] ?? '',
+      })
+    }
+  }
+  return out.sort((a, b) => a.port - b.port)
 }
 
 function decodeHexAddr(hex: string): string {
   if (hex.length === 8) {
     // IPv4, little-endian 32-bit word
     const n = parseInt(hex, 16)
-    return `${n & 0xff}.${(n >> 8) & 0xff}.${(n >> 16) & 0xff}.${(n >>> 24) & 0xff}`
+    return `${n & 0xff}.${(n >> 8) & 0xff}.${(n >> 16) & 0xff}.${n >>> 24}`
   }
   if (hex.length === 32) {
     // IPv6, four 32-bit words each in host (little-endian) byte order:
@@ -70,48 +136,30 @@ function decodeHexAddr(hex: string): string {
   return hex
 }
 
-function parseListeners(): Listener[] {
-  const out: Listener[] = []
-  for (const [file, proto] of [
-    ['/proc/net/tcp', 'tcp'],
-    ['/proc/net/tcp6', 'tcp6'],
-  ] as const) {
+/** inode→pid walk, async and TTL-cached: fd readlinks only resolve for
+ *  this console user's own processes — other users' sockets stay an
+ *  honest null mapping. */
+async function inodeToPidMap(): Promise<Map<string, number>> {
+  return cached('services:inode-pid', 5_000, async () => {
+    const map = new Map<string, number>()
+    let pids: string[] = []
     try {
-      const lines = readFileSync(file, 'utf-8').split('\n').slice(1)
-      for (const line of lines) {
-        const parts = line.trim().split(/\s+/)
-        if (parts.length < 10) continue
-        if (parts[3] !== '0A') continue // LISTEN only
-        const [ipHex, portHex] = (parts[1] ?? '').split(':')
-        out.push({
-          port: parseInt(portHex ?? '0', 16),
-          proto,
-          addr: decodeHexAddr(ipHex ?? ''),
-          inode: parts[9] ?? '',
-        })
-      }
+      pids = await readdir('/proc')
     } catch {
-      /* file unreadable — skip */
+      return map
     }
-  }
-  return out.sort((a, b) => a.port - b.port)
-}
-
-function inodeToPidMap(): Map<string, number> {
-  const map = new Map<string, number>()
-  try {
-    for (const pid of readdirSync('/proc')) {
+    for (const pid of pids) {
       if (!/^\d+$/.test(pid)) continue
       const fdDir = `/proc/${pid}/fd`
       let fds: string[] = []
       try {
-        fds = readdirSync(fdDir)
+        fds = await readdir(fdDir)
       } catch {
         continue // not our process — honest null mapping
       }
       for (const fd of fds) {
         try {
-          const link = readlinkSync(`${fdDir}/${fd}`)
+          const link = await readlink(`${fdDir}/${fd}`)
           const m = link.match(/^socket:\[(\d+)\]$/)
           if (m && !map.has(m[1])) map.set(m[1], Number(pid))
         } catch {
@@ -119,27 +167,33 @@ function inodeToPidMap(): Map<string, number> {
         }
       }
     }
-  } catch {
-    /* degrade */
-  }
-  return map
+    return map
+  })
 }
 
-interface ProcMeta {
-  pid: number
-  comm: string
-}
-
-function pidMeta(pid: number): ProcMeta | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8')
-    const open = stat.indexOf('(')
-    const close = stat.lastIndexOf(')')
-    if (open < 0 || close < 0) return null
-    return { pid, comm: stat.slice(open + 1, close) }
-  } catch {
-    return null
-  }
+/** The host's live socket inventory, TTL-cached: both rungs walk real
+ *  kernel state, and a 5 s window keeps the 10 s poll from re-scanning
+ *  /proc for every tick while staying fresh enough to be called live. */
+async function socketInventory(): Promise<SocketRow[]> {
+  return cached('services:sockets', 5_000, async () => {
+    const ss = await ssListeners()
+    if (ss) return ss
+    const listeners = await procListeners()
+    const pidMap = await inodeToPidMap()
+    const out: SocketRow[] = []
+    for (const l of listeners) {
+      const pid = pidMap.get(l.inode) ?? null
+      let process: string | null = null
+      if (pid !== null) {
+        const stat = await readText(`/proc/${pid}/stat`)
+        const open = stat.indexOf('(')
+        const close = stat.lastIndexOf(')')
+        if (open >= 0 && close > open) process = stat.slice(open + 1, close)
+      }
+      out.push({ port: l.port, proto: l.proto, addr: l.addr, pid, process })
+    }
+    return out
+  })
 }
 
 // ── commands ─────────────────────────────────────────────────────────
@@ -148,22 +202,14 @@ export const commands = {
   list: async () => {
     await ensureSeeded()
     const registry = await db.servicePort.findMany({ orderBy: { service: 'asc' } })
-    const listeners = parseListeners()
-    const pidMap = inodeToPidMap()
+    const sockets = await socketInventory()
     const byPort = new Map<number, (typeof registry)[number]>()
     for (const row of registry) byPort.set(row.updatedPort ?? row.port, row)
 
-    const enriched = listeners.map((l) => {
-      const pid = pidMap.get(l.inode)
-      const meta = pid !== undefined ? pidMeta(pid) : null
-      const svc = byPort.get(l.port) ?? null
+    const enriched = sockets.map((s) => {
+      const svc = byPort.get(s.port) ?? null
       return {
-        port: l.port,
-        proto: l.proto,
-        addr: l.addr,
-        inode: l.inode,
-        pid: pid ?? null,
-        process: meta?.comm ?? null,
+        ...s,
         service: svc ? { service: svc.service, label: svc.label, configuredPort: svc.updatedPort ?? svc.port } : null,
       }
     })
@@ -182,7 +228,7 @@ export const commands = {
         registered: registry.length,
       },
       'live',
-      'sockets from /proc/net/tcp{,6}; inode→pid works only for this user\'s processes; registry seeded from the cockpit SERVICES_REGISTRY',
+      "sockets via `ss -H -tlnp` (fallback: /proc/net/tcp{,6} + inode walk); pid/process resolve only for this console user's own sockets; registry seeded from the cockpit SERVICES_REGISTRY",
     )
   },
 
@@ -197,13 +243,7 @@ export const commands = {
     if (!row) return failE(`unknown service: ${service}`)
     const oldPort = row.updatedPort ?? row.port
     await db.servicePort.update({ where: { service }, data: { updatedPort: port } })
-    await db.auditLog.create({
-      data: {
-        module: 'services',
-        action: 'setPort',
-        detail: `${service}: ${oldPort} → ${port} (${row.configPath})`,
-      },
-    })
+    await audit('setPort', `${service}: ${oldPort} → ${port} (${row.configPath})`)
     return ok(
       {
         service,
@@ -224,9 +264,7 @@ export const commands = {
     const row = await db.servicePort.findUnique({ where: { service } })
     if (!row) return failE(`unknown service: ${service}`)
     await db.servicePort.update({ where: { service }, data: { updatedPort: null } })
-    await db.auditLog.create({
-      data: { module: 'services', action: 'resetPort', detail: `${service} back to ${row.port}` },
-    })
+    await audit('resetPort', `${service} back to ${row.port}`)
     return ok({ service, port: row.port }, 'hybrid')
   },
 
@@ -235,9 +273,24 @@ export const commands = {
     await ensureSeeded()
     const row = await db.servicePort.findUnique({ where: { service } })
     if (!row) return failE(`unknown service: ${service}`)
-    await db.auditLog.create({
-      data: { module: 'services', action: 'restartService', detail: `attempted restart of ${service} (systemd unit ${service}.service)` },
-    })
-    return failE('systemd not available in this environment (PID 1 is tini) — restart attempt recorded to the audit log')
+    if (!(await which('systemctl'))) {
+      await audit('restartService', `refused: systemctl absent (${service})`)
+      return failE('systemctl is not present on this host — service restarts require systemd')
+    }
+    const unit = `${service}.service`
+    let res: { rc: number; stdout: string; stderr: string }
+    if (isRoot()) {
+      res = await run('systemctl', ['restart', unit], 30_000)
+    } else if (await havePasswordlessSudo()) {
+      res = await run('sudo', ['-n', 'systemctl', 'restart', unit], 30_000)
+    } else {
+      await audit('restartService', `refused: unprivileged (${service})`)
+      return failE(`not authorized: run as root or grant sudo -n to execute:\n  systemctl restart ${unit}`)
+    }
+    await audit('restartService', `systemctl restart ${unit} → rc=${res.rc}`)
+    if (res.rc !== 0) {
+      return failE(`systemctl restart ${unit} failed — ${res.stderr.trim().split('\n')[0] ?? 'unit error'}`)
+    }
+    return ok({ service, unit, restarted: true }, 'live', `real systemctl restart ${unit}`)
   },
 }

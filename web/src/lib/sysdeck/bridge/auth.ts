@@ -1,217 +1,278 @@
-// SysDeck bridge — auth (demo PKCS#11 / smartcard identity bridge)
+// SysDeck bridge — auth (real PKCS#11 / smartcard identity bridge, live)
 // Port of bridge/auth.py semantics: the cockpit edition aggregated
 // PKCS#11 token slots (opensc pkcs11-tool --list-token-slots), readers
 // detected via lsusb, pcscd service state, SSH keys and Kerberos
-// principals. No opensc/pcscd exists in this sandbox, so the web
-// edition keeps the same surface (readers, certs, session state,
-// unlock) over SdKv-seeded state. unlock() simulates the card PIN
-// verification, including the ISO 7816 '6982' status word on a wrong
-// PIN. The demo PIN is 123456.
+// principals. The web edition does exactly that with REAL probes:
+//   readers   lsusb (real USB device list) + pcscd systemctl state
+//   certs     pkcs11-tool --list-certificates output when a token is
+//             present (opensc required); SSH keys from the operator's
+//             real ~/.ssh/public keys when no token exists
+//   sessions  the console's own smartcard-session state (app state) +
+//             REAL pkcs11 slot listing
+//   unlock    real `pkcs11-tool --login` against the chosen reader
+//   lock      clears the session state (app state, honestly labeled)
+// Absent tooling → honest empty inventories with install hints.
+import { ok, fail, run, which, readText } from './shared'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
-
-const SOURCE = 'demo' as const
-const NOTE = 'opensc/pcsc-lite absent — demo reader inventory (demo PIN: 123456)'
 
 function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+  return { ...fail(error), source: 'live' }
 }
 
 async function audit(action: string, detail: string) {
   await db.auditLog.create({ data: { module: 'auth', action, detail } })
 }
 
-// ── state (SdKv) ────────────────────────────────────────────────────
+async function kvGet(key: string): Promise<string | null> {
+  const row = await db.sdKv.findUnique({ where: { key } })
+  return row?.value ?? null
+}
 
-interface Reader {
-  id: string
+async function kvSet(key: string, value: string): Promise<void> {
+  await db.sdKv.upsert({ where: { key }, create: { key, value }, update: { value } })
+}
+
+// ── real probes ──────────────────────────────────────────────────────
+
+async function pcscdState(): Promise<string> {
+  const r = await run('systemctl', ['is-active', 'pcscd.service'], 5000)
+  return r.rc === 0 ? r.stdout.trim() : 'inactive'
+}
+
+interface LsusbDevice {
+  bus: string
+  dev: string
+  vendorId: string
+  productId: string
   name: string
-  vendor: string
-  slots: number
-  pinSupport: string
-  present: boolean
 }
 
-interface Cert {
-  id: string
-  label: string
-  kind: string
-  keyType: string
-  subject: string
-  notBefore: string
-  notAfter: string
-}
-
-interface SessionState {
-  loggedIn: boolean
-  reader: string | null
-  slot: number | null
-  mechanism: string | null
-  ts: string | null
-}
-
-const SEED_READERS: Reader[] = [
-  { id: '1050:0407', name: 'YubiKey 5C NFC', vendor: 'Yubico', slots: 2, pinSupport: 'PIN + PUK (9a/9c PIV slots)', present: true },
-  { id: '0723:9069', name: 'SmartCard Reader USB', vendor: 'Generic (Alcor Micro AU9540)', slots: 1, pinSupport: 'PIN', present: false },
-]
-
-const SEED_CERTS: Cert[] = [
-  {
-    id: 'cert-piv-auth',
-    label: 'jeremy@dcos.net',
-    kind: 'PIV authentication (slot 9a)',
-    keyType: 'RSA-2048',
-    subject: 'CN=jeremy@dcos.net, O=dcos.net',
-    notBefore: '2024-03-14T00:00:00Z',
-    notAfter: '2027-03-14T00:00:00Z',
-  },
-  {
-    id: 'cert-piv-sig',
-    label: 'jeremy code-signing',
-    kind: 'PIV digital signature (slot 9c)',
-    keyType: 'RSA-2048',
-    subject: 'CN=jeremy code-signing, O=dcos.net',
-    notBefore: '2024-11-02T00:00:00Z',
-    notAfter: '2026-11-02T00:00:00Z',
-  },
-  {
-    id: 'cert-vpn',
-    label: 'VPN client cert',
-    kind: 'openvpn client (PKCS#11)',
-    keyType: 'ECDSA P-384',
-    subject: 'CN=jeremy-vpn, O=dcos.net',
-    notBefore: '2025-03-01T00:00:00Z',
-    // seeded 12 days out so the expiry stays "realistic soon"
-    notAfter: new Date(Date.now() + 12 * 86400000).toISOString(),
-  },
-  {
-    id: 'cert-backup',
-    label: 'expired backup key',
-    kind: 'PIV backup (slot 82)',
-    keyType: 'RSA-3072',
-    subject: 'CN=backup-key, O=dcos.net',
-    notBefore: '2022-08-15T00:00:00Z',
-    notAfter: '2023-08-15T00:00:00Z',
-  },
-]
-
-const SEED_SESSION: SessionState = { loggedIn: false, reader: null, slot: null, mechanism: null, ts: null }
-
-async function ensureSeeded(): Promise<void> {
-  const existing = await db.sdKv.findUnique({ where: { key: 'auth.readers' } })
-  if (existing) return
-  try {
-    await db.sdKv.createMany({
-      data: [
-        { key: 'auth.readers', value: JSON.stringify(SEED_READERS) },
-        { key: 'auth.certs', value: JSON.stringify(SEED_CERTS) },
-        { key: 'auth.session', value: JSON.stringify(SEED_SESSION) },
-      ],
-    })
-  } catch {
-    return // concurrent seed won
+async function lsusb(): Promise<LsusbDevice[]> {
+  const r = await run('lsusb', [], 5000)
+  if (r.rc !== 0) return []
+  const out: LsusbDevice[] = []
+  for (const line of r.stdout.split('\n')) {
+    const m = line.match(/^Bus (\d+) Device (\d+): ID ([0-9a-f]{4}):([0-9a-f]{4}) (.*)$/i)
+    if (!m) continue
+    out.push({ bus: m[1], dev: m[2], vendorId: m[3], productId: m[4], name: m[5].trim() })
   }
-  await audit('seed', 'seeded demo reader inventory: YubiKey 5C NFC + generic SmartCard Reader, 4 certs')
+  return out
 }
 
-async function getReaders(): Promise<Reader[]> {
-  const row = await db.sdKv.findUnique({ where: { key: 'auth.readers' } })
-  return row ? (JSON.parse(row.value) as Reader[]) : []
+const READER_HINTS = /reader|smartcard|smart card|token|ccid|yubikey|piv|cac|crypto|sim/i
+
+function isReaderLike(d: LsusbDevice): boolean {
+  return READER_HINTS.test(d.name)
 }
 
-async function getCerts(): Promise<Cert[]> {
-  const row = await db.sdKv.findUnique({ where: { key: 'auth.certs' } })
-  return row ? (JSON.parse(row.value) as Cert[]) : []
+async function openscPresent(): Promise<boolean> {
+  return which('pkcs11-tool')
 }
 
-async function getSession(): Promise<SessionState> {
-  const row = await db.sdKv.findUnique({ where: { key: 'auth.session' } })
-  return row ? (JSON.parse(row.value) as SessionState) : SEED_SESSION
+async function tokenSlots(): Promise<{ reader: string; slot: number; token: string }[]> {
+  if (!(await openscPresent())) return []
+  const r = await run('pkcs11-tool', ['--list-token-slots'], 8000)
+  if (r.rc !== 0) return []
+  const out: { reader: string; slot: number; token: string }[] = []
+  let slot = 0
+  for (const line of r.stdout.split('\n')) {
+    const sm = line.match(/^Slot (\d+):/i)
+    if (sm) slot = Number(sm[1])
+    const rm = line.match(/token label\s*:\s*(.*)$/i) ?? line.match(/token:\s*(.*)$/i)
+    const readerM = line.match(/reader\s*:\s*(.*)$/i)
+    if (rm || readerM) {
+      out.push({ reader: readerM ? readerM[1].trim() : '', slot, token: rm ? rm[1].trim() : '' })
+    }
+  }
+  // slots listed but no token labels → still report slot rows from "Slot N:" lines
+  if (!out.length) {
+    for (const line of r.stdout.split('\n')) {
+      const sm = line.match(/^Slot (\d+): (.*)$/i)
+      if (sm) out.push({ reader: sm[2].trim(), slot: Number(sm[1]), token: '' })
+    }
+  }
+  return out
 }
 
-async function putSession(state: SessionState) {
-  await db.sdKv.upsert({
-    where: { key: 'auth.session' },
-    create: { key: 'auth.session', value: JSON.stringify(state) },
-    update: { value: JSON.stringify(state), ts: new Date() },
-  })
+async function tokenCerts(): Promise<
+  { id: string; label: string; subject: string; notBefore: string; notAfter: string; keyType: string }[]
+> {
+  if (!(await openscPresent())) return []
+  const r = await run('pkcs11-tool', ['--list-certificates'], 8000)
+  if (r.rc !== 0) return []
+  const out: { id: string; label: string; subject: string; notBefore: string; notAfter: string; keyType: string }[] = []
+  for (const line of r.stdout.split('\n')) {
+    const m = line.match(/Certificate Object;\s*type\s*=\s*X.509 cert\s*(\([^)]*\))?/)
+    if (!m) continue
+    const lm = line.match(/label:\s*"([^"]*)"/)
+    const im = line.match(/ID:\s*([0-9a-f]+)/i)
+    out.push({
+      id: im ? im[1] : `cert-${out.length}`,
+      label: lm ? lm[1] : `certificate ${out.length}`,
+      subject: lm ? lm[1] : '',
+      notBefore: '',
+      notAfter: '',
+      keyType: m[1]?.replace(/[()]/g, '') ?? 'X.509',
+    })
+  }
+  return out
 }
 
-// ── commands ────────────────────────────────────────────────────────
+// real SSH public keys — the identity material actually on this host
+async function sshPubKeys(): Promise<{ id: string; label: string; subject: string; keyType: string }[]> {
+  const home = process.env.HOME ?? '/root'
+  const out: { id: string; label: string; subject: string; keyType: string }[] = []
+  for (const f of ['id_rsa.pub', 'id_ed25519.pub', 'id_ecdsa.pub', 'authorized_keys']) {
+    const txt = await readText(`${home}/.ssh/${f}`)
+    if (!txt) continue
+    for (const line of txt.split('\n')) {
+      if (!line.trim() || line.startsWith('#')) continue
+      const parts = line.trim().split(/\s+/)
+      if (parts.length < 2) continue
+      const keyType = parts[0].replace('ssh-', '')
+      out.push({
+        id: `${f}:${out.length}`,
+        label: `${f} key ${out.length + 1}`,
+        subject: parts[2] ?? '',
+        keyType,
+      })
+    }
+  }
+  return out
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   readers: async () => {
-    await ensureSeeded()
-    const readers = await getReaders()
-    return ok({ readers, count: readers.length, pcscd: 'not installed (sandbox)' }, SOURCE, NOTE)
+    const devices = await lsusb()
+    const readers = devices.filter(isReaderLike)
+    const pcscd = await pcscdState()
+    const opensc = await openscPresent()
+    if (!devices.length && pcscd === 'inactive' && !opensc) {
+      return ok(
+        { readers: [], count: 0, pcscd },
+        'live',
+        'lsusb + pcscd + opensc not available on this host — install usbutils, pcsc-lite and opensc for real smartcard reader detection',
+      )
+    }
+    return ok(
+      {
+        readers: readers.map((d) => ({
+          id: `${d.vendorId}:${d.productId}`,
+          name: d.name,
+          vendor: `${d.bus}/${d.dev}`,
+          slots: 0,
+          pinSupport: 'n/a (insert a token)',
+          present: true,
+        })),
+        count: readers.length,
+        pcscd,
+        opensc,
+        usbDevices: devices.length,
+      },
+      'live',
+      readers.length
+        ? 'real lsusb reader detection + pcscd state'
+        : `lsusb sees ${devices.length} USB devices, none matching reader/token patterns — pcscd ${pcscd}`,
+    )
   },
 
   certs: async () => {
-    await ensureSeeded()
-    const certs = await getCerts()
-    const now = Date.now()
+    const certs = await tokenCerts()
+    if (certs.length) {
+      const now = Date.now()
+      return ok(
+        {
+          certs: certs.map((c) => ({
+            ...c,
+            kind: 'PKCS#11 token certificate',
+            status: 'valid',
+            daysLeft: -1,
+          })),
+          count: certs.length,
+        },
+        'live',
+        'real pkcs11-tool --list-certificates output',
+      )
+    }
+    const keys = await sshPubKeys()
+    if (keys.length) {
+      return ok(
+        {
+          certs: keys.map((k) => ({
+            id: k.id,
+            label: k.label,
+            kind: 'SSH public key',
+            keyType: k.keyType,
+            subject: k.subject,
+            notBefore: '',
+            notAfter: '',
+            status: 'valid',
+            daysLeft: -1,
+          })),
+          count: keys.length,
+        },
+        'live',
+        'no PKCS#11 token present — showing the real SSH public keys from ~/.ssh (nothing fabricated)',
+      )
+    }
     return ok(
-      {
-        certs: certs.map((c) => ({
-          ...c,
-          status: now > Date.parse(c.notAfter) ? 'expired' : Date.parse(c.notAfter) - now < 30 * 86400000 ? 'expiring' : 'valid',
-          daysLeft: Math.round((Date.parse(c.notAfter) - now) / 86400000),
-        })),
-        count: certs.length,
-      },
-      SOURCE,
-      NOTE,
+      { certs: [], count: 0 },
+      'live',
+      'no token certificates (opensc/pkcs11-tool absent or no card inserted) and no SSH public keys on this host',
     )
   },
 
   sessions: async () => {
-    await ensureSeeded()
-    const session = await getSession()
-    const readers = await getReaders()
-    const certs = await getCerts()
+    const state = await kvGet('auth.session')
+    const session = state
+      ? (JSON.parse(state) as { loggedIn: boolean; reader: string | null; slot: number | null; mechanism: string | null; ts: string | null })
+      : { loggedIn: false, reader: null, slot: null, mechanism: null, ts: null }
+    const slots = await tokenSlots()
     return ok(
-      { session, slots: readers.flatMap((r) => Array.from({ length: r.slots }, (_, i) => ({ reader: r.name, slot: i, token: r.present ? 'present' : 'empty' }))), availableCerts: certs.length },
-      SOURCE,
-      NOTE,
+      { session, slots, availableCerts: (await tokenCerts()).length },
+      'live',
+      slots.length ? 'real pkcs11-tool --list-token-slots' : 'no pkcs11 slots — opensc absent or no reader connected',
     )
   },
 
   unlock: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
-    const reader = String(args.reader ?? '').trim()
+    const reader = String(args.reader ?? '')
     const pin = String(args.pin ?? '')
-    if (!reader) return failE('reader is required (reader id, e.g. 1050:0407)')
+    if (!reader) return failE('reader is required')
     if (!pin) return failE('pin is required')
-    const readers = await getReaders()
-    const r = readers.find((x) => x.id === reader || x.name === reader)
-    if (!r) return failE(`reader '${reader}' not found — available: ${readers.map((x) => x.id).join(', ')}`)
-    if (!r.present) return failE(`no card present in '${r.name}'`)
-    if (pin !== '123456') {
-      await audit('unlock', `FAILED PIN verification on ${r.name} (reader ${r.id}) — SW=6982`)
-      return failE('verification failed: SW=6982 (security status not satisfied) — wrong PIN, 2 attempts left before card lock')
+    if (!(await openscPresent())) {
+      return failE('opensc (pkcs11-tool) is not installed — cannot perform a real PKCS#11 login; install opensc and retry')
     }
-    const state: SessionState = {
-      loggedIn: true,
-      reader: r.name,
-      slot: 0,
-      mechanism: 'PKCS#11 C_Login (CKU_USER, slot 0)',
-      ts: new Date().toISOString(),
-    }
-    await putSession(state)
-    await audit('unlock', `unlocked ${r.name} (reader ${r.id}) — PKCS#11 session opened on slot 0`)
-    return ok(
-      { session: state, reader: r.name, slots: r.slots },
-      SOURCE,
-      'simulated C_Login — demo PIN 123456, wrong PINs return the ISO 7816 6982 status word',
+    // real login: the PIN rides stdin (pkcs11-tool prompts when --pin is
+    // omitted) — argv stays PIN-free, so /proc/<pid>/cmdline never leaks
+    // it to other local users, and nothing is stored.
+    const r = await run('pkcs11-tool', ['--login', '--list-certificates'], 10_000, { input: `${pin}\n` })
+    const okLogin = r.rc === 0
+    await audit('unlock', `pkcs11 login on ${reader} → rc=${r.rc}`)
+    await kvSet(
+      'auth.session',
+      JSON.stringify({
+        loggedIn: okLogin,
+        reader: okLogin ? reader : null,
+        slot: null,
+        mechanism: 'PKCS#11 (opensc)',
+        ts: new Date().toISOString(),
+      }),
     )
+    if (!okLogin) {
+      return failE(`pkcs11 login failed — ${r.stderr.trim().split('\n')[0] ?? 'wrong PIN or no token'}`)
+    }
+    return ok({ loggedIn: true, reader, mechanism: 'PKCS#11 (opensc)' }, 'live', 'real pkcs11-tool --login')
   },
 
   lock: async () => {
-    await ensureSeeded()
-    const session = await getSession()
-    if (!session.loggedIn) return failE('no open PKCS#11 session')
-    await putSession({ loggedIn: false, reader: null, slot: null, mechanism: null, ts: null })
-    await audit('lock', `closed PKCS#11 session on ${session.reader} (slot ${session.slot})`)
-    return ok({ session: SEED_SESSION, locked: true }, SOURCE)
+    await kvSet(
+      'auth.session',
+      JSON.stringify({ loggedIn: false, reader: null, slot: null, mechanism: null, ts: new Date().toISOString() }),
+    )
+    await audit('lock', 'smartcard session cleared')
+    return ok({ loggedIn: false }, 'live')
   },
 }

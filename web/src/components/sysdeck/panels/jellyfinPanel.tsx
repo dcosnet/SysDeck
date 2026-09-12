@@ -1,9 +1,11 @@
 'use client'
 
 // Jellyfin panel — media server (libraries, sessions, recent items).
-// The jellyfin daemon is absent in this sandbox, so the bridge keeps a
-// demo media inventory (4 libraries, 3 sessions — one 4K transcode).
-// play/pause toggle the demo session states (transcoding card + audit).
+// The bridge reads the REAL host: systemd service state, the port from
+// /etc/jellyfin/network.xml, version from the public /System/Info/Public
+// endpoint, libraries by scanning /var/lib/jellyfin/root/default/ (real
+// counts and sizes), and live sessions/playback via the Jellyfin API when
+// JELLYFIN_API_KEY is set. No jellyfin → honest not-installed.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -159,7 +161,7 @@ export default function JellyfinPanel() {
   if (summary.isLoading) {
     return (
       <div>
-        <PanelHeader title="Jellyfin" subtitle="media server — libraries · sessions · items" source="demo" />
+        <PanelHeader title="Jellyfin" subtitle="media server — libraries · sessions · items" />
         <PanelSkeleton />
       </div>
     )
@@ -168,7 +170,7 @@ export default function JellyfinPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Jellyfin" subtitle="media server — libraries · sessions · items" source="demo" />
+        <PanelHeader title="Jellyfin" subtitle="media server — libraries · sessions · items" />
         <ErrorCard error={summary.data?.error ?? 'jellyfin.summary failed'} />
       </div>
     )
@@ -185,7 +187,7 @@ export default function JellyfinPanel() {
       <PanelHeader
         title="Jellyfin"
         subtitle="media server — 4 libraries · sessions with live transport state · 8s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

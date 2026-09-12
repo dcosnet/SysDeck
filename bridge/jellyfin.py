@@ -69,8 +69,13 @@ def _have(binary: str) -> bool:
     return shutil.which(binary) is not None
 
 
+_SYSTEMCTL = shutil.which("systemctl")
+
+
 def _systemctl_show(unit: str, props: list[str]) -> dict[str, str]:
     """Return a dict of {property: value} from systemctl show."""
+    if not _SYSTEMCTL:
+        return {}
     out = subprocess.run(
         ["systemctl", "show", unit, "--property=" + ",".join(props)],
         capture_output=True, text=True, timeout=5,
@@ -170,6 +175,8 @@ def cmd_summary(_args: list[str]) -> dict[str, Any]:
 
 def _unit_loaded() -> bool:
     """True if the jellyfin.service unit is loaded on the host."""
+    if not _SYSTEMCTL:
+        return False
     out = subprocess.run(
         ["systemctl", "list-unit-files", JELLYFIN_SERVICE],
         capture_output=True, text=True, timeout=5,

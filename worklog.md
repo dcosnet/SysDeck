@@ -1807,3 +1807,43 @@ Stage Summary:
 - Live detection verified end-to-end against a staged cockpit tree (machines + podman detected LIVE: labels, orders, API levels, file counts; menu-less chrome and sysdeck-* traps correctly excluded); demo fallback verified (11 modules, DEMO badge); detail views, native-panel jumps (Virtual Machines → Containers & VMs clicked in a real browser), hub table, palette entries all browser-driven; VLM visual QA pass on shell/detail/hub (clean, subtitle "clean and minimal").
 - make check ALL PASS (218 calls / 28 modules, 254/254 tests, version sync at 0.4.1); bun run lint clean; tsc clean on touched files.
 - Console/host parity is now 100%: whatever cockpit modules the host has, the console shows — plus the unix login from 0.4.0.
+
+---
+Task ID: v0.4.1-docs
+Agent: Main Orchestrator (docs pass — standalone-first description)
+Task: Update README, QUICKSTART and BLOG with a better standalone description and an explicit statement that every module can be loaded in Cockpit as well; sync the standalone runbook and the tarball builder.
+
+Work Log:
+- README.md: tagline rewritten standalone-first ("A standalone Linux operations console — sign in with a Unix account and run every module in the browser. No Cockpit required; the same modules load in Cockpit too."); "What this is" rewritten in four paragraphs (the console, the Unix/PAM login, the Cockpit plugin shape, the two-way module parity rule); the deployment-shapes table gained the standalone console as the DEFAULT shape (the "cockpit plugin is the primary deliverable" line retired — it described 0.2.x); the quick start shows both paths (make web-dev first, sudo make install second) with current tarball names; a v0.4.1 highlights bullet records the docs pass.
+- QUICKSTART.md: header version fixed (was stale at 0.2.0 Master Edition); the intro describes the two five-minute paths, standalone first; §2/§5 stale 0.0.35 tarball refs refreshed to sysdeck-0.4.1-master; §3's verify table completed to the real 27 sidebar entries (AI Gateway, Monitoring, 3rd-Party Modules, Service/Ports were missing) with a both-sides note; §9 retitled "The standalone web console (no Cockpit required)" and rewritten (Unix login, 29 modules, fester, cockpit-module detection, the loads-in-cockpit cross-reference); §10.4 retitled "The console login"; the living sections scrubbed of "web edition" phrasing (historical release notes and operator quotes left verbatim); §7's BLOG pointer de-staled.
+- web/README.md (the standalone runbook): title de-codenamed to "SysDeck — the standalone web console"; the intro carries the Unix-login line and the "every module also loads in Cockpit" promise; §2's login paragraph rewritten from the long-removed 0.3.1 shared password (SYSDECK_WEB_PASSWORD) to the PAM login; the systemd unit description updated; §9's layout paragraph states the module parity; a stale 0.3.1-master path fixed to 0.4.1-master.
+- BLOG.md: new "v0.4.1 docs pass — the standalone description" entry appended (the operator's ask verbatim, the repositioning rationale, the per-file change list, the verification block); the top-of-file latest-release pointer updated to mention the docs pass.
+- QA.md: v0.4.1 docs-pass QA entry (positioning accuracy, consistency, guards + packaging).
+- make-master-tarball.sh: two stale 0.3.1-era guards (SYSDECK_WEB_PASSWORD probes against QUICKSTART.md and session.ts — both strings were removed from those files in 0.4.0, so the guards could never pass again) replaced with 0.4.x markers (SYSDECK_AUTH_MODE for QUICKSTART §10.4, createSessionToken for the v2 session lib); the generated .env heredoc rewritten for the auth-mode/detection surface (was still documenting the shared password); the embedded web/README.md heredoc fully synced with the live file — the heredoc had drifted from the live runbook across 0.4.0/0.4.1 (old env-table row, old 0.3.1 security bullet); verified byte-identical after the sync.
+- Rebuilt sysdeck-0.4.1-master.tar.bz2 (docs-revised) via the staged-tree builder with all guards green; `make check` ALL PASS after the edits; shipped to the sandbox download/ directory with a refreshed sha256 and a stage snapshot.
+
+Stage Summary:
+- The docs now sell what the code does: SysDeck standalone-first (Unix-account login, browser-only, no cockpit required), every module loadable in Cockpit as well, and every installed cockpit module loadable in the console — one module catalog, two front ends.
+- No code paths touched; no version bump — the docs pass is part of 0.4.1.
+
+---
+Task ID: v0.4.1-uninstaller
+Agent: Main Orchestrator (quiet uninstaller for old cockpit-installed versions)
+Task: "write a quite uninstall script for old cockpit installed versions" — standalone, quiet, covers every layout ever shipped.
+
+Work Log:
+- sysdeck-uninstall.sh (new, tree root, executable): quiet uninstaller with a strict output contract — zero stdout on success (including the nothing-installed case), diagnostics to stderr + non-zero exit only on real failures; idempotent.
+- Coverage derived line-by-line from make uninstall / make install / make install-branding: pacman/dpkg/rpm sysdeck package (best effort, then the file pass catches the rest); /usr/share/cockpit/sysdeck (v0.0.9-v0.0.19 single-plugin); /usr/share/cockpit/sysdeck-* (v0.0.20+ multi-plugin incl. sysdeck-common); branding.css skin + distro backup restore (.sysdeck-bak, mirrors uninstall-branding); /usr/lib/sysdeck (bridge + tests); /usr/share/sysdeck (diagnostics, firewall templates/policies, prometheus); /usr/share/doc/sysdeck; metainfo; both polkit actions; python site-packages sysdeck symlinks (any python3.x site/dist-packages via glob + the live python3 resolution) and sysdeck-*.dist-info / egg-info.
+- Extras over make uninstall: dpkg/rpm package handling, dist-info cleanup, multi-python site dirs, polkit reload + appstream refresh + cockpit.socket restart in one step (--no-restart skips), branding backup restore.
+- Operator data deliberately survives: /etc/sysdeck, /etc/pam.d/sysdeck, /var/lib/sysdeck (builder artifacts) unless --purge-state; third-party cockpit modules untouched; web console is a directory, not an install.
+- Flags: -q (default) / -v / -n dry-run / --no-restart / --purge-state / -h. Non-root re-execs via sudo in real mode.
+- Testability: SYSDECK_ROOT=<prefix> relocates every path and routes system actions into <prefix>/.uninstall-actions.log — nothing outside the prefix is touched.
+- Tests (scripts/test-sysdeck-uninstall.sh, sandbox): fake root planted with every historical layout (single-plugin, four multi-plugin dirs + common, branding skin + backup, bridge+tests, share tree, docs, metainfo, both polkit files, two python minors' site-packages links + dist-info, var/lib + etc operator data); scenarios: quiet default (silent full removal + backup restored + action log has restart/polkit), idempotent rerun, dry-run lists without removing, verbose, --purge-state + --no-restart (log proves restart skipped), bad option (stderr + rc≠0 + untouched), help. 48/48 PASS.
+- Makefile wiring: UNINSTALL_SCRIPT variable; install target drops it at /usr/share/sysdeck/ (available on package-managed hosts without the tarball); added to dist + master tarball file lists.
+- Incident + fix: a partially-applied edit mangled recipe indentation (tabs → spaces) across the Makefile; make -n caught "missing separator"; restored the pristine Makefile from web/master-build/cockpit/ (staged during the docs-pass build) and re-applied only the three intended additions; make check ALL PASS after (recipe-indentation guard green, 254/254, version sync).
+- Docs: QUICKSTART §6 documents the script after make uninstall; BLOG.md "v0.4.1 follow-up — the quiet uninstaller" entry; QA.md verification block.
+- Rebuilt sysdeck-0.4.1-master.tar.bz2 (script at bundle root, executable) via the staged-tree builder, guards green; re-shipped to download/ with refreshed sha256 + stage snapshot.
+
+Stage Summary:
+- One-command quiet cleanup of every cockpit-installed SysDeck version: sudo ./sysdeck-uninstall.sh (or /usr/share/sysdeck/sysdeck-uninstall.sh on installed boxes).
+- 48/48 harness checks; make check ALL PASS; master tarball rebuilt and verified.

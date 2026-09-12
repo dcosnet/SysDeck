@@ -1,3 +1,30 @@
+sysdeck (0.4.3-1) unstable; urgency=medium
+
+  * v0.4.3: the MoE QA pass — production hardening across every axis.
+    stdin-piped privileged writes with verification, comment injection
+    guards, mktemp staging, admin-gated mutations (SYSDECK_MUTATIONS),
+    honest dry-runs and unbans, XFF trust gating, TTL + single-flight
+    polling caches, and cockpit-side bridge parity (sensors chain,
+    dnf rc-100, subprocess timeouts).
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 12 Sep 2026 06:30:00 -0400
+
+sysdeck (0.4.2-1) unstable; urgency=medium
+
+  * v0.4.2: the zero-demo release — production implementations only.
+    The sensors bridge reads the real lm-sensors JSON (sensors -j)
+    with an honest sysfs fallback; the netsec ban layer enforces for
+    real (atomic nftables batch: table inet sysdeck + blacklist set
+    with 30d timeouts, iptables DROP fallback) and merges the live
+    fail2ban ban list; the firewall panel gains a live-ruleset tab
+    (real nft -j list ruleset / iptables-save) and its template
+    catalog now carries all seven shipped topologies; LUKS header
+    backups are hashed from the actual image. The bridge envelope no
+    longer admits a 'demo' source at the type level — every module
+    reads real host state or fails honestly.
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 12 Sep 2026 20:00:00 -0400
+
 sysdeck (0.4.1-1) unstable; urgency=medium
 
   * v0.4.1: cockpit module detection for the web console — every

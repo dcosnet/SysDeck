@@ -6,7 +6,7 @@ Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
 
 ## v0.3.0 — 2026-09-11 (AI Gateway Edition: klanker-gate integrated)
 
-*(latest release: v0.4.1 — cockpit module detection; see the last entry below)*
+*(latest release: v0.4.3 — the MoE QA pass; see the last entry below)*
 
 v0.3.0 answers the operator's question: *"lets take a look at this project klanker-gate, i believe its mainly coded for a windows platform. how much work would it be to port it to arch linux and into the sysdeck as a module."* The answer surprised the premise, so this entry records both the verdict and the evidence.
 
@@ -3075,3 +3075,214 @@ typical distro set badged DEMO; detail views, native-panel jumps, hub
 table, and palette entries driven through a real browser; `make check`
 still ALL PASS (218 calls / 28 modules, 254/254 tests, version sync at
 0.4.1); lint and tsc clean on every touched file.
+
+## v0.4.1 follow-up — the quiet uninstaller
+
+*"write a quite uninstall script for old cockpit installed versions"*
+— the operator's ask, and the honest companion to `make uninstall`:
+the Makefile target has covered every prior version's fingerprints
+since v0.0.20, but it is chatty, it stops before restarting cockpit
+(telling the operator to do it), and it only exists where the source
+tree is. A box that installed via package manager has no Makefile at
+all.
+
+`sysdeck-uninstall.sh` (tree root; `make install` also drops it at
+`/usr/share/sysdeck/`, so it survives on package-managed hosts) is
+the quiet version of the same thoroughness:
+
+- **Every layout ever shipped** — the v0.0.9-v0.0.19 single-plugin
+  `/usr/share/cockpit/sysdeck/`, the v0.0.20+ multi-plugin
+  `/usr/share/cockpit/sysdeck-*/` (including `sysdeck-common`), the
+  Python bridge helpers and tests under `/usr/lib/sysdeck/`, the
+  diagnostics/firewall/prometheus share tree, the docs, the AppStream
+  metainfo, both polkit actions, the python site-packages symlinks
+  (any python3.x, plus dist-info/egg-info), and the pacman/dpkg/rpm
+  `sysdeck` package when one owns the files.
+- **The 0.3.0 branding skin** — removes our `branding.css` and
+  restores the distro backup taken by `install-branding`, mirroring
+  `make uninstall-branding`.
+- **Quiet contract** — zero stdout on success, including when nothing
+  was installed (idempotent); diagnostics to stderr with a non-zero
+  exit only on real failures. `-v` lists each removal, `-n` dry-runs.
+- **One step to a flushed sidebar** — it reloads polkit, refreshes
+  the AppStream cache and restarts cockpit.socket itself (`--no-restart`
+  to skip), instead of telling the operator to.
+- **Operator data survives** — `/etc/sysdeck/`, `/etc/pam.d/sysdeck`
+  and `/var/lib/sysdeck/` (builder artifacts) are left alone;
+  `--purge-state` opts the state directory in.
+- **Testable without root** — `SYSDECK_ROOT=<prefix>` relocates every
+  path and turns system actions into a log, which is how it was
+  verified: a fake root planted with artifacts from every historical
+  layout (single-plugin, multi-plugin, branding skin + backup, two
+  python minors' site-packages links, dist-info) driven through
+  quiet / idempotent / verbose / dry-run / `--purge-state` /
+  `--no-restart` / bad-option / help scenarios — 48/48 checks pass.
+
+**Verified:** `bash -n` clean; the 48-check harness above;
+`make check` ALL PASS after the Makefile wiring (recipe-indentation
+guard included — it caught a tab/space mangling incident during the
+edit, restored from the staged 0.4.1 tree); the master tarball rebuilt
+with the script at the bundle root and installed by `make install`
+into `/usr/share/sysdeck/`.
+
+## v0.4.3 — 2026-09-12 (the MoE QA pass: hardened on every axis)
+
+*"do a MoE QA pass acting as a team of web designers, backend coders,
+javascript expert in react, vue, next, nodejs and others. elm expert,
+a css expert, ui/ux expert, a algorithms specialist get it production
+ready"* — and two more directives that shaped the whole pass: comments
+must read as decisive present-tense decisions (no more "restored" /
+"brought back" archaeology), and wherever the code forks between
+backends it must follow an explicit step-down chain, Unix-philosophy
+style.
+
+Four expert reviews ran in parallel — design/CSS/UI-UX,
+JS/React/Next + Elm-style type discipline, backend (Python bridges +
+route handlers), and algorithms/performance — and their findings
+landed in one sweep:
+
+- **The dangerous ones first.** The polkit sync spawned `sudo -n tee`
+  with no stdin — the ruleset never arrived and a half-closed pipe
+  could truncate the live rules file. It now pipes the ruleset and
+  verifies the write byte-for-byte. Firewall rule comments accepted
+  newlines — a comment could break out of the quoted nft script string
+  and inject directives into a root-run load; they're validated and
+  render-time-escaped now. Three surfaces wrote root rulesets to
+  predictable `/tmp` paths; the web side pipes to `nft -f -` /
+  `iptables-restore` instead, the shipped templates gained `mktemp` +
+  `trap`, and module installs stage in `mkdtemp` dirs. The smartcard
+  PIN traveled in argv — `/proc/<pid>/cmdline` is world-readable; it
+  rides stdin now.
+- **Authorization grew a spine.** Any signed-in unix account could hit
+  every mutating command — `isAdmin` was a badge, not a gate. The
+  bridge dispatcher now consults a command-level mutation registry
+  (one explicit map, no naming heuristics) and requires an admin
+  session, with `SYSDECK_MUTATIONS=any` documented for
+  single-operator consoles. Rate-limit identity ignores
+  client-supplied `X-Forwarded-For` unless `SYSDECK_TRUST_PROXY=1`.
+- **Honesty fixes the demo-sweep missed.** The firewall apply marked a
+  ruleset ACTIVE before checking the script's exit code; netsec's
+  unban hard-coded `ok: true`; a dry-run showed a synthesized script
+  while apply ran the shipped template — all three now report the
+  truth, and dry-runs render the shipped script verbatim. Panel copy
+  still narrating the dev sandbox ("simulated", "seeded", "932
+  packages") was rewritten to describe the capability
+  unconditionally; `restartService` fabricates nothing and runs the
+  real `systemctl restart` under the privilege chain.
+- **The polling layer stopped spamming the host.** A TTL +
+  single-flight cache landed in the shared bridge layer — binary
+  probes, docker/podman inventories, the mining rig, kata sandboxes,
+  fail2ban sweeps and glances snapshots all share one subprocess sweep
+  per window instead of spawning per panel per tick; fleet
+  reachability probes run in parallel; the services bridge restored
+  the python's `ss -tlnp` → `/proc` step-down and stopped blocking
+  the event loop with a synchronous pid×fd walk; the Fester replay
+  fold went from O(n²) to O(delta) via a WeakMap-keyed running fold.
+- **The cockpit side caught up.** The Python `sensors` bridge ran the
+  same `sensors -j` → sysfs step-down the web side already had (and
+  stopped crashing on hosts without lm-sensors); `dnf check-update`'s
+  exit-100-when-updates-exist is data now, not a fabricated empty
+  list; every Python bridge spawn carries a hard timeout and the
+  scrubbed `LC_ALL=C` environment; the quiet uninstaller's sudo
+  re-exec stopped dropping the operator's options (a lost `-n` used
+  to escalate a dry run into a real uninstall).
+- **The wording directive.** Every comment that narrated development
+  churn — "restored", "brought back", "v0.1.4 FIX: ... had never
+  worked" — was rewritten as a present-tense statement of the rule the
+  code now follows. The grep for that vocabulary comes back clean
+  across `web/src`, `bridge/`, `shared/` and the scripts.
+
+Verification: tsc and eslint clean across the changed surface,
+`py_compile` across every bridge, `make check` 254/254 with version
+sync at 0.4.3, and a standalone harness for the new shared layer
+(stdin piping, scrubbed env, buffer caps, TTL/single-flight cache,
+invalidations) passing 8/8.
+
+---
+
+## v0.4.2 — 2026-09-12 (the zero-demo release: production implementations only)
+
+*"i consider any and all demo, mock, stub code to be a waste of time,
+production ready implimentations only."* — the operator's standing
+directive, restated after a review of the Next.js implementation found
+that a few models had drifted and shipped demo data during the fast
+feature cadence. 0.4.2 is the catch-up pass that removes every last
+fabricated row from the codebase — and makes the compiler itself
+enforce the policy.
+
+### What the audit found
+
+A full sweep (`demo|mock|stub|fake|placeholder` across every bridge,
+panel, and type) found three bridges with real demo remnants: **sensors**
+(supplemented a synthetic coretemp/nct6798/it8620 chip set with drifting
+values when the host's sysfs was sparse), **netsec** (seeded three
+classic hostile-actor bans into the registry and only recorded new bans
+— no kernel enforcement), and **firewall** (a live bridge, but a
+5-of-7 template catalog and a panel that still described the
+pre-production "simulated apply" era). Beyond the bridges, the drift
+was labeling: the `ok()` envelope helper **defaulted its source to
+'demo'**, so dozens of genuinely live call sites rendered with a DEMO
+badge; twelve registry entries and as many panels carried stale
+`demo` statuses; and `InstallHint` still apologized that "a demo
+dataset is shown instead."
+
+### The production implementations
+
+- **Sensors** now parse the canonical source: the real `sensors -j`
+  (lm-sensors) JSON — chip names, labels, critical trips — the exact
+  output the cockpit edition parses. When lm-sensors isn't installed,
+  the bridge reads the same sysfs nodes lm-sensors itself reads
+  (`/sys/class/hwmon/hwmon*/{temp,fan,in}*_input` with `_label` and
+  `_crit`, plus thermal zones). A host with no sensors gets an honest
+  empty panel with install guidance. The demo chip set is gone.
+- **Netsec bans enforce for real.** `ban` loads an atomic `nft -f`
+  batch — `table inet sysdeck`, a `blacklist` set typed `ipv4_addr`
+  with `flags timeout`, the address added with a 30-day timeout — or,
+  on iptables-only hosts, an `INPUT DROP` rule tagged
+  `sysdeck-netsec-ban`. Both paths are privilege-gated exactly like
+  the firewall module (root / `sudo -n`, honest refusal with the exact
+  operator command otherwise; the batch is idempotent so a retry after
+  gaining privilege just works). `unban` deletes the element. And the
+  ban list now **merges the live fail2ban ban list** —
+  `fail2ban-client status <jail>` per jail, privilege-aware — with
+  fail2ban rows carrying synthetic `fail2ban:<jail>:<ip>` ids whose
+  unban executes the real `fail2ban-client set <jail> unbanip`.
+- **The firewall panel grew a live-ruleset tab**: the host's actual
+  kernel firewall — `nft -j list ruleset` on nftables hosts,
+  `iptables-save` on legacy hosts — rendered raw from the binary every
+  15s, with honest privilege guidance. The template catalog now
+  carries **all seven shipped topologies** (vps-webserver and ai-llm
+  ported verbatim from their executable scripts), and the panel's
+  copy finally matches the bridge it has had since the production
+  rewrite: real applies, real refusals, real dry-runs.
+- **LUKS header backups are now hashed from the actual image bytes**
+  (the vault bridge had been digesting `Date.now()+path` — a fabricated
+  checksum nobody could verify; the digest now matches
+  `sha256sum <file>` on the command line).
+- A corrupted `hwalert.ts` (three `ScannedDevice[]>` annotations from
+  a truncated write) was repaired — the file hadn't compiled since.
+
+### The compiler-enforced policy
+
+The `DataSource` union no longer contains `'demo'`:
+`'live' | 'hybrid' | 'unavailable'`. Every panel badge, every registry
+status, every bridge envelope is checked against it — reintroducing a
+demo source anywhere in the web console is now a **type error**, not a
+code-review gamble. The `ok()` helper's default source is `'live'`,
+and honest-empty is a first-class rendering state ("nothing is
+fabricated — install the backend and the panel fills on the next
+poll").
+
+**Verified:** `tsc --noEmit` clean across the whole web tree (first
+time — the check also surfaced and fixed pre-existing glances
+null-safety, a vault type error, and scoped the fester Bun
+mini-service out of the app tsconfig); eslint clean on every touched
+file; live end-to-end probes — sensors honest-empty, firewall
+create-from-template → dry-run (exact nft script) → real apply
+(honest unprivileged refusal naming the shipped
+`firewall/templates/ai-llm.sh`), netsec ban/unban lifecycle with
+registry provenance, all 30 modules answering `source: 'live'`;
+browser QA — firewall LIVE badge with the live-ruleset tab default,
+sensors LIVE with honest zeros, netsec LIVE with the origin column.
+`make check` ALL PASS (218 calls / 28 modules, 254/254 tests, version
+sync at 0.4.2).

@@ -73,7 +73,7 @@ export const commands = {
   resetToggles: async () => {
     await writeDisabled([])
     await db.auditLog.create({
-      data: { module: 'shell', action: 'module-reset', detail: 'all module visibility toggles restored' },
+      data: { module: 'shell', action: 'module-reset', detail: 'all module visibility toggles reset to defaults' },
     })
     return ok({ disabled: [] }, 'live')
   },

@@ -1111,13 +1111,15 @@ def cmd_stop(_args: list[str]) -> dict[str, Any]:
         r = subprocess.run(
             [systemctl, "stop", "nftables.service"],
             capture_output=True, text=True, check=False, timeout=15,
+            env=SCRUBBED_ENV,
         )
-        _write_active_template(None)
+        if r.returncode == 0:
+            _write_active_template(None)
         return {
             "stopped": r.returncode == 0,
             "method": "systemd",
-            "output": r.stdout.strip(),
-            "stderr": r.stderr.strip() or err2.strip(),
+            "output": _sanitize_output(r.stdout),
+            "stderr": _sanitize_output(r.stderr) or err2.strip(),
         }
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
         return {
@@ -1537,10 +1539,8 @@ def cmd_install_backend(args: list[str]) -> dict[str, Any]:
     for p in pkgs:
         if not _validate_filename(p):
             return {"error": f"invalid package name: {p!r}"}
-    # v0.1.4 FIX: the trailing '--' separator made packages.py's
-    # install() see '--' as args[0] and fail with "no targets" — the
-    # backend-install path had never worked. packages.py now skips
-    # leading '--' argv elements anyway, so both sides are fixed.
+    # Both sides accept the `--` argv separator: packages.py skips
+    # leading '--' elements, and this caller never emits one.
     cmd = [python3, packages_helper, "install", *pkgs]
     try:
         r = subprocess.run(

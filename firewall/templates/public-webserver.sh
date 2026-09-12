@@ -54,7 +54,9 @@ SCRIPT_VERSION="0.0.47"
 
 TABLE_NAME="firewall"
 NFT_CMD="${NFT_CMD:-nft}"
-RULES_FILE="${RULES_FILE:-/tmp/sysdeck-firewall-public-webserver.rules}"
+RULES_FILE="${RULES_FILE:-$(mktemp /tmp/sysdeck-firewall-public-webserver-XXXXXX.rules)}"
+# a fresh mktemp name per run — no predictable /tmp path for a root write
+trap 'rm -f "$RULES_FILE"' EXIT
 
 # ── Configurable ports (auto-detected) ──────────────────────────────
 # v0.0.47: Varnish is the public cache front on :80; Caddy HTTP backend

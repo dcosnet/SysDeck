@@ -1,13 +1,13 @@
 'use client'
 
-// Firmware panel — fwupd-style device inventory (DMI entry real, fwupd
-// rows demo-labeled), raw DMI identity, TPM PCR0 boot-chain block, and
-// an updates section whose Stage action records staging through the
-// bridge (SdKv + audit) — the actual flash needs the cockpit bridge
-// on a managed host, which the toast states plainly.
+// Firmware panel — fwupd-style device inventory (real DMI identity +
+// real fwupdmgr get-devices when fwupd exists), raw DMI fields, TPM
+// PCR0 boot-chain block, and updates straight from fwupdmgr
+// get-updates. Stage runs the real fwupdmgr flow when fwupd is present
+// and refuses honestly otherwise.
 
 import { toast } from 'sonner'
-import { Cpu, Download, Fingerprint, HardDrive, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Download, Fingerprint, HardDrive, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
 import {
   DataTable,
@@ -35,7 +35,6 @@ interface FwDevice {
   Kind: string
   Flags: string
   Guid: string
-  demo?: boolean
 }
 
 interface DmiFields {
@@ -68,7 +67,7 @@ export default function FirmwarePanel() {
   const tpm = useBridgeQuery<{
     installed: boolean
     note: string
-    pcr0: { demo?: boolean; algorithm: string; pcr: number; digest: string; extensions: string[] }
+    pcr0: { algorithm: string; pcr: number; digest: string; extensions: string[] }
   }>('firmware', 'tpm')
   const updates = useBridgeQuery<{ updates: FwUpdate[]; count: number }>('firmware', 'updates')
   const action = useBridgeAction()
@@ -132,7 +131,7 @@ export default function FirmwarePanel() {
       {/* devices */}
       <PanelCard
         title="Device inventory"
-        actions={<Mono>first entry = real identity; fwupd rows are demo-labeled (fwupd absent)</Mono>}
+        actions={<Mono>real identity from /sys/class/dmi + fwupdmgr when installed</Mono>}
       >
         <DataTable
           rows={dev?.Devices ?? []}
@@ -160,15 +159,9 @@ export default function FirmwarePanel() {
                 ))}
               </TableCell>
               <TableCell className="text-right">
-                {r.demo ? (
-                  <Badge variant="outline" className="border-amber-500/30 font-mono text-[9px] text-amber-500" title="seeded demo row — fwupd not installed">
-                    demo
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="border-emerald-500/30 font-mono text-[9px] text-emerald-400" title="read from this host's kernel/DMI identity">
-                    real
-                  </Badge>
-                )}
+                <Badge variant="outline" className="border-emerald-500/30 font-mono text-[9px] text-emerald-400" title="read from this host's kernel/DMI identity + fwupdmgr">
+                  real
+                </Badge>
               </TableCell>
             </>
           )}
@@ -193,7 +186,7 @@ export default function FirmwarePanel() {
           <p className="mt-2 font-mono text-[10px] text-muted-foreground">
             {dmiKnown
               ? 'raw /sys/class/dmi/id values'
-              : dmi.data?.note ?? '/sys/class/dmi/id is not exposed in this container — values stay honestly empty'}
+              : dmi.data?.note ?? '/sys/class/dmi/id is not exposed by this host — values stay honestly empty'}
           </p>
         </PanelCard>
 
@@ -207,7 +200,7 @@ export default function FirmwarePanel() {
             )
           }
         >
-          {t?.installed ? (
+          {t?.installed && t.pcr0 ? (
             <div>
               <KV k="algorithm" v={t.pcr0.algorithm} />
               <KV k="pcr index" v={t.pcr0.pcr} />
@@ -216,39 +209,16 @@ export default function FirmwarePanel() {
               </p>
             </div>
           ) : (
-            <>
-              <InstallHint
-                bin="tpm2-tools"
-                distro="labeled demo"
-                hint="tpm2_pcrread sha256:0  # reads the real measured-boot digest"
-              />
-              <div className="mt-3">
-                <p className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Cpu className="h-3.5 w-3.5" aria-hidden />
-                  PCR0 layout the cockpit edition rendered ({t?.pcr0.algorithm} · bank {t?.pcr0.pcr}):
-                </p>
-                <p
-                  className="break-all rounded-md border border-border bg-zinc-950/60 p-3 font-mono text-[11px] leading-relaxed text-zinc-300"
-                  title="demo digest — tpm2-tools not installed in this environment"
-                >
-                  {t?.pcr0.digest}
-                </p>
-                <div className="mt-2 space-y-1">
-                  {(t?.pcr0.extensions ?? []).map((x) => (
-                    <p key={x} className="flex items-baseline gap-2 text-[11px] text-muted-foreground">
-                      <span className="text-primary">└</span> {x}
-                    </p>
-                  ))}
-                </div>
-                <p className="mt-2 font-mono text-[10px] text-amber-500/80">digest above is a labeled demo value</p>
-              </div>
-            </>
+            <InstallHint
+              bin="tpm2-tools"
+              hint="tpm2_pcrread sha256:0  # reads the real measured-boot digest"
+            />
           )}
         </PanelCard>
       </div>
 
       {/* updates */}
-      <PanelCard title="Firmware updates" actions={<Mono>{ups?.count ?? 0} in catalog · staging is recorded, flashing is cockpit-bridge-only</Mono>}>
+      <PanelCard title="Firmware updates" actions={<Mono>{ups?.count ?? 0} in catalog · real fwupdmgr get-updates</Mono>}>
         <div className="space-y-3">
           {(ups?.updates ?? []).map((u) => (
             <div key={u.guid} className="rounded-lg border border-border bg-muted/30 p-3">

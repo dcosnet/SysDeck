@@ -1,101 +1,355 @@
-// SysDeck bridge — containers (demo inventory)
+// SysDeck bridge — containers (real multi-runtime aggregation, all live)
 // Port of bridge/containers.py semantics: the cockpit edition aggregated
-// `podman ps -a --format json` enriched with systemd scope units
-// (libpod-<id>.scope). This sandbox has no incus/podman/libvirt/
-// firecracker, so the web edition keeps the SAME surface (list of
-// containers/VMs with state, image, cpu, mem, uptime, ports + lifecycle
-// transitions) over a seeded Prisma inventory. Mutations are recorded
-// in AuditLog; exec() returns simulated shell output.
+// `podman ps -a --format json`. The web edition aggregates EVERY runtime
+// actually present on the host:
+//   podman · docker · incus · lxc · libvirt (virsh) · firecracker sockets
+// Each driver is probed with its real CLI and the inventories are merged
+// per call — no seeded rows, no simulated state transitions. Lifecycle
+// actions (start/stop/freeze/delete/exec) run the runtime's real command;
+// failures surface the runtime's own error verbatim (e.g. rootless
+// runtimes, the libvirt system daemon socket, or absent binaries).
+import { ok, fail, run, which, cached, invalidateCache } from './shared'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { readdir } from 'fs/promises'
 
-const SOURCE = 'demo' as const
-const NOTE = 'incus/podman/libvirt not present in sandbox — demo inventory'
-
-/** fail() + source → the dispatcher spreads this into a top-level
- *  {ok:false, error, source} envelope (1-b's failE pattern). */
 function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+  return { ...fail(error), source: 'live' }
 }
 
 async function audit(action: string, detail: string) {
   await db.auditLog.create({ data: { module: 'containers', action, detail } })
 }
 
-// ── lazy seed ───────────────────────────────────────────────────────
+// ── unified row shape (panel contract) ───────────────────────────────
 
-async function ensureSeeded(): Promise<void> {
-  const count = await db.container.count()
-  if (count > 0) return
-  await db.container.createMany({
-    data: [
-      // incus system containers
-      { name: 'web-frontend', driver: 'incus', kind: 'container', image: 'nginx:alpine', state: 'running', cpuPct: 0.8, memMb: 84, uptimeS: 764301, ports: '0.0.0.0:8081 -> 80/tcp' },
-      { name: 'api-gateway', driver: 'incus', kind: 'container', image: 'images:debian/12', state: 'running', cpuPct: 3.2, memMb: 412, uptimeS: 764298, ports: '0.0.0.0:8080 -> 8080/tcp' },
-      { name: 'redis-cache', driver: 'incus', kind: 'container', image: 'images:alpine/3.20', state: 'running', cpuPct: 1.1, memMb: 96, uptimeS: 512340, ports: '10.10.0.1:6379' },
-      { name: 'postgres-main', driver: 'incus', kind: 'container', image: 'images:debian/12', state: 'running', cpuPct: 5.4, memMb: 1284, uptimeS: 512338, ports: '10.10.0.1:5432' },
-      { name: 'worker-queue', driver: 'incus', kind: 'container', image: 'images:debian/12', state: 'stopped', cpuPct: 0, memMb: 0, uptimeS: 0, ports: null },
-      { name: 'ci-runner', driver: 'incus', kind: 'container', image: 'images:archlinux/current', state: 'running', cpuPct: 12.6, memMb: 890, uptimeS: 44610, ports: null },
-      { name: 'grafana-agent', driver: 'incus', kind: 'container', image: 'images:alpine/3.20', state: 'running', cpuPct: 1.4, memMb: 62, uptimeS: 512301, ports: '127.0.0.1:9090 -> 9090/tcp' },
-      // libvirt VMs
-      { name: 'win11-dev', driver: 'libvirt', kind: 'vm', image: 'win11-dev.qcow2', state: 'running', cpuPct: 8.9, memMb: 8192, uptimeS: 1903742, ports: '192.168.122.51:3389, 5900' },
-      { name: 'arch-test', driver: 'libvirt', kind: 'vm', image: 'arch-test.qcow2', state: 'stopped', cpuPct: 0, memMb: 0, uptimeS: 0, ports: null },
-      { name: 'pfsense-fw', driver: 'libvirt', kind: 'vm', image: 'pfSense-2.7.2.qcow2', state: 'running', cpuPct: 2.1, memMb: 512, uptimeS: 2367421, ports: '192.168.122.1:443' },
-      // podman containers
-      { name: 'ollama-inference', driver: 'podman', kind: 'container', image: 'docker.io/ollama/ollama:0.3.12', state: 'running', cpuPct: 45.2, memMb: 9216, uptimeS: 384620, ports: '0.0.0.0:11434 -> 11434/tcp' },
-      { name: 'openwebui', driver: 'podman', kind: 'container', image: 'ghcr.io/open-webui/open-webui:v0.3.32', state: 'running', cpuPct: 4.8, memMb: 512, uptimeS: 384615, ports: '0.0.0.0:3000 -> 8080/tcp' },
-      { name: 'homebridge', driver: 'podman', kind: 'container', image: 'docker.io/homebridge/homebridge:1.8.4', state: 'stopped', cpuPct: 0, memMb: 0, uptimeS: 0, ports: null },
-      // firecracker microVMs
-      { name: 'fc-build-1', driver: 'firecracker', kind: 'vm', image: 'vmlinux-6.1.fc (rootfs: ext4)', state: 'running', cpuPct: 88.0, memMb: 2048, uptimeS: 5410, ports: null },
-      { name: 'fc-build-2', driver: 'firecracker', kind: 'vm', image: 'vmlinux-6.1.fc (rootfs: ext4)', state: 'stopped', cpuPct: 0, memMb: 0, uptimeS: 0, ports: null },
-    ],
-  })
-  await db.auditLog.create({
-    data: { module: 'containers', action: 'seed', detail: 'seeded demo inventory: 15 containers/VMs (incus 7, libvirt 3, podman 3, firecracker 2)' },
-  })
+export interface CtrRow {
+  id: string
+  name: string
+  driver: string
+  kind: 'container' | 'vm'
+  image: string
+  state: 'running' | 'stopped' | 'frozen'
+  cpuPct: number
+  memMb: number
+  uptimeS: number
+  ports: string | null
+  createdAt: string
 }
 
-// ── helpers ─────────────────────────────────────────────────────────
+// ── driver probes (each returns [] when the runtime is absent) ───────
 
-async function getContainer(id: string) {
-  return db.container.findUnique({ where: { id } })
-}
-
-function jitter(base: number, pct = 0.25): number {
-  return Math.round(base * (1 + (Math.random() - 0.5) * 2 * pct) * 10) / 10
-}
-
-// Simulated exec output for the demo containers (cmd echo style).
-function execOutput(name: string, command: string): { rc: number; lines: string[] } {
-  const prompt = `root@${name}:~# ${command}`
-  const cmd = command.trim()
-  const known: Record<string, string[]> = {
-    'uname -a': [`Linux ${name} 6.8.9-sysdeck #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux`],
-    'uptime -p': ['up 8 days, 20 hours, 18 minutes'],
-    whoami: ['root'],
-    'df -h': ['Filesystem      Size  Used Avail Use% Mounted on', '/dev/sda1        58G   21G   35G  38% /'],
-    'ps aux': ['USER  PID %CPU %MEM COMMAND', 'root    1  0.0  0.1 systemd', 'root   42  0.8  0.3 nginx: master process'],
-    'cat /etc/os-release': ['PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"', 'VERSION_ID="12"'],
-    'free -m': ['               total   used   free', 'Mem:           1024    312    712'],
+async function listPodman(): Promise<CtrRow[]> {
+  if (!(await which('podman'))) return []
+  const r = await run('podman', ['ps', '-a', '--format', 'json'], 20_000)
+  if (r.rc !== 0 || !r.stdout.trim()) return []
+  let raw: unknown
+  try {
+    raw = JSON.parse(r.stdout)
+  } catch {
+    return []
   }
-  if (known[cmd]) return { rc: 0, lines: [prompt, ...known[cmd]] }
-  if (cmd.startsWith('echo ')) return { rc: 0, lines: [prompt, cmd.slice(5)] }
-  if (cmd.startsWith('ls')) return { rc: 0, lines: [prompt, 'bin  boot  dev  etc  home  root  tmp  usr  var'] }
-  return { rc: 127, lines: [prompt, `sh: 1: ${cmd.split(' ')[0]}: not found`] }
+  const items = Array.isArray(raw) ? raw : []
+  const rows: CtrRow[] = []
+  for (const it of items as Record<string, unknown>[]) {
+    const state = String(it.State ?? '').toLowerCase()
+    const names = Array.isArray(it.Names) ? (it.Names as string[]) : []
+    const created = Number(it.CreatedAt ?? 0) || Number(it.Created ?? 0)
+    const ports = formatPodmanPorts(it.Ports)
+    rows.push({
+      id: String(it.Id ?? '').slice(0, 12) || (names[0] ?? ''),
+      name: names[0] ?? String(it.Id ?? '').slice(0, 12),
+      driver: 'podman',
+      kind: 'container',
+      image: String(it.Image ?? ''),
+      state: state === 'running' ? 'running' : state === 'paused' ? 'frozen' : 'stopped',
+      cpuPct: 0,
+      memMb: 0,
+      uptimeS: created ? Math.max(0, Math.floor(Date.now() / 1000) - created) : 0,
+      ports: ports ?? null,
+      createdAt: created ? new Date(created * 1000).toISOString() : '',
+    })
+  }
+  // live cpu/mem for running containers (best-effort, one shot)
+  await decoratePodmanStats(rows)
+  return rows
 }
 
-// ── commands ────────────────────────────────────────────────────────
+function formatPodmanPorts(p: unknown): string | null {
+  // podman Ports field: array of {hostPort, containerPort, protocol, hostIP}
+  if (!Array.isArray(p) || !p.length) return null
+  const parts: string[] = []
+  for (const e of p as Record<string, unknown>[]) {
+    const host = String(e.hostIP ?? '0.0.0.0')
+    const hp = String(e.hostPort ?? '')
+    const cp = String(e.containerPort ?? '')
+    const proto = String(e.protocol ?? 'tcp')
+    if (hp && cp) parts.push(`${host}:${hp} -> ${cp}/${proto}`)
+  }
+  return parts.length ? parts.join(', ') : null
+}
+
+async function decoratePodmanStats(rows: CtrRow[]): Promise<void> {
+  const running = rows.filter((r) => r.state === 'running')
+  if (!running.length) return
+  const r = await run('podman', ['stats', '--no-stream', '--format', 'json'], 20_000)
+  if (r.rc !== 0 || !r.stdout.trim()) return
+  try {
+    const stats = JSON.parse(r.stdout) as Record<string, unknown>[]
+    const byName = new Map<string, Record<string, unknown>>()
+    for (const s of stats) byName.set(String(s.Name ?? ''), s)
+    for (const row of running) {
+      const s = byName.get(row.name)
+      if (!s) continue
+      row.cpuPct = parseCpuPct(String(s.CPU ?? s.CPUPerc ?? ''))
+      row.memMb = parseMemMb(String(s.MemUsage ?? ''))
+    }
+  } catch {
+    // stats output varies across podman versions — leave zeros
+  }
+}
+
+function parseCpuPct(v: string): number {
+  const m = v.match(/([\d.]+)/)
+  return m ? Math.round(Number(m[1]) * 10) / 10 : 0
+}
+
+function parseMemMb(v: string): number {
+  const m = v.match(/([\d.]+)\s*(B|kB|KiB|MB|MiB|GB|GiB)/)
+  if (!m) return 0
+  const n = Number(m[1])
+  const unit = m[2]
+  const mult: Record<string, number> = { B: 1 / 1048576, kB: 1 / 1024, KiB: 1 / 1024, MB: 1, MiB: 1, GB: 1024, GiB: 1024 }
+  return Math.round(n * (mult[unit] ?? 1))
+}
+
+async function listDocker(): Promise<CtrRow[]> {
+  if (!(await which('docker'))) return []
+  // docker ps --format '{{json .}}' emits ONE json object per line
+  const r = await run('docker', ['ps', '-a', '--format', '{{json .}}'], 20_000)
+  if (r.rc !== 0 || !r.stdout.trim()) return []
+  const rows: CtrRow[] = []
+  for (const line of r.stdout.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const it = JSON.parse(line) as Record<string, string>
+      const state = (it.State ?? '').toLowerCase()
+      rows.push({
+        id: (it.ID ?? '').slice(0, 12),
+        name: (it.Names ?? '').split(',')[0] ?? it.ID ?? '',
+        driver: 'docker',
+        kind: 'container',
+        image: it.Image ?? '',
+        state: state === 'running' ? 'running' : state === 'paused' ? 'frozen' : 'stopped',
+        cpuPct: 0,
+        memMb: 0,
+        uptimeS: 0,
+        ports: it.Ports ? it.Ports.split(', ').filter(Boolean).join(', ') : null,
+        createdAt: it.CreatedAt ?? '',
+      })
+    } catch {
+      continue
+    }
+  }
+  return rows
+}
+
+async function listIncus(): Promise<CtrRow[]> {
+  const bin = (await which('incus')) ? 'incus' : (await which('lxc')) ? 'lxc' : null
+  if (!bin) return []
+  const r = await run(bin, ['list', '--format', 'json'], 30_000)
+  if (r.rc !== 0 || !r.stdout.trim()) return []
+  try {
+    const items = JSON.parse(r.stdout) as Record<string, unknown>[]
+    const rows: CtrRow[] = []
+    for (const it of items) {
+      const status = String(it.status ?? '').toLowerCase()
+      const st = (it.state ?? {}) as Record<string, unknown>
+      const mem = ((st.memory ?? {}) as Record<string, unknown>).usage_bytes
+      const cpu = (st.cpu ?? {}) as Record<string, unknown>
+      const createdAt = String(it.created_at ?? '')
+      const typ = String(it.type ?? 'container') === 'virtual-machine' ? 'vm' : 'container'
+      rows.push({
+        id: String(it.name ?? ''),
+        name: String(it.name ?? ''),
+        driver: bin,
+        kind: typ,
+        image: String(((it.config ?? {}) as Record<string, string>)['image.description'] ?? ''),
+        state: status === 'running' ? 'running' : status.includes('frozen') ? 'frozen' : 'stopped',
+        cpuPct: cpu.usage ? Math.round(Number(cpu.usage) / 100) / 10 : 0,
+        memMb: mem ? Math.round(Number(mem) / 1048576) : 0,
+        uptimeS: createdAt ? Math.max(0, Math.floor((Date.now() - Date.parse(createdAt)) / 1000)) : 0,
+        ports: null,
+        createdAt,
+      })
+    }
+    return rows
+  } catch {
+    return []
+  }
+}
+
+async function listLibvirt(): Promise<CtrRow[]> {
+  if (!(await which('virsh'))) return []
+  const r = await run('virsh', ['list', '--all'], 20_000)
+  if (r.rc !== 0) return []
+  const rows: CtrRow[] = []
+  for (const line of r.stdout.split('\n').slice(2)) {
+    if (!line.trim() || line.startsWith(' ')) continue
+    // " -   win11-dev    shut off" / " 1   arch-test   running"
+    const m = line.trim().match(/^(-|\d+)\s+(\S+)(?:\s+(.*))?$/)
+    if (!m) continue
+    const stateStr = (m[3] ?? '').toLowerCase()
+    rows.push({
+      id: m[2],
+      name: m[2],
+      driver: 'libvirt',
+      kind: 'vm',
+      image: '',
+      state: stateStr.includes('running') ? 'running' : stateStr.includes('paused') ? 'frozen' : 'stopped',
+      cpuPct: 0,
+      memMb: 0,
+      uptimeS: 0,
+      ports: null,
+      createdAt: '',
+    })
+  }
+  return rows
+}
+
+async function listFirecracker(): Promise<CtrRow[]> {
+  // firecracker keeps one API socket per microVM under /run/firecracker/
+  if (!(await which('firecracker'))) return []
+  const roots = ['/run/firecracker', '/var/run/firecracker']
+  for (const root of roots) {
+    try {
+      const entries = await readdir(root)
+      const socks = entries.filter((e) => e.endsWith('.sock'))
+      return socks.map((s) => ({
+        id: s.replace(/\.sock$/, ''),
+        name: s.replace(/\.sock$/, ''),
+        driver: 'firecracker',
+        kind: 'vm' as const,
+        image: '',
+        state: 'running' as const, // an active API socket is a live microVM
+        cpuPct: 0,
+        memMb: 0,
+        uptimeS: 0,
+        ports: null,
+        createdAt: '',
+      }))
+    } catch {
+      continue
+    }
+  }
+  return []
+}
+
+// ── aggregate ────────────────────────────────────────────────────────
+
+interface RuntimeStatus {
+  available: string[]
+  absent: string[]
+}
+
+const ALL_RUNTIMES = ['podman', 'docker', 'incus', 'lxc', 'virsh', 'firecracker'] as const
+
+async function runtimeStatus(): Promise<RuntimeStatus> {
+  const available: string[] = []
+  const absent: string[] = []
+  for (const rt of ALL_RUNTIMES) {
+    if (rt === 'incus' || rt === 'lxc') continue // represented by whichever exists
+    if (await which(rt)) available.push(rt)
+    else absent.push(rt)
+  }
+  if (await which('incus')) available.push('incus')
+  else if (await which('lxc')) available.push('lxc')
+  else absent.push('incus/lxc')
+  return { available, absent }
+}
+
+/** One inventory pass over every runtime, TTL-cached and single-flight:
+ *  the summary and list polls share one sweep (~14 spawns → one), and
+ *  mutations invalidate the entry so the next read is fresh. */
+async function aggregate(): Promise<{ rows: CtrRow[]; status: RuntimeStatus }> {
+  return cached('containers:aggregate', 3_000, async () => {
+    const status = await runtimeStatus()
+    const parts = await Promise.all([listPodman(), listDocker(), listIncus(), listLibvirt(), listFirecracker()])
+    const rows = parts.flat().sort((a, b) => a.driver.localeCompare(b.driver) || a.name.localeCompare(b.name))
+    return { rows, status }
+  })
+}
+
+async function findInstance(id: string): Promise<CtrRow | null> {
+  const { rows } = await aggregate()
+  return rows.find((r) => r.id === id || r.name === id) ?? null
+}
+
+// ── lifecycle dispatch (real commands per driver) ────────────────────
+
+async function driverAction(
+  row: CtrRow,
+  action: 'start' | 'stop' | 'freeze' | 'delete',
+): Promise<{ rc: number; stderr: string; command: string }> {
+  let cmd: string
+  let args: string[]
+  switch (row.driver) {
+    case 'podman':
+      cmd = 'podman'
+      args = action === 'start' ? ['start', row.name] : action === 'stop' ? ['stop', row.name] : action === 'freeze' ? ['pause', row.name] : ['rm', '-f', row.name]
+      break
+    case 'docker':
+      cmd = 'docker'
+      args = action === 'start' ? ['start', row.name] : action === 'stop' ? ['stop', row.name] : action === 'freeze' ? ['pause', row.name] : ['rm', '-f', row.name]
+      break
+    case 'incus':
+    case 'lxc':
+      cmd = row.driver
+      args = action === 'start' ? ['start', row.name] : action === 'stop' ? ['stop', row.name] : action === 'freeze' ? ['pause', row.name] : ['delete', '--force', row.name]
+      break
+    case 'libvirt':
+      cmd = 'virsh'
+      args = action === 'start' ? ['start', row.name] : action === 'stop' ? ['shutdown', row.name] : action === 'freeze' ? ['suspend', row.name] : ['undefine', row.name]
+      break
+    default:
+      // firecracker: real API call over the microVM's unix socket
+      return firecrackerAction(row, action)
+  }
+  const r = await run(cmd, args, 60_000)
+  if (r.rc === 0) invalidateCache('containers:aggregate') // next read sees the new state
+  return { rc: r.rc, stderr: r.stderr, command: [cmd, ...args].join(' ') }
+}
+
+async function firecrackerAction(
+  row: CtrRow,
+  action: 'start' | 'stop' | 'freeze' | 'delete',
+): Promise<{ rc: number; stderr: string; command: string }> {
+  if (action === 'start') {
+    return { rc: 1, stderr: 'firecracker microVMs boot from a kernel+rootfs spec, not from a stopped state — start it via the machine config', command: 'firecracker api' }
+  }
+  const command = `curl --unix-socket /run/firecracker/${row.id}.sock -X PUT http://localhost/actions`
+  const r = await run(
+    'curl',
+    ['--unix-socket', `/run/firecracker/${row.id}.sock`, '-X', 'PUT', 'http://localhost/actions', '-H', 'Content-Type: application/json', '-d', '{"action_type":"InstanceStop"}'],
+    15_000,
+  )
+  if (r.rc === 0) invalidateCache('containers:aggregate') // next read sees the new state
+  return { rc: r.rc, stderr: r.stderr || r.stdout, command }
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   summary: async () => {
-    await ensureSeeded()
-    const rows = await db.container.findMany()
+    const { rows, status } = await aggregate()
     const running = rows.filter((c) => c.state === 'running').length
-    const stopped = rows.filter((c) => ['stopped', 'frozen'].includes(c.state)).length
+    const stopped = rows.filter((c) => c.state !== 'running').length
     const drivers = [...new Set(rows.map((c) => c.driver))].map((name) => ({
       name,
       count: rows.filter((c) => c.driver === name).length,
     }))
+    const note = status.available.length
+      ? `live inventory — runtimes detected: ${status.available.join(', ')}`
+      : `no container/VM runtime detected on this host (probed: ${ALL_RUNTIMES.join(', ')}) — install one and it appears here automatically`
     return ok(
       {
         total: rows.length,
@@ -104,93 +358,96 @@ export const commands = {
         vms: rows.filter((c) => c.kind === 'vm').length,
         containers: rows.filter((c) => c.kind === 'container').length,
         drivers,
+        runtimes: status.available,
       },
-      SOURCE,
-      NOTE,
+      'live',
+      note,
     )
   },
 
   list: async () => {
-    await ensureSeeded()
-    const rows = await db.container.findMany({ orderBy: [{ driver: 'asc' }, { name: 'asc' }] })
-    return ok({ containers: rows, total: rows.length }, SOURCE, NOTE)
+    const { rows, status } = await aggregate()
+    const note = status.available.length
+      ? `live inventory via ${status.available.join(', ')}`
+      : `no container/VM runtime detected (probed: ${ALL_RUNTIMES.join(', ')})`
+    return ok({ containers: rows, total: rows.length }, 'live', note)
   },
 
   start: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '')
     if (!id) return failE('id is required')
-    const c = await getContainer(id)
-    if (!c) return failE('container not found')
-    if (c.state === 'running') return failE(`${c.name} is already running`)
-    const row = await db.container.update({
-      where: { id },
-      data: {
-        state: 'running',
-        cpuPct: jitter(3.5),
-        memMb: c.memMb && c.memMb > 64 ? c.memMb : jitter(320),
-        uptimeS: 1,
-      },
-    })
-    await audit('start', `${c.name} (${c.driver} ${c.kind}) → running`)
-    return ok({ container: row, state: 'running' }, SOURCE, `${c.name} started — demo state transition`)
+    const row = await findInstance(id)
+    if (!row) return failE(`instance '${id}' not found in the live runtime inventory`)
+    if (row.state === 'running') return failE(`${row.name} is already running`)
+    const res = await driverAction(row, 'start')
+    await audit('start', `${res.command} → rc=${res.rc}`)
+    if (res.rc !== 0) return failE(`${res.command} failed — ${res.stderr.trim().split('\n')[0] ?? 'runtime error'}`)
+    return ok({ name: row.name, state: 'running', command: res.command }, 'live', res.command)
   },
 
   stop: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '')
     if (!id) return failE('id is required')
-    const c = await getContainer(id)
-    if (!c) return failE('container not found')
-    if (c.state === 'stopped') return failE(`${c.name} is already stopped`)
-    const row = await db.container.update({
-      where: { id },
-      data: { state: 'stopped', cpuPct: 0, memMb: 0, uptimeS: 0 },
-    })
-    await audit('stop', `${c.name} (${c.driver} ${c.kind}) → stopped (cpu/mem/uptime zeroed)`)
-    return ok({ container: row, state: 'stopped' }, SOURCE, `${c.name} stopped — demo state transition`)
+    const row = await findInstance(id)
+    if (!row) return failE(`instance '${id}' not found in the live runtime inventory`)
+    if (row.state === 'stopped') return failE(`${row.name} is already stopped`)
+    const res = await driverAction(row, 'stop')
+    await audit('stop', `${res.command} → rc=${res.rc}`)
+    if (res.rc !== 0) return failE(`${res.command} failed — ${res.stderr.trim().split('\n')[0] ?? 'runtime error'}`)
+    return ok({ name: row.name, state: 'stopped', command: res.command }, 'live', res.command)
   },
 
   freeze: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '')
     if (!id) return failE('id is required')
-    const c = await getContainer(id)
-    if (!c) return failE('container not found')
-    if (c.kind !== 'container') return failE(`${c.name} is a VM — only system containers can be frozen (CRIU checkpoint)`)
-    if (c.state !== 'running') return failE(`${c.name} is ${c.state} — only running containers can be frozen`)
-    const row = await db.container.update({ where: { id }, data: { state: 'frozen', cpuPct: 0 } })
-    await audit('freeze', `${c.name} → frozen (memory preserved, cpu zeroed)`)
-    return ok({ container: row, state: 'frozen' }, SOURCE, `${c.name} frozen — demo state transition`)
+    const row = await findInstance(id)
+    if (!row) return failE(`instance '${id}' not found in the live runtime inventory`)
+    if (row.kind !== 'container') return failE(`${row.name} is a VM — pause/suspend support depends on the driver (${row.driver})`)
+    if (row.state !== 'running') return failE(`${row.name} is ${row.state} — only running containers can be frozen`)
+    const res = await driverAction(row, 'freeze')
+    await audit('freeze', `${res.command} → rc=${res.rc}`)
+    if (res.rc !== 0) return failE(`${res.command} failed — ${res.stderr.trim().split('\n')[0] ?? 'runtime error'}`)
+    return ok({ name: row.name, state: 'frozen', command: res.command }, 'live', res.command)
   },
 
   delete: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '')
     if (!id) return failE('id is required')
-    const c = await getContainer(id)
-    if (!c) return failE('container not found')
-    if (c.state === 'running') return failE(`${c.name} is running — stop it first`)
-    await db.container.delete({ where: { id } })
-    await audit('delete', `${c.name} (${c.driver} ${c.kind}) deleted`)
-    return ok({ deleted: { id, name: c.name, driver: c.driver } }, SOURCE)
+    const row = await findInstance(id)
+    if (!row) return failE(`instance '${id}' not found in the live runtime inventory`)
+    if (row.state === 'running') return failE(`${row.name} is running — stop it first`)
+    const res = await driverAction(row, 'delete')
+    await audit('delete', `${res.command} → rc=${res.rc}`)
+    if (res.rc !== 0) return failE(`${res.command} failed — ${res.stderr.trim().split('\n')[0] ?? 'runtime error'}`)
+    return ok({ deleted: { id: row.id, name: row.name, driver: row.driver }, command: res.command }, 'live', res.command)
   },
 
   exec: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '')
     const command = String(args.command ?? '')
     if (!id) return failE('id is required')
     if (!command.trim()) return failE('command is required')
-    const c = await getContainer(id)
-    if (!c) return failE('container not found')
-    if (c.state === 'stopped') return failE(`${c.name} is stopped — exec requires a running instance`)
-    const out = execOutput(c.name, command)
-    await audit('exec', `${c.name}: ${command} (rc=${out.rc})`)
-    return ok(
-      { id, name: c.name, command, rc: out.rc, lines: out.lines },
-      SOURCE,
-      'simulated shell output — no real exec in the demo inventory',
-    )
+    const row = await findInstance(id)
+    if (!row) return failE(`instance '${id}' not found in the live runtime inventory`)
+    if (row.state !== 'running') return failE(`${row.name} is ${row.state} — exec requires a running instance`)
+    let r: { rc: number; stdout: string; stderr: string }
+    switch (row.driver) {
+      case 'podman':
+      case 'docker':
+        r = await run(row.driver, ['exec', row.name, 'sh', '-c', command], 30_000)
+        break
+      case 'incus':
+      case 'lxc':
+        r = await run(row.driver, ['exec', row.name, '--', 'sh', '-c', command], 30_000)
+        break
+      case 'libvirt':
+        r = await run('virsh', ['qemu-agent-command', row.name, JSON.stringify({ execute: 'guest-exec', arguments: { path: '/bin/sh', arg: ['-c', command], 'capture-output': true } })], 30_000)
+        break
+      default:
+        return failE(`exec is not supported for the ${row.driver} driver`)
+    }
+    const lines = (r.stdout + (r.stderr ? `\n${r.stderr}` : '')).trimEnd().split('\n').filter((l) => l.length > 0)
+    await audit('exec', `${row.name}: ${command} (rc=${r.rc})`)
+    return ok({ id, name: row.name, command, rc: r.rc, lines: lines.length ? lines : ['(no output)'] }, 'live')
   },
 }

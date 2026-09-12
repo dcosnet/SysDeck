@@ -14,15 +14,21 @@
 //
 // Excluded from the list: sysdeck-* (this console already ships native
 // panels for those) and manifest entries without a `menu` block (base1,
-// shell — chrome, not pages). Demo fallback: when no cockpit tree is
-// found, a clearly-badged typical-distro set is returned so the surface
-// is still explorable; SYSDECK_COCKPIT_SCAN adds extra scan roots
-// (colon-separated) for staged/DESTDIR trees.
+// shell — chrome, not pages). No cockpit tree → the honest empty answer
+// (cockpitDetected: false, zero modules — nothing fabricated);
+// SYSDECK_COCKPIT_SCAN adds extra scan roots (colon-separated) for
+// staged/DESTDIR trees.
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import path from 'path'
-import { ok } from './shared'
+import { ok, fail } from './shared'
 import { which } from './shared'
 import type { CockpitModuleInfo, CockpitModuleList } from '../types'
+
+/** fail() + source — the dispatcher passes error envelopes through
+ *  top-level; the source keeps the panel badge honest on failure. */
+function failE(error: string) {
+  return { ...fail(error), source: 'live' as const }
+}
 
 // Known distro/addon modules → package name, backend binary, and the
 // native web-console module that already covers the domain.
@@ -104,56 +110,13 @@ async function probeBackend(bin: string): Promise<boolean> {
   return await which(bin)
 }
 
-function demoSet(): CockpitModuleInfo[] {
-  const names = ['machines', 'podman', 'networkmanager', 'storage', 'systemd', 'users', 'packagekit', 'selinux', 'metrics', 'kdump', 'tuned']
-  return names.map((name) => {
-    const k = KNOWN[name]
-    return {
-      name,
-      label: demoLabel(name),
-      description: k?.description ?? '',
-      order: 50,
-      path: `/usr/share/cockpit/${name}`,
-      fileCount: 0,
-      apiVersion: null,
-      pkg: k?.pkg ?? null,
-      source: 'demo' as const,
-      backend: k?.bin ? { bin: k.bin, present: false } : null,
-      nativeModule: k?.native ?? null,
-    }
-  })
-}
-
-function demoLabel(name: string): string {
-  const labels: Record<string, string> = {
-    machines: 'Virtual Machines',
-    podman: 'Podman Containers',
-    networkmanager: 'Networking',
-    storage: 'Storage',
-    systemd: 'System',
-    users: 'Accounts',
-    packagekit: 'Software Updates',
-    selinux: 'SELinux',
-    metrics: 'Performance Metrics',
-    kdump: 'Kernel Dump',
-    tuned: 'Tuning',
-  }
-  return labels[name] ?? name
-}
-
 async function buildList(): Promise<CockpitModuleList> {
   const roots = [...SCAN_ROOTS, ...extraScanRoots()]
   const scanned = roots.filter((r) => existsSync(r))
   if (scanned.length === 0) {
-    // no cockpit tree — demo set, but backend probes are still REAL:
-    // the binaries themselves may well be installed on this host
-    const modules = demoSet()
-    await Promise.all(
-      modules.map(async (m) => {
-        if (m.backend) m.backend.present = await probeBackend(m.backend.bin)
-      }),
-    )
-    return { cockpitDetected: false, scanned: roots, modules }
+    // no cockpit tree — the honest answer: zero modules detected.
+    // No fabricated "typical distro" set.
+    return { cockpitDetected: false, scanned: roots, modules: [] }
   }
 
   const modules: CockpitModuleInfo[] = []
@@ -206,14 +169,18 @@ export const commands = {
   list: async () => {
     const data = await buildList()
     if (!data.cockpitDetected) {
-      return ok<CockpitModuleList>(data, 'demo', 'no cockpit tree on this host — showing a typical distro install (badged DEMO); install cockpit-* packages or point SYSDECK_COCKPIT_SCAN at a staged tree for live detection')
+      return ok<CockpitModuleList>(
+        data,
+        'live',
+        'no cockpit tree on this host (scanned: ' + data.scanned.join(', ') + ') — install cockpit-* packages or point SYSDECK_COCKPIT_SCAN at a cockpit tree for live detection; zero modules reported honestly',
+      )
     }
     return ok<CockpitModuleList>(data, 'live')
   },
 
   info: async (args: Record<string, unknown>) => {
     const name = typeof args.name === 'string' ? args.name : ''
-    if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return ok({ error: 'invalid module name' }, 'live')
+    if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return failE('invalid module name')
 
     // live tree first
     for (const root of [...SCAN_ROOTS, ...extraScanRoots()]) {
@@ -254,24 +221,7 @@ export const commands = {
       )
     }
 
-    // demo entry (same names the demo list shows)
-    const k = KNOWN[name]
-    if (k || demoSet().some((m) => m.name === name)) {
-      const stub = ['index.html', 'manifest.json', `${name}.js`, `${name}-dialogs.js`, 'po/']
-      return ok(
-        {
-          name,
-          path: `/usr/share/cockpit/${name}`,
-          files: stub.map((f) => ({ name: f, sizeBytes: 0 })),
-          fileCount: stub.length,
-          manifest: { name, menu: { index: { label: demoLabel(name), order: 50 } } },
-          backendVersion: null,
-          source: 'demo' as const,
-        },
-        'demo',
-        'typical distro entry — no cockpit tree on this host',
-      )
-    }
-    return ok({ error: `module not found: ${name}` }, 'live')
+    // no live manifest — honest miss
+    return failE(`module not found: ${name} (no manifest under any scan root on this host)`)
   },
 }

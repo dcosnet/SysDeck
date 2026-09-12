@@ -38,11 +38,12 @@ export function PanelHeader({
 }
 
 export function SourceBadge({ source }: { source: DataSource }) {
+  // Chip text pairs a light-theme tone (700/600, AA on paper/arctic) with
+  // its dark-theme tone (400) — the `dark` class follows the active theme.
   const map: Record<DataSource, { label: string; cls: string }> = {
-    live: { label: 'LIVE', cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-    demo: { label: 'DEMO', cls: 'bg-amber-500/15 text-amber-500 border-amber-500/30' },
-    hybrid: { label: 'HYBRID', cls: 'bg-teal-500/15 text-teal-400 border-teal-500/30' },
-    unavailable: { label: 'N/A', cls: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30' },
+    live: { label: 'LIVE', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' },
+    hybrid: { label: 'HYBRID', cls: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30' },
+    unavailable: { label: 'N/A', cls: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30' },
   }
   const m = map[source]
   return (
@@ -69,9 +70,9 @@ export function StatCard({
 }) {
   const toneCls = {
     default: 'text-foreground',
-    good: 'text-emerald-400',
-    warn: 'text-amber-500',
-    bad: 'text-red-500',
+    good: 'text-emerald-700 dark:text-emerald-400',
+    warn: 'text-amber-600 dark:text-amber-500',
+    bad: 'text-red-600 dark:text-red-500',
   }[tone]
   return (
     <Card>
@@ -160,14 +161,14 @@ export function StateBadge({ state }: { state: string }) {
   const s = state.toLowerCase()
   const cls =
     s === 'running' || s === 'online' || s === 'healthy' || s === 'succeeded' || s === 'active' || s === 'unlocked' || s === 'playing' || s === 'done' || s === 'allow' || s === 'installed' || s === 'pass'
-      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
       : s === 'stopped' || s === 'offline' || s === 'locked' || s === 'queued' || s === 'idle' || s === 'deny' || s === 'uninstalled'
-        ? 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30'
+        ? 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30'
         : s === 'failed' || s === 'error' || s === 'danger' || s === 'crit' || s === 'critical'
-          ? 'bg-red-500/15 text-red-500 border-red-500/30'
+          ? 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30'
           : s === 'warn' || s === 'degraded' || s === 'warned' || s === 'frozen' || s === 'paused' || s === 'acknowledged'
-            ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-            : 'bg-teal-500/15 text-teal-400 border-teal-500/30'
+            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30'
+            : 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30'
   return (
     <span className={cn('rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', cls)}>
       {state}
@@ -217,12 +218,14 @@ export function HintCard({ title, children }: { title: string; children: ReactNo
   )
 }
 
-export function InstallHint({ bin, distro, hint }: { bin: string; distro: string; hint?: string }) {
+export function InstallHint({ bin, distro, hint }: { bin: string; distro?: string; hint?: string }) {
   return (
     <HintCard title={`${bin} not available`}>
       <p>
         This panel backs itself with the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{bin}</code>{' '}
-        backend. It is not present on this host, so a {distro} dataset is shown instead.
+        backend{distro && distro !== 'not-installed' ? <> on {distro}</> : null}. It is not present
+        on this host, so the sections that need it stay empty — nothing is fabricated. Install it below and the panel
+        fills with real data on the next poll.
       </p>
       {hint ? <pre className="overflow-auto rounded bg-zinc-950/80 p-3 font-mono text-xs text-zinc-300">{hint}</pre> : null}
     </HintCard>
@@ -252,7 +255,7 @@ export function Mono({ children }: { children: ReactNode }) {
 export function ErrorCard({ error }: { error: string }) {
   return (
     <PanelCard title="Bridge error">
-      <p className="font-mono text-xs text-red-400">{error}</p>
+      <p className="font-mono text-xs text-red-600 dark:text-red-400">{error}</p>
     </PanelCard>
   )
 }

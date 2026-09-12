@@ -1,10 +1,10 @@
 'use client'
 
 // Mesh panel — kubernetes cluster view (services / deployments / pods).
-// kubectl is absent in this sandbox, so the bridge keeps a demo cluster
-// (state in SdKv JSON): 3 nodes, 5 namespaces, 8 deployments, 24 pods.
-// scale adjusts pod rows + readiness; describe/logs answer kubectl-style
-// output for the demo pods.
+// The bridge runs the REAL kubectl (`kubectl get services/deployments/
+// pods -A -o json`) on every poll; scale runs `kubectl scale`, describe
+// and logs run the real `kubectl describe` / `kubectl logs`. Absent
+// kubectl or unreachable cluster → an honest zero-count inventory.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -259,7 +259,7 @@ export default function MeshPanel() {
   if (summary.isLoading) {
     return (
       <div>
-        <PanelHeader title="Mesh" subtitle="kubernetes cluster — services · deployments · pods" source="demo" />
+        <PanelHeader title="Mesh" subtitle="kubernetes cluster — services · deployments · pods" />
         <PanelSkeleton />
       </div>
     )
@@ -268,7 +268,7 @@ export default function MeshPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Mesh" subtitle="kubernetes cluster — services · deployments · pods" source="demo" />
+        <PanelHeader title="Mesh" subtitle="kubernetes cluster — services · deployments · pods" />
         <ErrorCard error={summary.data?.error ?? 'mesh.summary failed'} />
       </div>
     )
@@ -283,8 +283,8 @@ export default function MeshPanel() {
     <div>
       <PanelHeader
         title="Mesh"
-        subtitle="kubernetes cluster — services · deployments · pods · kubectl absent — demo cluster"
-        source="demo"
+        subtitle="kubernetes cluster — services · deployments · pods — real kubectl"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -434,8 +434,9 @@ export default function MeshPanel() {
       </Tabs>
 
       <p className="mt-4 pb-2 text-xs text-muted-foreground">
-        kubectl is not installed on this host — the cluster above is the bridge&apos;s demo dataset (SdKv JSON state: 3 nodes,
-        5 namespaces, 12 services, 8 deployments). scale round-trips through mesh.scale and adjusts the pod inventory.
+        kubectl is not installed on this host (or the cluster is unreachable) — the inventory is honest zeros, nothing is
+        fabricated. Install kubectl and point KUBECONFIG at the cluster, and services/deployments/pods appear here live;
+        scale/describe/logs run the real kubectl commands against it.
       </p>
 
       <Dialog open={dlg.open} onOpenChange={dlg.setOpen}>
@@ -445,7 +446,7 @@ export default function MeshPanel() {
               {dlg.mode} — <span className="text-muted-foreground">{dlg.title}</span>
             </DialogTitle>
             <DialogDescription>
-              {dlg.mode === 'describe' ? 'kubectl describe -style output (demo dataset)' : 'kubectl logs -style output (demo dataset)'}
+              {dlg.mode === 'describe' ? 'real kubectl describe output' : 'real kubectl logs output'}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="h-72 rounded border border-border bg-zinc-950/80">

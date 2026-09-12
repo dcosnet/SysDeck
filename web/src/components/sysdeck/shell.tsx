@@ -7,10 +7,11 @@
 // administrative-access badge, a live session-expiry countdown, and a
 // user@host segment in the status bar, cockpit-style.
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { PANEL_MAP } from '@/components/sysdeck/panels-map'
 import { MODULES, MODULE_MAP, GROUP_LABELS, modulesByGroup, SYSDECK_VERSION } from '@/lib/sysdeck/registry'
 import { bridgeCall, useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
+import { applySdTheme } from '@/lib/sysdeck/theme'
 import type { ConsoleUser } from '@/lib/sysdeck/users'
 import type { HostTicker } from '@/lib/sysdeck/types'
 import { Button } from '@/components/ui/button'
@@ -166,6 +167,7 @@ export function SysDeckShell({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [theme, setTheme] = useState('midnight')
   const [now, setNow] = useState(() => Date.now())
+  const reduced = useReducedMotion() ?? false
 
   const meta = MODULE_MAP[active]
 
@@ -185,7 +187,7 @@ export function SysDeckShell({
       const saved = localStorage.getItem('sd_theme')
       if (saved) {
         setTheme(saved)
-        document.documentElement.dataset.sdTheme = saved
+        applySdTheme(saved)
       }
     } catch {
       /* storage unavailable — bridge value below still applies */
@@ -193,13 +195,13 @@ export function SysDeckShell({
     bridgeCall<string>('themes', 'getActive').then((r) => {
       const t = r.ok && typeof r.data === 'string' ? r.data : 'midnight'
       setTheme(t)
-      document.documentElement.dataset.sdTheme = t
+      applySdTheme(t)
     })
   }, [])
 
   const applyTheme = useCallback((t: string) => {
     setTheme(t)
-    document.documentElement.dataset.sdTheme = t
+    applySdTheme(t)
     // mirror for the login screen (the bridge is session-gated, the
     // login screen can't ask it — localStorage can)
     try {
@@ -305,18 +307,15 @@ export function SysDeckShell({
     staleTime: 30000,
   })
   const cockpitMods = useMemo(() => cmQ.data?.data?.modules ?? [], [cmQ.data])
-  const cmSource: 'live' | 'demo' = cmQ.data?.data?.cockpitDetected ? 'live' : 'demo'
+  const cmSource: 'live' | 'unavailable' = cmQ.data?.data?.cockpitDetected ? 'live' : 'unavailable'
 
-  // active view: a registry module, or a detected cockpit module (cm:<name>)
+  // active view: a registry module, or a detected cockpit module (cm:<name>).
+  // The panel component identity stays STABLE across the 60 s cockpit-module
+  // detection refetch — only props change — so the panel never remounts and
+  // loses state when the poll lands.
   const cmName = active.startsWith('cm:') ? active.slice(3) : null
   const cmMod = cmName ? (cockpitMods.find((m) => m.name === cmName) ?? null) : null
-  const ActivePanel = useMemo(() => {
-    if (cmName) {
-      const CmPanel = () => <CockpitModulePanel mod={cmMod} />
-      return CmPanel
-    }
-    return PANEL_MAP[active] ?? PANEL_MAP.overview
-  }, [cmName, cmMod, active])
+  const RegistryPanel = PANEL_MAP[active] ?? PANEL_MAP.overview
   const headerMeta = cmMod
     ? { name: cmMod.label, description: `cockpit module · ${cmMod.name}${cmMod.pkg ? ' · ' + cmMod.pkg : ''}` }
     : (meta ?? undefined)
@@ -414,11 +413,11 @@ export function SysDeckShell({
                   'ml-auto rounded border px-1 font-mono text-[9px] font-semibold tracking-wider',
                   cmSource === 'live'
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-500',
+                    : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
                 )}
-                title={cmSource === 'live' ? 'detected on this host' : 'no cockpit tree — typical distro set'}
+                title={cmSource === 'live' ? 'manifest-scanned from this host\'s cockpit tree' : 'no cockpit tree under any scan root — install cockpit modules and they load here automatically'}
               >
-                {cmSource === 'live' ? 'LIVE' : 'DEMO'}
+                {cmSource === 'live' ? 'LIVE' : 'N/A'}
               </span>
             </div>
             <ul className="space-y-0.5">
@@ -678,18 +677,19 @@ export function SysDeckShell({
             </DropdownMenu>
           </header>
 
-          {/* main panel — cross-fade between modules */}
+          {/* main panel — cross-fade between modules; reduced motion swaps
+              instantly with no translate */}
           <main className="min-w-0 flex-1 px-4 py-5 sm:px-6">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={active}
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduced ? { opacity: 1 } : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
+                exit={reduced ? { opacity: 1 } : { opacity: 0, y: -4 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }}
               >
                 <Suspense fallback={<PanelSkeleton />}>
-                  <ActivePanel />
+                  {cmName ? <CockpitModulePanel mod={cmMod} /> : <RegistryPanel />}
                 </Suspense>
               </motion.div>
             </AnimatePresence>

@@ -3,7 +3,7 @@
 **A drop-in plugin for an existing Cockpit install — twenty-six domain modules behind one dashboard.**
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
-Version: **0.4.1** · License: **MIT**
+Version: **0.4.3** · License: **MIT**
 
 ---
 
@@ -12,6 +12,72 @@ Version: **0.4.1** · License: **MIT**
 SysDeck is a cockpit-native plugin that consolidates the day-to-day work of a Linux operations team — containers, firewall, integrity auditing, network security, service mesh, encryption vaults, fleet compute, Kata Containers, firmware, image building, mining, theme engine, hardware authentication, DAG-driven build orchestration, system monitoring, hardware sensors, system benchmarking, package management, policy & permissions, database control, Jellyfin media server, photo manager (PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/LibrePhotos), remote filesystem manager (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS), a 3rd-party Cockpit module installer (45Drives Navigator/File-Sharing/ZFS-Manager, cockpit-pacman, cockpit-identities, cockpit-sensors, cockpit-benchmark — each pulled on demand with the license, developer, source URL, and homepage shown inline next to a 1-click Install button), and a service/port editor (a first-class sidebar entry that enumerates every listening TCP socket, cross-references against a SERVICES_REGISTRY of 9 known services — ssh, cockpit, caddy, varnish, mariadb, ollama, openwebui, hermes, odysseus — and lets the operator edit the port in each service's config file with an atomic write + systemctl restart) — into a single dashboard accessible from the cockpit web UI.
 
 The plugin ships as static HTML+JS+CSS plus a Python bridge helper package. It installs under `/usr/share/cockpit/sysdeck-*/` and is discovered automatically by the cockpit-bridge. No separate web server, no Node.js runtime, no database — the plugin runs inside the cockpit web service.
+
+### v0.4.3 highlights (the MoE QA pass — hardened on every axis)
+
+A multi-expert review (design, CSS/UI-UX, JS/React/Next, Elm-style type
+discipline, backend, algorithms) audited the whole web console and the
+cockpit-side bridges; 0.4.3 lands its findings:
+
+- **Privileged writes ride stdin.** The polkit rules sync pipes the
+  generated ruleset to `sudo -n tee` and verifies the on-disk file
+  byte-for-byte afterwards; firewall applies pipe rulesets to
+  `nft -f -` / `iptables-restore` directly (no predictable `/tmp`
+  file exists to hijack — the same hardening the shipped templates
+  gained via `mktemp`); the smartcard PIN never touches argv, so
+  `/proc/<pid>/cmdline` cannot leak it to other local users.
+- **Mutations require an admin session** (wheel/sudo/adm or uid 0) —
+  reads stay open to every signed-in unix account, cockpit-style, and
+  `SYSDECK_MUTATIONS=any` restores the single-operator posture for
+  consoles where every login IS the operator.
+- **Honest previews and results**: a firewall dry-run now shows the
+  exact shipped template script apply would execute; unbans and
+  template applies report the firewall's real exit code instead of a
+  success-shaped lie; rule comments are injection-guarded before they
+  land inside nft/iptables script strings.
+- **Rate-limit identity ignores client-supplied `X-Forwarded-For`**
+  unless the operator opts in with `SYSDECK_TRUST_PROXY=1`.
+- **The polling layer got a real cache layer** — TTL + single-flight
+  probes shared across panels (one subprocess sweep per window instead
+  of a spawn storm per tick), parallel TCP reachability probes, and an
+  O(delta) replay fold for the Fester journal viewer.
+- **Cockpit-side bridge parity**: the Python `sensors` bridge runs the
+  same `sensors -j` → sysfs step-down chain as the web side; `dnf
+  check-update`'s exit 100 (updates exist) is data, not failure; every
+  Python bridge spawn carries a hard timeout and a scrubbed
+  environment.
+
+### v0.4.2 highlights (the zero-demo release — production implementations only)
+
+Every module in the web console now reads **real host state** — the
+codebase contains no demo, mock, stub, or seeded data anywhere, and the
+bridge envelope's `DataSource` type no longer even admits a `'demo'`
+value (the compiler rejects any reintroduction):
+
+- **Sensors** reads the canonical source — the real `sensors -j`
+  (lm-sensors) JSON, the same output the cockpit edition parses — with
+  the raw sysfs collectors (`/sys/class/hwmon`, thermal zones) as the
+  dependency-free fallback. A host with no sensors gets an honest empty
+  inventory, never a made-up chip set.
+- **Network security bans are enforced for real** — banning an address
+  loads an atomic nftables batch (`table inet sysdeck`, a `blacklist`
+  set with 30-day timeouts) or an iptables `INPUT DROP` rule when only
+  iptables exists, privilege-gated exactly like the firewall module
+  (root / `sudo -n`, honest refusal otherwise). The ban list also
+  **merges the live fail2ban ban list** when fail2ban runs, and
+  unbanning a fail2ban row executes the real
+  `fail2ban-client set <jail> unbanip`.
+- **The firewall panel gained a live-ruleset tab** — the host's actual
+  kernel firewall (`nft -j list ruleset` / `iptables-save`) rendered
+  straight from the binary, refreshed every 15s — and the template
+  catalog now carries **all seven shipped topologies** (public-
+  webserver, vps-webserver, ai-llm, remote-admin, no-services, cilium,
+  sysdeck-fw).
+- **LUKS header backups are hashed from the actual image bytes** —
+  verifiable against `sha256sum` on the command line.
+- **Absent backends render honest empty inventories** — no XMRig
+  daemon, no kubectl, no container runtimes, no fail2ban: the panels
+  say so and show install guidance, never fabricated rows.
 
 ### v0.4.1 highlights (cockpit module detection — 100% console/host parity)
 
@@ -26,7 +92,8 @@ and cockpit-podman, addons, anything with a `menu` entry in its
   ship here) and chrome without a menu (`base1`, `shell`) never shows.
   Works with cockpit stopped or absent; `SYSDECK_COCKPIT_SCAN` adds
   extra scan roots (colon-separated) for staged/DESTDIR trees. With no
-  cockpit tree the surface shows a clearly-badged typical-distro set.
+  cockpit tree the surface shows the honest empty answer (nothing is
+  fabricated).
 - **A "Cockpit" sidebar group** appears with every detected module —
   each opens a detail view: manifest identity, shipped files with
   sizes, live backend presence probes (`virsh`, `podman`, `nmcli`,
@@ -34,8 +101,7 @@ and cockpit-podman, addons, anything with a `menu` entry in its
   console panel covering the domain (machines/podman → Containers &
   VMs, packagekit → Packages, networkmanager → Network Security,
   metrics → Monitoring...). The ⌘K palette searches them too, and the
-  **Cockpit Modules** hub panel lists everything with LIVE/DEMO
-  provenance.
+  **Cockpit Modules** hub panel lists everything with live provenance.
 - **The UI codenames are retired** — no more "web edition" or edition
   subtitles anywhere in the console; the identity is simply **SysDeck**
   with a single clean subtitle: **dcos.net** (login banner, sidebar,

@@ -86,7 +86,12 @@ export function authenticateViaPam(user: string, password: string): Promise<PamR
     })
 
     let out = ''
-    child.stdout?.on('data', (d) => (out += d.toString().slice(0, 4096)))
+    // Cap the accumulated buffer (tail kept) — the helper emits one small
+    // JSON line, so anything larger is a misbehaving child.
+    child.stdout?.on('data', (d) => {
+      out += d.toString()
+      if (out.length > 8192) out = out.slice(-8192)
+    })
     child.stderr?.on('data', (d) => {
       // stderr is diagnostics only — never returned to the client
       const line = d.toString().trim()

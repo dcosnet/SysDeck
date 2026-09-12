@@ -1,10 +1,12 @@
 'use client'
 
-// DB panel — database instance fleet. HYBRID: the sqlite row is the REAL
-// sysdeck state store (db/custom.db — size + row counts are live); the
-// other engines are demo rows (no mariadb/postgres/redis in the sandbox).
-// start/stop/backup mutate the registry; stopping sqlite is refused by the
-// bridge ('cannot stop the sysdeck state store') — the toast surfaces it.
+// DB panel — database instance fleet. LIVE: every row is a real
+// instance probed on this host — the sqlite row is the sysdeck state
+// store (db/custom.db, size + row counts live), and mariadb/postgres/
+// redis appear when their daemons actually run (systemd + readiness
+// probes). start/stop run real systemctl actions; stopping sqlite is
+// refused by the bridge ('cannot stop the sysdeck state store') — the
+// toast surfaces it.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -274,9 +276,10 @@ export default function DbPanel() {
         ) : null}
 
         <p className="pb-2 text-xs text-muted-foreground">
-          HYBRID: the sqlite row is the real state store behind this panel (size via fs.stat, row counts live); the
-          mariadb/postgres/redis rows are demo instances — no database daemons exist in this sandbox. Stopping sqlite is
-          refused by the bridge; backups are ~40%-compression dump records.
+          LIVE: the sqlite row is the real state store behind this panel (size via fs.stat, row counts live); the
+          mariadb/postgres/redis rows appear only when those daemons actually run on this host (real systemd +
+          readiness probes — never seeded). Stopping sqlite is refused by the bridge; backups are real dumps of the
+          sqlite store.
         </p>
       </div>
 
@@ -286,7 +289,7 @@ export default function DbPanel() {
             <DialogTitle className="font-mono">
               backup record — <span className="text-muted-foreground">{backup?.instance}</span>
             </DialogTitle>
-            <DialogDescription>simulated dump + gzip (~40% compression) — written to the audit log</DialogDescription>
+            <DialogDescription>real dump piped through gzip into /var/backups — recorded in the audit log</DialogDescription>
           </DialogHeader>
           {backup ? (
             <div className="rounded border border-border bg-zinc-950/80 p-3">

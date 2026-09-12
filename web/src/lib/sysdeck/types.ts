@@ -4,15 +4,15 @@
 //   python3 /usr/lib/sysdeck/bridge/<module>.py <subcommand>
 // In the web edition, the same call goes over POST /api/bridge.
 
-export type DataSource = 'live' | 'demo' | 'hybrid' | 'unavailable'
+export type DataSource = 'live' | 'hybrid' | 'unavailable'
 
 export interface BridgeResponse<T = unknown> {
   ok: boolean
   data?: T
   error?: string
-  /** Where the data came from — 'live' = read from this host, 'demo' = seeded dataset */
+  /** Where the data came from — 'live' = read from this host, 'hybrid' = mixed live + operator registry, 'unavailable' = backend absent. No demo tier exists: bridges read real state or fail honestly. */
   source?: DataSource
-  /** Optional human note, e.g. "k8s unreachable — demo cluster shown" */
+  /** Optional human note, e.g. "no cockpit tree under any scan root" */
   note?: string
   module?: string
   command?: string
@@ -33,7 +33,7 @@ export interface ModuleMeta {
   /** marks modules that are read-write vs read-only */
   interactive?: boolean
   /** module health states surfaced in the sidebar */
-  status?: 'live' | 'demo' | 'hybrid' | 'unavailable'
+  status?: 'live' | 'hybrid' | 'unavailable'
 }
 
 export type ModuleGroup =
@@ -73,7 +73,8 @@ export interface CockpitModuleInfo {
   fileCount: number
   apiVersion: string | null
   pkg: string | null
-  source: 'live' | 'demo'
+  /** 'live' = manifest-scanned from a real cockpit tree, 'unavailable' = no cockpit tree on this host */
+  source: 'live' | 'unavailable'
   backend: CockpitBackendProbe | null
   nativeModule: string | null
 }

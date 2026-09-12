@@ -1,24 +1,21 @@
-// SysDeck bridge — firmware (DMI + fwupd-style inventory + TPM)
+// SysDeck bridge — firmware (real DMI + fwupd + TPM, all live)
 // Port of bridge/firmware.py: the cockpit edition aggregated
-// `fwupdmgr get-devices --json` plus `tpm2_pcrread sha256:0`. Neither
-// fwupd nor tpm2-tools exist in this container, and /sys/class/dmi is
-// not mounted, so the web edition: (1) reads DMI fields from
-// /sys/class/dmi/id when present (real — empty here, and honestly
-// reported), (2) supplements a fwupd-style device list seeded with
-// realistic board/BMC/NIC/SSD firmware (demo rows flagged), (3) exposes
-// a demo TPM PCR0 digest clearly labeled, and (4) stages firmware
-// updates as SdKv state — the actual flash requires the cockpit bridge
-// on a managed host. Device rows keep fwupd's capitalized keys
-// (Name/Vendor/Version/Kind/Flags/Guid) so panels port directly.
+// `fwupdmgr get-devices --json` plus `tpm2_pcrread sha256:0`. The web
+// edition does exactly that against the REAL host:
+//   - devices: fwupdmgr get-devices --json when fwupd exists (fwupd's
+//     own capitalized keys preserved); the DMI system-firmware entry
+//     from /sys/class/dmi/id always (real values, honest when empty)
+//   - dmi: raw /sys/class/dmi/id values
+//   - tpm: real `tpm2_pcrread sha256:0` when tpm2-tools exist — else
+//     installed:false, the honest answer (no fabricated digests)
+//   - updates: real `fwupdmgr get-updates --json` when fwupd exists
+//   - apply: real `fwupdmgr update` (privilege-gated, honest failure)
 import { readFileSync } from 'fs'
 import os from 'os'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, run, which } from './shared'
 
-/** fail() + source → the dispatcher spreads this into a top-level
- *  {ok:false, error, source} envelope. (A bare fail() lacks data/source
- *  keys, so the dispatcher would wrap it as {ok:true, data:{ok:false}}.) */
-function failE(error: string, source: 'live' | 'demo' | 'hybrid' = 'hybrid') {
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
   return { ...fail(error), source }
 }
 
@@ -49,7 +46,7 @@ function readDmi(): Record<DmiField, string> {
   return out
 }
 
-// ── demo fwupd-style devices ────────────────────────────────────────
+// ── fwupd (real when installed) ──────────────────────────────────────
 
 interface FwDevice {
   Name: string
@@ -58,99 +55,47 @@ interface FwDevice {
   Kind: string
   Flags: string
   Guid: string
-  demo?: boolean
 }
 
-const DEMO_DEVICES: FwDevice[] = [
-  {
-    Name: 'UEFI dbx',
-    Vendor: 'UEFI Forum',
-    Version: '77',
-    Kind: 'firmware',
-    Flags: 'internal',
-    Guid: '4bde22fb-3e24-5a53-a539-8b0c9e1e6b90',
-    demo: true,
-  },
-  {
-    Name: 'Supermicro X10SLH-F BMC',
-    Vendor: 'Supermicro',
-    Version: '3.88',
-    Kind: 'firmware',
-    Flags: 'internal|updatable',
-    Guid: 'c9a1c6a2-1d3e-5f47-9b26-8e5f4e2a7c31',
-    demo: true,
-  },
-  {
-    Name: 'Intel I210 NVM',
-    Vendor: 'Intel Corporation',
-    Version: '3.25',
-    Kind: 'firmware',
-    Flags: 'internal|updatable',
-    Guid: '2d47a2b1-9f3c-5e18-b764-1c2e5a8d4f02',
-    demo: true,
-  },
-  {
-    Name: 'Samsung SSD 870 EVO',
-    Vendor: 'Samsung',
-    Version: '2B4QEXM7',
-    Kind: 'device',
-    Flags: 'internal|updatable|needs-reboot',
-    Guid: '67a5f0b9-8e2d-5c14-a938-f1e7d6b3a85c',
-    demo: true,
-  },
-]
-
-interface FwUpdate {
-  device: string
-  guid: string
-  current: string
-  candidate: string
-  severity: 'critical' | 'low'
-  description: string
-  releaseNotes?: string
-}
-
-const DEMO_UPDATES: FwUpdate[] = [
-  {
-    device: 'Supermicro X10SLH-F BMC',
-    guid: 'c9a1c6a2-1d3e-5f47-9b26-8e5f4e2a7c31',
-    current: '3.88',
-    candidate: '4.12',
-    severity: 'critical',
-    description: 'BMC firmware update — fixes CVE-2022-40242 (authentication bypass) and CVE-2022-40242 adjacent issues in the Redfish API.',
-    releaseNotes: 'Supermicro BIOS/BMC release 4.12 (2024-06): hardens Redfish authentication, fixes SSH cipher negotiation, updates SSL bundle.',
-  },
-  {
-    device: 'Samsung SSD 870 EVO',
-    guid: '67a5f0b9-8e2d-5c14-a938-f1e7d6b3a85c',
-    current: '2B4QEXM7',
-    candidate: '2B6QEXM7',
-    severity: 'low',
-    description: 'SSD firmware upgrade — improves sustained-write consistency on nearly-full drives.',
-    releaseNotes: 'Samsung 870 EVO firmware 2B6QEXM7: enhanced error recovery on low-NAND-health blocks.',
-  },
-]
-
-// ── commands ─────────────────────────────────────────────────────────
-
-const APPLIED_KV = 'firmware.applied'
-
-async function appliedSet(): Promise<string[]> {
-  const row = await db.sdKv.findUnique({ where: { key: APPLIED_KV } })
-  if (!row) return []
+async function fwupdJson(subcommand: string[]): Promise<Record<string, unknown> | null> {
+  if (!(await which('fwupdmgr'))) return null
+  const r = await run('fwupdmgr', [...subcommand, '--json'], 30_000)
+  if (r.rc !== 0 || !r.stdout.trim()) return null
   try {
-    const parsed = JSON.parse(row.value) as unknown
-    return Array.isArray(parsed) ? parsed.map(String) : []
+    return JSON.parse(r.stdout) as Record<string, unknown>
   } catch {
-    return []
+    return null
   }
 }
+
+function mapFwupdDevices(devs: unknown): FwDevice[] {
+  if (!Array.isArray(devs)) return []
+  return (devs as Record<string, unknown>[]).map((d) => {
+    const guid =
+      typeof d.Guid === 'string'
+        ? d.Guid
+        : Array.isArray(d.Guid) && d.Guid.length
+          ? String(d.Guid[0])
+          : '00000000-0000-5000-8000-000000000000'
+    return {
+      Name: String(d.Name ?? d.InstanceIds ?? 'device'),
+      Vendor: String(d.Vendor ?? 'Unknown'),
+      Version: String(d.Version ?? ''),
+      Kind: String(d.Kind ?? 'device'),
+      Flags: String(d.Flags ?? 'internal'),
+      Guid: guid,
+    }
+  })
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   devices: async () => {
     const dmi = readDmi()
+    const realDmi = Boolean(dmi.sys_vendor || dmi.bios_version)
     const devices: FwDevice[] = []
-    if (dmi.sys_vendor || dmi.bios_version) {
+    if (realDmi) {
       devices.push({
         Name: `${dmi.product_name || 'System'} — System Firmware`,
         Vendor: dmi.sys_vendor || dmi.bios_vendor || 'Unknown',
@@ -160,8 +105,8 @@ export const commands = {
         Guid: '00000000-0000-5000-8000-000000000001',
       })
     } else {
-      // No DMI in this container — an honest placeholder built from the
-      // real kernel identity rather than a fabricated board.
+      // No DMI in this container — an honest entry built from the real
+      // kernel identity rather than a fabricated board.
       devices.push({
         Name: 'System Firmware (container — no DMI)',
         Vendor: 'Unknown',
@@ -171,20 +116,18 @@ export const commands = {
         Guid: '00000000-0000-5000-8000-000000000001',
       })
     }
-    const applied = await appliedSet()
-    devices.push(
-      ...DEMO_DEVICES.map((d) => ({
-        ...d,
-        Flags: applied.includes(d.Guid) ? `${d.Flags}|staged` : d.Flags,
-      })),
-    )
-    const realDmi = Boolean(dmi.sys_vendor || dmi.bios_version)
+    const fw = await fwupdJson(['get-devices'])
+    if (fw && Array.isArray(fw.Devices)) {
+      devices.push(...mapFwupdDevices(fw.Devices))
+    }
     return ok(
-      { Devices: devices, applied: applied.length },
-      realDmi ? 'hybrid' : 'hybrid',
-      realDmi
-        ? 'DMI entry real; fwupd-style devices are seeded demo rows (fwupd absent)'
-        : '/sys/class/dmi not mounted in this container — entry built from real kernel identity; fwupd-style devices are seeded demo rows (fwupd absent)',
+      { Devices: devices, fwupd: Boolean(fw) },
+      'live',
+      fw
+        ? 'real fwupdmgr get-devices --json + DMI entry'
+        : realDmi
+          ? 'real DMI entry; fwupd not installed — install fwupd for the full updatable-device inventory (LVFS metadata)'
+          : '/sys/class/dmi not mounted in this container — entry built from real kernel identity; fwupd not installed (nothing fabricated)',
     )
   },
 
@@ -199,65 +142,81 @@ export const commands = {
   },
 
   tpm: async () => {
-    // tpm2-tools absent — installed:false is the honest answer. The PCR0
-    // block below is a demo digest (labeled) so panels can render the
-    // layout the cockpit edition showed.
-    const digest = '3a7f2e9c4d18b6a5f0e2c8d4b1a9f7e3c5d2b8a4f1e6c9d3b7a5f2e8c4d1b6a9f3'
+    if (!(await which('tpm2_pcrread'))) {
+      return ok(
+        {
+          installed: false,
+          note: 'tpm2-tools not available on this host — install tpm2-tools for real PCR readings (no digest is fabricated)',
+        },
+        'live',
+      )
+    }
+    const r = await run('tpm2_pcrread', ['sha256:0'], 15_000)
+    if (r.rc !== 0) {
+      return ok(
+        { installed: true, reachable: false, note: `tpm2_pcrread failed — ${r.stderr.trim().split('\n')[0] ?? 'no TPM device (/dev/tpmrm0 absent or needs root)'}` },
+        'live',
+      )
+    }
+    const digest = r.stdout.match(/:\s*([0-9A-Fa-f]{64})/)?.[1] ?? ''
     return ok(
       {
-        installed: false,
-        note: 'tpm2-tools not available in this environment',
+        installed: true,
+        reachable: true,
         pcr0: {
-          demo: true,
           algorithm: 'SHA256',
           pcr: 0,
           digest,
-          extensions: [
-            'EFI boot variables (EV_EFI_VARIABLE_DRIVER_CONFIG)',
-            'Secure Boot policy (EV_EFI_VARIABLE_DRIVER_CONFIG)',
-            'measured boot (EV_EFI_ACTION)',
-          ],
         },
       },
-      'hybrid',
-      'TPM status real (tools absent); PCR0 block is a labeled demo digest',
+      'live',
+      'real tpm2_pcrread sha256:0',
     )
   },
 
   updates: async () => {
-    const applied = await appliedSet()
-    return ok(
-      {
-        updates: DEMO_UPDATES.map((u) => ({ ...u, staged: applied.includes(u.guid) })),
-        count: DEMO_UPDATES.length,
-      },
-      'demo',
-      'seeded update catalog — fwupd/LVFS metadata requires the cockpit bridge on a managed host',
-    )
+    const fw = await fwupdJson(['get-updates'])
+    if (!fw) {
+      const haveMgr = await which('fwupdmgr')
+      return ok(
+        { updates: [], count: 0 },
+        'live',
+        haveMgr
+          ? 'fwupdmgr present but no updates returned (metadata may need fwupdmgr refresh)'
+          : 'fwupd not installed — no firmware update catalog available (install fwupd to pull LVFS metadata)',
+      )
+    }
+    const updates = mapFwupdDevices(fw.Devices).map((d) => ({
+      device: d.Name,
+      guid: d.Guid,
+      current: '',
+      candidate: d.Version,
+      severity: 'low',
+      description: `${d.Vendor} ${d.Kind} update`,
+    }))
+    return ok({ updates, count: updates.length }, 'live', 'real fwupdmgr get-updates --json')
   },
 
   apply: async (args: Record<string, unknown>) => {
     const guid = String(args.guid ?? '').trim()
-    const update = DEMO_UPDATES.find((u) => u.guid === guid) ?? DEMO_DEVICES.find((d) => d.Guid === guid)
-    if (!update) return failE(`unknown firmware guid: ${guid}`)
-    const applied = await appliedSet()
-    if (!applied.includes(guid)) applied.push(guid)
-    await db.sdKv.upsert({
-      where: { key: APPLIED_KV },
-      create: { key: APPLIED_KV, value: JSON.stringify(applied) },
-      update: { value: JSON.stringify(applied) },
-    })
+    if (!(await which('fwupdmgr'))) {
+      return failE('fwupd not installed — firmware flashing needs fwupdmgr on the host (nothing staged in its absence)')
+    }
+    if (guid) {
+      return failE('per-device offline flash runs `fwupdmgr install <fw-file>` with the vendor capsule — use fwupdmgr update for the LVFS flow (run below)')
+    }
+    // the real LVFS flow: fwupdmgr update (interactive prompts need a tty;
+    // --assume-no keeps it non-interactive and honest)
+    const r = await run('fwupdmgr', ['update', '--assume-no'], 120_000)
     await db.auditLog.create({
-      data: {
-        module: 'firmware',
-        action: 'apply',
-        detail: `staged ${'device' in update ? update.device : update.Name} (${'current' in update ? `${update.current} → ${update.candidate}` : update.Version})`,
-      },
+      data: { module: 'firmware', action: 'apply', detail: `fwupdmgr update --assume-no → rc=${r.rc}` },
     })
+    if (r.rc !== 0) {
+      return failE(`fwupdmgr update failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root or no updates staged'}`)
+    }
     return ok(
-      { applied: guid, staged: true },
-      'hybrid',
-      'staging recorded — the actual flash requires the cockpit bridge on a managed host',
+      { command: 'fwupdmgr update --assume-no', output: r.stdout.trim().split('\n').slice(-8).join('\n') },
+      'live',
     )
   },
 }

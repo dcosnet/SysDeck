@@ -1,10 +1,11 @@
 'use client'
 
 // Vault panel — LUKS volume inventory + encryption vault entries.
-// The lsblk table is REAL live data (this container has no crypto_LUKS
-// devices — honestly reported); the vault entries are a seeded registry
-// whose lock/unlock state changes are recorded + audited. Actual
-// cryptsetup operations need the cockpit bridge on a managed host.
+// The lsblk table is REAL live data (hosts without crypto_LUKS devices
+// report the empty set honestly); vault entries derive live from lsblk
+// plus the operator's registered keyfiles — never seeded. lock/unlock
+// state changes are recorded + audited, and cryptsetup operations run
+// for real through the privilege chain (root / sudo -n).
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -271,9 +272,8 @@ export default function VaultPanel() {
             {luksFound.length === 0 ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 {luksNote ??
-                  'real lsblk inventory — no crypto_LUKS devices in this container'}{' '}
-                — this is an honest live reading, not a demo. The vault-entries tab holds the seeded registry the
-                cockpit edition managed.
+                  'real lsblk inventory — no crypto_LUKS devices on this host'}{' '}
+                — an honest live reading. The vault-entries tab holds the operator's encrypted-secret registry.
               </p>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">

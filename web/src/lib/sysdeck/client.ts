@@ -62,7 +62,10 @@ export interface BridgeQueryOptions {
   staleTime?: number
 }
 
-/** TanStack Query wrapper over a bridge command. */
+/** TanStack Query wrapper over a bridge command. Window-focus refetches
+ *  stay OFF: every active panel already polls on its interval, and a
+ *  focus event firing ~8 child-process-backed queries at once is a
+ *  self-inflicted burst the host does not need. */
 export function useBridgeQuery<T = unknown>(
   module: string,
   command: string,
@@ -75,6 +78,7 @@ export function useBridgeQuery<T = unknown>(
     refetchInterval: options.refetchInterval,
     enabled: options.enabled,
     staleTime: options.staleTime ?? 2000,
+    refetchOnWindowFocus: false,
   })
 }
 

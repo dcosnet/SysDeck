@@ -1,10 +1,11 @@
 'use client'
 
-// Mining panel — rig fleet (basement-1, garage-2, attic-3, solar-1).
-// No xmrig/bosminer daemons exist in this sandbox, so the bridge keeps a
-// demo fleet with LIVE-FEEL values: the panel polls mining.refresh every
-// 5s, which random-walks ±3% hashrates/temps on online rigs (each walk is
-// audited — the demo XMRig-style API). start/stop zero/restore nominal.
+// Mining panel — rig fleet. The bridge probes the local XMRig daemon's
+// real HTTP API (SYSDECK_XMRIG_URL, default 127.0.0.1:18088) on every
+// poll — live hashrates, pool, per-thread loads — plus nvidia-smi GPU
+// telemetry when a GPU is present. start/stop run the real
+// `systemctl start/stop xmrig.service`; pool-config PUTs the live daemon
+// config. No daemon → an honest empty fleet.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -100,7 +101,7 @@ export default function MiningPanel() {
   if (summary.isLoading || list.isLoading) {
     return (
       <div>
-        <PanelHeader title="Mining" subtitle="rig fleet — hashrate · power · thermals" source="demo" />
+        <PanelHeader title="Mining" subtitle="rig fleet — hashrate · power · thermals" />
         <PanelSkeleton />
       </div>
     )
@@ -109,7 +110,7 @@ export default function MiningPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Mining" subtitle="rig fleet — hashrate · power · thermals" source="demo" />
+        <PanelHeader title="Mining" subtitle="rig fleet — hashrate · power · thermals" />
         <ErrorCard error={summary.data?.error ?? 'mining.summary failed'} />
       </div>
     )
@@ -123,7 +124,7 @@ export default function MiningPanel() {
       <PanelHeader
         title="Mining"
         subtitle="rig fleet — values random-walk every 5s (XMRig-style API) · 5s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -249,9 +250,10 @@ export default function MiningPanel() {
         })}
 
         <p className="pb-2 text-xs text-muted-foreground">
-          no mining daemons (xmrig/bosminer) in this sandbox — the fleet is the bridge&apos;s demo registry, but the values
-          are live-feel: the 5s poll calls mining.refresh, which random-walks ±3% hashrate/temps on online rigs (each
-          walk is audited). stop zeroes hashrate/power/temps; start restores nominal values.
+          no XMRig daemon answered at the bridge&apos;s probe URL — the fleet is empty, nothing is fabricated. Start one
+          with <Mono>xmrig --http-host 127.0.0.1 --http-port 18088</Mono> (or point{' '}
+          <Mono>SYSDECK_XMRIG_URL</Mono> at it) and this panel fills with live hashrates, pool state and GPU
+          thermals on the next 5s poll. start/stop manage the real xmrig.service.
         </p>
       </div>
     </div>

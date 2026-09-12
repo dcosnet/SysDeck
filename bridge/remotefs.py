@@ -118,8 +118,11 @@ def _have(binary: str) -> bool:
     return shutil.which(binary) is not None
 
 
+_SYSTEMCTL = shutil.which("systemctl")
+
+
 def _unit_loaded(unit: str) -> bool:
-    if not unit:
+    if not unit or not _SYSTEMCTL:
         return False
     out = subprocess.run(
         ["systemctl", "list-unit-files", unit],
@@ -129,6 +132,8 @@ def _unit_loaded(unit: str) -> bool:
 
 
 def _systemctl_show(unit: str, props: list[str]) -> dict[str, str]:
+    if not _SYSTEMCTL:
+        return {}
     out = subprocess.run(
         ["systemctl", "show", unit, "--property=" + ",".join(props)],
         capture_output=True, text=True, timeout=5,
@@ -252,6 +257,8 @@ def cmd_status(bid: str) -> dict[str, Any]:
 def _systemctl(action: str, unit: str) -> dict[str, Any]:
     if not unit:
         return {"rc": 127, "success": False, "stderr": "no systemd unit for this backend"}
+    if not _SYSTEMCTL:
+        return {"rc": 127, "success": False, "stderr": "systemctl not present on this host (no systemd)"}
     try:
         r = subprocess.run(
             ["systemctl", action, unit],

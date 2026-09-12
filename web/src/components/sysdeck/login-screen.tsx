@@ -13,6 +13,7 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } fr
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { applySdTheme } from '@/lib/sysdeck/theme'
 import {
   ArrowRight,
   CheckCircle2,
@@ -48,7 +49,7 @@ export function LoginScreen({ hostname, authMode, pamAvailable, usingDefault }: 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('sd_theme')
-      if (saved) document.documentElement.dataset.sdTheme = saved
+      if (saved) applySdTheme(saved)
     } catch {
       /* default theme is fine */
     }

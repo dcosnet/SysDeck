@@ -354,7 +354,7 @@ export default function IntegrityPanel() {
           <p>
             The baseline covers <Mono>/etc/passwd</Mono>, <Mono>/etc/group</Mono>, <Mono>/etc/hosts</Mono>,{' '}
             <Mono>/etc/os-release</Mono>, <Mono>/bin/sh</Mono>, <Mono>/usr/bin/dpkg</Mono> and friends —{' '}
-            <Mono>/etc/shadow</Mono> is honestly skipped (unreadable in this container). All hashes are real sha256
+            <Mono>/etc/shadow</Mono> is honestly skipped (root-only). All hashes are real sha256
             digests of this host&apos;s files.
           </p>
         </HintCard>

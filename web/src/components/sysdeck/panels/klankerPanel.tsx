@@ -11,12 +11,12 @@ import { useState } from 'react'
 // is contained here (credit: klanker-gate/ATTRIBUTION.md + the
 // cockpit THIRD_PARTY.md); SysDeck adds only the Arch packaging.
 //
-// HYBRID like the other service-client panels: every command probes the
+// LIVE like the other service-client panels: every command fetches the
 // real gateway server-side (KLANKER_URL, 1.5s timeout, bearer admin
-// token when configured) and falls back to the seeded demo dataset
-// when the gateway is unreachable — which is always the case in this
-// sandbox (no Deno runtime, no PostgreSQL). All calls go through the
-// suite's bridge client (POST /api/bridge), never a direct fetch.
+// token when configured). An unreachable gateway returns the honest
+// offline answer with wiring guidance — empty tables, never a seeded
+// fallback. All calls go through the suite's bridge client
+// (POST /api/bridge), never a direct fetch.
 // Upstream money convention: integer micro-USD everywhere, displayed
 // here as USD by /1e6.
 
@@ -247,7 +247,7 @@ export default function KlankerPanel() {
   const logs = logsQ.data?.data?.logs ?? []
   const logLimit = logsQ.data?.data?.limit ?? 25
 
-  const isDemo = statusQ.data?.source !== 'live'
+  const isOffline = st?.offline === true || st?.ok === false
   const gatewayUrl = st?.gatewayUrl ?? 'http://127.0.0.1:8080'
   const activeKeys = vkeys.filter((v) => v.state === 'active').length
   const cacheRate = s?.cacheHitRate ?? null
@@ -259,14 +259,14 @@ export default function KlankerPanel() {
         subtitle="klanker-gate · frosty deno — local stack (ollama · llama.cpp · koboldcpp) + providers, vkeys, spend & runtime"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <SourceBadge source={isDemo ? 'demo' : 'live'} />
+            <SourceBadge source={isOffline ? 'unavailable' : 'live'} />
             <span
               className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
               title="gateway base URL (KLANKER_URL env override)"
             >
               <Globe className="h-3 w-3" aria-hidden />
               {gatewayUrl}
-              {st ? ` · v${st.version.replace(' (seeded)', '')}` : ''}
+              {st?.version ? ` · v${st.version}` : ''}
             </span>
             <span
               className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground"
@@ -279,21 +279,19 @@ export default function KlankerPanel() {
         }
       />
 
-      {/* offline / demo notice */}
-      {isDemo ? (
+      {/* offline notice */}
+      {isOffline ? (
         <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/[0.04] p-3">
           <p className="flex items-center gap-2 text-sm font-semibold text-amber-500">
             <WifiOff className="h-4 w-4" aria-hidden />
-            gateway offline — seeded demo dataset
+            gateway offline — honest empty tables
           </p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            the bridge probes <Mono>{gatewayUrl}/healthz</Mono> with a 1.5s timeout and got no answer: this sandbox has
-            no Deno runtime and no PostgreSQL, so klanker-gate cannot run here. The numbers below are a seeded 24h
-            dataset — 6 provider accounts, 5 virtual keys, 40 requests with realistic micro-USD costs and one
-            semantic-cache hit streak. On a host running the gateway, set{' '}
+            the bridge probes <Mono>{gatewayUrl}/healthz</Mono> with a 1.5s timeout and got no answer, so the tables below
+            are empty — nothing is fabricated. On a host running the gateway, set{' '}
             <Mono>KLANKER_URL</Mono> (plus <Mono>KLANKER_ADMIN_TOKEN</Mono> when it runs with{' '}
-            <Mono>FROSTY_ADMIN_TOKEN</Mono>) and this panel flips to live data automatically
-            {st?.reason ? ` (${st.reason})` : ''}.
+            <Mono>FROSTY_ADMIN_TOKEN</Mono>) and this panel fills with live providers, keys, requests and spend
+            automatically{st?.reason ? ` (${st.reason})` : ''}.
           </p>
         </div>
       ) : null}
@@ -568,9 +566,9 @@ export default function KlankerPanel() {
       )}
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        HYBRID: every command probes the gateway server-side (<Mono>KLANKER_URL</Mono>, 1.5s timeout,{' '}
+        LIVE: every command fetches the gateway server-side (<Mono>KLANKER_URL</Mono>, 1.5s timeout,{' '}
         <Mono>Bearer</Mono> admin token when configured — the token never reaches this page). An unreachable gateway
-        falls back to seeded demo rows; a running one flips the panel live automatically. Costs are integer micro-USD
+        leaves the tables honestly empty; a running one fills them automatically. Costs are integer micro-USD
         upstream (the repo-wide convention), displayed as USD by /1e6. Live per-key usage counters are lifetime totals
         upstream; the 24h aggregates come from <Mono>/api/analytics</Mono>.
       </p>

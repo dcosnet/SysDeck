@@ -39,9 +39,9 @@ Containers 3.x APIs:
                       dnsmasq + test -d /srv/tftp + ls
                       /srv/tftp/pxelinux.cfg/.
   qcrows-list         list QCrows kernel bundles in
-                      /usr/share/sysdeck/kata/qcrows/.
-  qcrows-export       invoke qcrows-export (real binary).
-  qcrows-initrd-regen  invoke qcrows-initrd-regen (real binary).
+                      /usr/share/sysdeck/kata/qcrows/. (qcrows-export
+                      and qcrows-initrd-regen are operator binaries the
+                      host runs directly — the bridge does not wrap them.)
 
 KEY DESIGN DECISIONS (Kata 3.x reality):
   - kata-runtime list/inspect were REMOVED in 3.x. Do not call them.

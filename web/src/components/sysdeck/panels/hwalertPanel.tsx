@@ -5,9 +5,9 @@
 // is the first UI it ever got. Foreign USB storage, DMA-capable
 // Thunderbolt, rogue Bluetooth pairings, new PCI devices and firmware
 // tamper — with a persisted policy, device whitelist and per-alert state.
-// Devices/alerts are seeded (the container's buses are empty), but `scan`
-// reads the REAL DMI host identity and re-detects the new PCI device
-// idempotently. Source: HYBRID.
+// Devices and alerts come from REAL bus scans (/sys/bus/* + bluetoothctl);
+// a host with empty buses stays honestly empty. Source: HYBRID (kernel
+// DMI identity read live; alert/whitelist state persisted in the db).
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -197,7 +197,7 @@ export default function HwalertPanel() {
   }
 
   async function setPolicy(key: string, value: boolean) {
-    const res = await action('hwalert', 'policy', { key, value: String(value) })
+    const res = await action('hwalert', 'setPolicy', { key, value: String(value) })
     if (res.ok) {
       toast.success(`policy: ${key} = ${value}`, {
         description: 'persisted — applied on the next scan / device event',
@@ -287,8 +287,11 @@ export default function HwalertPanel() {
       >
         <div className="grid gap-3 lg:grid-cols-2">
           {alerts.map((a) => (
-            <div key={a.id} className={`rounded-md border p-3 ${alertCardTone(a.severity)} ${a.state === 'active' && a.severity === 'danger' ? 'animate-pulse' : ''}`}>
+            <div key={a.id} className={`rounded-md border p-3 ${alertCardTone(a.severity)}`}>
               <div className="flex flex-wrap items-center gap-2">
+                {a.state === 'active' && a.severity === 'danger' ? (
+                  <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                ) : null}
                 <span className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider ${severityCls(a.severity)}`}>
                   {a.severity}
                 </span>
@@ -470,13 +473,14 @@ export default function HwalertPanel() {
 
           <HintCard title="What is real here">
             <p>
-              The <Mono>scan</Mono> host identity is REAL (<Mono>/sys/class/dmi/id/product_name</Mono> — reported as
-              unknown in this container, no DMI). The usb/thunderbolt/bluetooth/pci bus inventory is seeded: this
-              sandbox has no populated buses. Policy, whitelist, block and alert state persist in the db.
+              The <Mono>scan</Mono> host identity is REAL (<Mono>/sys/class/dmi/id/product_name</Mono>; hosts without
+              DMI exposure report unknown). The usb/thunderbolt/bluetooth/pci/firewire inventory comes from real bus
+              scans — a host with empty buses stays honestly empty. Policy, whitelist, block and alert state persist in
+              the db.
             </p>
             <p>
-              The I225-V PCI device appears once on the first scan (idempotent — no alert spam), exactly like a
-              previously-unseen device would on a real host.
+              A genuinely new device raises one alert on the scan that first sees it (idempotent — no alert spam), and
+              lands in the whitelist/block workflow from there.
             </p>
           </HintCard>
         </div>

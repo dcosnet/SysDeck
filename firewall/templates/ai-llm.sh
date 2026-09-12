@@ -57,7 +57,9 @@ SCRIPT_VERSION="0.0.44"
 
 TABLE_NAME="firewall"
 NFT_CMD="${NFT_CMD:-nft}"
-RULES_FILE="${RULES_FILE:-/tmp/sysdeck-firewall-ai-llm.rules}"
+RULES_FILE="${RULES_FILE:-$(mktemp /tmp/sysdeck-firewall-ai-llm-XXXXXX.rules)}"
+# a fresh mktemp name per run — no predictable /tmp path for a root write
+trap 'rm -f "$RULES_FILE"' EXIT
 
 # ── Configurable ports (auto-detected) ──────────────────────────────
 SSH_PORT="${SYSDECK_AI_LLM_SSH_PORT:-22}"

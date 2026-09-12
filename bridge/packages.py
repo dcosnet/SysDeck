@@ -42,6 +42,10 @@ import subprocess
 import sys
 from typing import Any
 
+# Scrubbed child environment: parsed output stays locale-stable (LC_ALL=C)
+# and no console process state leaks into children.
+SCRUBBED_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
+
 
 PACMAN_LICENSE = "GPL-2.0+ (pacman)"
 PACMAN_AUTHOR = "Pacman Development Team"
@@ -55,23 +59,35 @@ def _detect_pkg_manager() -> str:
     """Return 'pacman', 'dnf', or 'apt' based on what is available."""
     for cmd in ("pacman", "dnf", "apt"):
         try:
-            subprocess.run([cmd, "--version"], capture_output=True, check=True)
+            subprocess.run(
+                [cmd, "--version"], capture_output=True, check=True,
+                timeout=5, env=SCRUBBED_ENV,
+            )
             return cmd
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
             continue
     return "unknown"
 
 PKG_MANAGER = _detect_pkg_manager()
 
 
-def run(argv: list[str]) -> str:
-    """Run a command, returning stdout. Returns '' on failure."""
+def run(argv: list[str], timeout: int = 60, ok_rcs: tuple[int, ...] = ()) -> str:
+    """Run a command, returning stdout; '' on real failure.
+
+    check=False + an explicit accept-set: dnf check-update exits 100
+    when updates EXIST (and 0 when none do) — treating 100 as failure
+    would fabricate an empty update list on every RPM host. Every child
+    runs under the scrubbed env with a hard timeout."""
     try:
-        return subprocess.run(
-            argv, capture_output=True, text=True, check=True,
-        ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        r = subprocess.run(
+            argv, capture_output=True, text=True, check=False,
+            timeout=timeout, env=SCRUBBED_ENV,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
+    if r.returncode == 0 or r.returncode in ok_rcs:
+        return r.stdout
+    return ""
 
 
 # ── Pacman backend ──────────────────────────────────────────────────
@@ -133,8 +149,11 @@ def _dnf_list_installed() -> list[dict[str, str]]:
 
 
 def _dnf_list_updates() -> list[dict[str, str]]:
-    """List available updates via dnf check-update."""
-    raw = run(["dnf", "check-update", "--quiet"])
+    """List available updates via dnf check-update.
+
+    dnf check-update exits 100 when updates exist (0 when none) — the
+    100 is data, not failure."""
+    raw = run(["dnf", "check-update", "--quiet"], timeout=120, ok_rcs=(100,))
     return _parse_rpm_update_list(raw)
 
 
@@ -312,11 +331,9 @@ def _pkg_name_ok(pkg: str) -> bool:
 
 
 def _first_pkg_arg(args: list[str]) -> str | None:
-    """v0.1.4 FIX: firewall.py's install-backend used to call this
-    helper as `packages.py install -- <pkgs…>` (a `--` argv separator,
-    shell convention) — install() read args[0] == '--' and the
-    backend-install path has been broken since it shipped. Skip any
-    leading '--' separators instead of choking on them."""
+    """Accept the shell convention `--` as an argv separator: callers
+    may pass `packages.py install -- <pkgs…>`; the separator is skipped
+    and the first package name wins."""
     for a in args:
         if a != "--":
             return a
@@ -361,7 +378,10 @@ def install(args: list[str]) -> dict[str, str]:
     # Actually run it. The cockpit bridge runs as the cockpit user; the
     # JS panel's cockpit.spawn(..., { superuser: 'try' }) makes cockpit
     # prompt the operator for auth and run us as root via polkit.
-    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    r = subprocess.run(
+        cmd, capture_output=True, text=True, check=False,
+        timeout=600, env=SCRUBBED_ENV,
+    )
     return {"action": "install", "package": pkg, "manager": PKG_MANAGER,
             "command": " ".join(cmd), "success": r.returncode == 0,
             "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
@@ -383,7 +403,10 @@ def remove(args: list[str]) -> dict[str, str]:
     if not cmd:
         return {"action": "remove", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no remove command for {PKG_MANAGER}"}
-    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    r = subprocess.run(
+        cmd, capture_output=True, text=True, check=False,
+        timeout=600, env=SCRUBBED_ENV,
+    )
     return {"action": "remove", "package": pkg, "manager": PKG_MANAGER,
             "command": " ".join(cmd), "success": r.returncode == 0,
             "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
@@ -405,7 +428,10 @@ def update(args: list[str]) -> dict[str, str]:
     if not cmd:
         return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update command for {PKG_MANAGER}"}
-    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    r = subprocess.run(
+        cmd, capture_output=True, text=True, check=False,
+        timeout=600, env=SCRUBBED_ENV,
+    )
     return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
             "command": " ".join(cmd), "success": r.returncode == 0,
             "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
@@ -429,7 +455,10 @@ def update_all() -> dict[str, str]:
     if not cmd:
         return {"action": "update-all", "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update-all command for {PKG_MANAGER}"}
-    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    r = subprocess.run(
+        cmd, capture_output=True, text=True, check=False,
+        timeout=600, env=SCRUBBED_ENV,
+    )
     return {"action": "update-all", "manager": PKG_MANAGER,
             "command": " ".join(cmd), "success": r.returncode == 0,
             "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}

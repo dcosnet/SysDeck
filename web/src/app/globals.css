@@ -473,4 +473,12 @@
   .sd-flow-edge {
     animation: none !important;
   }
+  /* tailwind utility animations (status pulses, spinners) carry no
+     information beyond the element itself — still them under reduced
+     motion */
+  .animate-pulse,
+  .animate-spin,
+  .animate-ping {
+    animation: none !important;
+  }
 }

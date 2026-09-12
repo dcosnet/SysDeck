@@ -119,6 +119,30 @@
   </keywords>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.3" date="2026-09-12">
+      <description>
+        <p>v0.4.3: the multi-expert QA pass. Privileged writes ride stdin
+        with post-write verification; rule comments are injection-guarded;
+        temp staging is mktemp'd; the smartcard PIN never touches argv;
+        mutating bridge commands require an admin session with an
+        opt-out for single-operator consoles; dry-runs preview exactly
+        what apply executes; rate-limit identity ignores client-supplied
+        X-Forwarded-For unless the operator opts in; the polling layer
+        shares TTL-cached single-flight probes; and the cockpit-side
+        bridges match the web side's step-down chains.</p>
+      </description>
+    </release>
+    <release version="0.4.2" date="2026-09-12">
+      <description>
+        <p>v0.4.2: the zero-demo release — production implementations
+        only. Sensor readings come from the real lm-sensors JSON; the
+        network-security ban layer enforces through real nftables or
+        iptables and merges the live fail2ban ban list; the firewall
+        panel reads the host's actual kernel ruleset and ships the full
+        seven-template catalog; absent backends render honest empty
+        inventories, never fabricated rows.</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-09-12">
       <description>
         <p>v0.4.1: every cockpit module installed on the host is

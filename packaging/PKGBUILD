@@ -3,7 +3,7 @@
 # Upstream: https://dcos.net
 
 pkgname=sysdeck
-pkgver=0.4.1
+pkgver=0.4.3
 pkgrel=1
 pkgdesc="Unified operations surface for Linux infrastructure — twenty-six domain modules behind one Cockpit dashboard"
 arch=('any')

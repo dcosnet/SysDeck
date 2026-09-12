@@ -201,7 +201,9 @@ SCRIPT_VERSION="2.0.0"
 NFT_CMD="$(command -v nft 2>/dev/null || echo "")"
 TABLE_NAME="firewall"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-RULES_FILE="/tmp/nftables-rules-${TIMESTAMP}.nft"
+RULES_FILE="$(mktemp /tmp/nftables-rules-XXXXXX.nft)"
+# a fresh mktemp name per run — no predictable /tmp path for a root write
+trap 'rm -f "$RULES_FILE"' EXIT
 SAVED_RULES="/etc/nftables/firewall.rules"
 
 # Colors for output

@@ -5,8 +5,9 @@
 // source and homepage are visible on the card BEFORE the install click —
 // no modal. The Install button itself is the acceptance gesture: it calls
 // install {id, acceptLicense: true} (the bridge refuses without it).
-// Installs are simulated pulls — the registry is only reachable on a
-// managed host; depends[] checks are real which() probes.
+// Installs are REAL: the host package manager, git clone --depth 1, or
+// curl + extraction into a cockpit scan root; depends[] checks are real
+// which() probes.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -111,15 +112,15 @@ export default function ModulesPanel() {
     try {
       const res = await action('modules', 'install', { id: entry.id, acceptLicense: true })
       if (res.ok) {
-        const d = res.data as { status?: string; missingDeps?: string[] }
+        const d = res.data as { status?: string; missingDeps?: string[]; command?: string }
         if (d.status === 'already-installed') {
           toast.info(`${entry.name} is already installed`)
         } else {
           toast.success(`installed ${entry.name}`, {
             description:
               d.missingDeps && d.missingDeps.length > 0
-                ? `simulated pull (registry reachable only on a managed host) — missing deps: ${d.missingDeps.join(', ')}`
-                : `simulated pull — the cockpit-modules registry is only reachable on a managed host`,
+                ? `${d.command ?? 'real install'} — missing deps: ${d.missingDeps.join(', ')}`
+                : (d.command ?? 'real install'),
           })
         }
       } else {
@@ -155,7 +156,7 @@ export default function ModulesPanel() {
   if (catalog.isLoading) {
     return (
       <div>
-        <PanelHeader title="Modules" subtitle="3rd-party module installer — with inline license disclosure" source="demo" />
+        <PanelHeader title="Modules" subtitle="3rd-party module installer — with inline license disclosure" />
         <PanelSkeleton />
       </div>
     )
@@ -164,7 +165,7 @@ export default function ModulesPanel() {
   if (!catalog.data?.ok || !catalog.data.data) {
     return (
       <div>
-        <PanelHeader title="Modules" subtitle="3rd-party module installer — with inline license disclosure" source="demo" />
+        <PanelHeader title="Modules" subtitle="3rd-party module installer — with inline license disclosure" />
         <ErrorCard error={catalog.data?.error ?? 'modules.catalog failed'} />
       </div>
     )
@@ -178,7 +179,7 @@ export default function ModulesPanel() {
       <PanelHeader
         title="Modules"
         subtitle="3rd-party module installer — license, author, source and homepage are disclosed inline BEFORE the install click"
-        source="demo"
+        source={catalog.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -293,9 +294,9 @@ export default function ModulesPanel() {
       </div>
 
       <p className="mt-4 pb-2 text-xs text-muted-foreground">
-        catalog values are ported verbatim from the cockpit-modules registry; on this sandbox the pulls are simulated
-        (the registry is reachable only on a managed host) but the <Mono>depends[]</Mono> checks are real{' '}
-        <Mono>which()</Mono> probes — every dep is absent here, which the install toast reports honestly. The bridge
+        catalog values are ported verbatim from the cockpit-modules registry; installs are real (host package manager,
+        git clone, or curl + extraction) and the <Mono>depends[]</Mono> checks are real <Mono>which()</Mono> probes — a
+        missing dep is reported by the install result instead of blocking it.
         refuses installs without <Mono>acceptLicense: true</Mono>; this UI never opens a license modal — the disclosure
         lives inline on the card, next to the button.
       </p>

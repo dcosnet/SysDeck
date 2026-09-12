@@ -1,9 +1,10 @@
 'use client'
 
 // Kata panel — kata-containers sandbox inventory (kata-qemu + kata-clh
-// runtimes). kata-runtime/kata-monitor are absent in this sandbox, so the
-// bridge keeps a demo inventory: 5 sandboxes (confidential guests, vfio
-// passthrough, attested jobs, a plain test sandbox).
+// runtimes). The bridge enumerates REAL sandboxes via the kata-monitor
+// HTTP API and the /run/vc/sbs + /run/kata filesystems; kata-runtime
+// check reports host capability. Absent binaries → an honest empty
+// inventory — nothing is fabricated.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -84,7 +85,7 @@ export default function KataPanel() {
   if (summary.isLoading || list.isLoading) {
     return (
       <div>
-        <PanelHeader title="Kata" subtitle="kata-containers — isolated VM sandboxes" source="demo" />
+        <PanelHeader title="Kata" subtitle="kata-containers — isolated VM sandboxes" />
         <PanelSkeleton />
       </div>
     )
@@ -93,7 +94,7 @@ export default function KataPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Kata" subtitle="kata-containers — isolated VM sandboxes" source="demo" />
+        <PanelHeader title="Kata" subtitle="kata-containers — isolated VM sandboxes" />
         <ErrorCard error={summary.data?.error ?? 'kata.summary failed'} />
       </div>
     )
@@ -107,7 +108,7 @@ export default function KataPanel() {
       <PanelHeader
         title="Kata"
         subtitle="kata-containers — hardware-isolated VM sandboxes · 6s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -175,9 +176,9 @@ export default function KataPanel() {
         </PanelCard>
 
         <p className="pb-2 text-xs text-muted-foreground">
-          kata-runtime / kata-monitor are not present in this sandbox — the sandboxes above are the bridge&apos;s demo
-          inventory (kata-qemu with confidential guests + vfio passthrough, kata-clh with measured boot attestation).
-          start/stop mutate the registry and are audited.
+          kata-runtime / kata-monitor are not present on this host — the inventory is empty, nothing is fabricated. Install
+          kata-containers and start sandboxes from any container engine (containerd/CRI-O owns the lifecycle) and they
+          appear here live from the kata-monitor API and /run/kata enumeration.
         </p>
       </div>
     </div>

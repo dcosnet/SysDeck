@@ -1,10 +1,12 @@
 'use client'
 
 // Remote filesystems panel — ceph / glusterfs / moosefs / beegfs / orangefs
-// cluster inventory. The daemons are absent in this sandbox, so the bridge
-// keeps a demo cluster (972 TB capacity, 5 filesystems, one degraded
-// gluster + one offline orangefs). mount/unmount/heal mutate the demo
-// registry: unmount to 0 marks offline, heal replaces the degraded brick.
+// cluster inventory. The bridge auto-detects which backends are installed
+// (real which() probes) and surfaces each one's REAL cluster status via
+// its own command (ceph fs status / gluster volume status /
+// beegfs-ctl --getstate / moosefs-cli / pvfs2-client). mount/unmount run
+// the real mount(8); heal runs the backend's real heal command. Absent
+// backends → an honest empty inventory.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -101,7 +103,7 @@ export default function RemotefsPanel() {
   if (summary.isLoading || list.isLoading) {
     return (
       <div>
-        <PanelHeader title="Remote FS" subtitle="distributed storage — ceph · glusterfs · moosefs · beegfs · orangefs" source="demo" />
+        <PanelHeader title="Remote FS" subtitle="distributed storage — ceph · glusterfs · moosefs · beegfs · orangefs" />
         <PanelSkeleton />
       </div>
     )
@@ -110,7 +112,7 @@ export default function RemotefsPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Remote FS" subtitle="distributed storage — ceph · glusterfs · moosefs · beegfs · orangefs" source="demo" />
+        <PanelHeader title="Remote FS" subtitle="distributed storage — ceph · glusterfs · moosefs · beegfs · orangefs" />
         <ErrorCard error={summary.data?.error ?? 'remotefs.summary failed'} />
       </div>
     )
@@ -125,7 +127,7 @@ export default function RemotefsPanel() {
       <PanelHeader
         title="Remote FS"
         subtitle="distributed storage — ceph · glusterfs · moosefs · beegfs · orangefs · 8s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -210,9 +212,9 @@ export default function RemotefsPanel() {
       </div>
 
       <p className="mt-4 pb-2 text-xs text-muted-foreground">
-        no ceph/glusterfs/moosefs/beegfs/orangefs daemons in this sandbox — the cluster above is the bridge&apos;s demo
-        inventory (glance-share degraded with brick gv2 down; orange-hpc offline since the last maintenance). unmount
-        reaching zero marks a filesystem offline; heal restores the degraded gluster (bricks 2→3).
+        no ceph/glusterfs/moosefs/beegfs/orangefs backends are installed on this host — the inventory is empty, nothing is
+        fabricated. Install any of them and the bridge probes its real cluster status (ceph fs status, gluster volume
+        status, ...) on every poll; mount/unmount/heal run the backend&apos;s real commands.
       </p>
     </div>
   )

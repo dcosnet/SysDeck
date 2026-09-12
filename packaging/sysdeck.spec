@@ -7,7 +7,7 @@
 #       Debian/Ubuntu users: see packaging/debian/
 
 Name:           sysdeck
-Version:        0.4.1
+Version:        0.4.3
 Release:        1%{?dist}
 Summary:        Unified operations surface for Linux infrastructure
 
@@ -84,6 +84,23 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.3-1
+- v0.4.3: the MoE QA pass — production hardening across every axis.
+  Privileged writes ride stdin (polkit rules verified post-write,
+  nft -f -/iptables-restore piped, PIN off argv); rule comments are
+  injection-guarded; /tmp staging is mktemp'd; mutations require an
+  admin session (SYSDECK_MUTATIONS=any restores single-operator mode);
+  dry-runs preview the exact shipped script; dnf check-update rc-100
+  is data; the polling layer gained TTL + single-flight caches; the
+  cockpit-side sensors bridge gained the full lm-sensors -> sysfs
+  step-down chain.
+* Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.2-1
+- v0.4.2: the zero-demo release — production implementations only.
+  Real sensors -j reads, real nftables/iptables ban enforcement with
+  live fail2ban merging, a live-ruleset tab on the firewall panel, the
+  full seven-template firewall catalog, and honest-empty inventories
+  everywhere else. The bridge DataSource type no longer admits 'demo'.
+
 * Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.1-1
 - v0.4.1: cockpit module detection for the web console — every
   installed cockpit module (distro modules like cockpit-machines and

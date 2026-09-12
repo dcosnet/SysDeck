@@ -1,9 +1,10 @@
 'use client'
 
 // Builder panel — the image-builder workbench (mkosi / vmdb2 / archiso /
-// live-build). HYBRID: no build backends exist in this sandbox (builds are
-// simulated with staged logs + artifacts), but importHostPackages reads
-// the REAL dpkg database (932 packages on this host). Profiles are a
+// live-build). Builds run the backend's REAL command (mkosi build /
+// mkarchiso / lb / vmdb2) against a synthesized profile; a host without
+// any backend gets an honest refusal. importHostPackages reads the
+// host's REAL package database via the packages bridge. Profiles are a
 // Prisma registry; every mutation is audited.
 
 import { useMemo, useState } from 'react'
@@ -351,7 +352,7 @@ export default function BuilderPanel() {
           value={s.backendsInstalled.length}
           tone={s.backendsInstalled.length > 0 ? 'good' : 'warn'}
           icon={<FileArchive className="h-4 w-4" aria-hidden />}
-          hint={s.backendsInstalled.length > 0 ? s.backendsInstalled.join(' · ') : 'none — builds are simulated'}
+          hint={s.backendsInstalled.length > 0 ? s.backendsInstalled.join(' · ') : 'none — build commands are refused until one is installed'}
         />
       </div>
 
@@ -634,7 +635,7 @@ export default function BuilderPanel() {
           </PanelCard>
           <p className="mt-2 pb-2 text-xs text-muted-foreground">
             artifacts persist per profile after successful builds (mkosi → image.raw + rootfs.tar.xz; archiso/live-build →
-            .iso). the record dialog shows the stored entry — no real download endpoint in the sandbox.
+            .iso) in the profile's build directory — the record dialog shows the stored entry.
           </p>
         </TabsContent>
       </Tabs>
@@ -649,9 +650,9 @@ export default function BuilderPanel() {
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  This performs a <strong>REAL read of this host&apos;s dpkg database</strong> (dpkg-query) and{' '}
-                  {importMode === 'replace' ? 'REPLACES' : 'appends to'} the profile&apos;s package list. The first 300
-                  names are stored; the true total (932 packages on this host) is kept in SdKv.
+                  This performs a <strong>REAL read of this host&apos;s package database</strong> (dpkg / pacman / rpm){' '}
+                  and {importMode === 'replace' ? 'REPLACES' : 'appends to'} the profile&apos;s package list. The first 300
+                  names are stored; the host total at import time is kept in SdKv.
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">mode</span>
@@ -746,7 +747,7 @@ export default function BuilderPanel() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>artifact record</DialogTitle>
-            <DialogDescription>no real download endpoint in the sandbox — this is the stored record</DialogDescription>
+            <DialogDescription>artifacts stay on the host in the profile&apos;s build directory — this is the stored record</DialogDescription>
           </DialogHeader>
           {artifactRecord ? (
             <div className="rounded border border-border bg-zinc-950/80 p-3">

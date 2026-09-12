@@ -1,10 +1,12 @@
 'use client'
 
 // Netsec panel — network security monitor (iptraf-ng-style socket view +
-// fail2ban-style ban registry + real localhost port sweeps).
+// fail2ban-style ban layer + real localhost port sweeps).
 // Connections/surface/scan are LIVE (decoded from /proc/net/tcp{,6}, the
-// sweep connect-tests every listening port); the ban registry is seeded
-// demo state — enforcement needs the cockpit bridge on a managed host.
+// sweep connect-tests every listening port). Bans are production: the
+// registry is the operator's workspace (never seeded), fail2ban's live
+// ban list is merged when it runs, and ban/unban enforce for real via
+// nftables (table sysdeck, set blacklist) or an iptables DROP rule.
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -87,6 +89,7 @@ interface BanRow {
   strikes: number
   bannedAt: string
   expiresAt: string | null
+  source?: 'registry' | 'fail2ban'
 }
 
 interface ScanPortResult {
@@ -182,8 +185,9 @@ function BanDialog({ onBan }: { onBan: (args: Record<string, unknown>) => Promis
         <DialogHeader>
           <DialogTitle className="font-mono">Ban an address</DialogTitle>
           <DialogDescription>
-            Records the address in the sysdeck jail registry (fail2ban-style). Live nftables enforcement requires the
-            cockpit bridge on a managed host.
+            Records the address in the sysdeck jail registry AND enforces it for real — an nftables element in the
+            sysdeck blacklist set (30d timeout) on nft hosts, an iptables INPUT DROP rule otherwise. Privilege-gated
+            (root / sudo -n); unprivileged consoles save the registry row and say so.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -267,8 +271,12 @@ export default function NetsecPanel() {
   async function ban(args: Record<string, unknown>) {
     const res = await action('netsec', 'ban', args)
     if (res.ok) {
+      const d = res.data as { enforced?: boolean; via?: string; command?: string } | undefined
       toast.success(`${String(args.ip)} banned`, {
-        description: `${String(args.service)} jail — recorded in the registry`,
+        description: d?.enforced
+          ? `enforced for real — ${d.command ?? d.via ?? 'nftables/iptables'}`
+          : (res.note ?? 'recorded in the registry — kernel enforcement unavailable on this host'),
+        duration: 9000,
       })
     } else {
       toast.error('ban failed', { description: res.error })
@@ -312,7 +320,7 @@ export default function NetsecPanel() {
       <PanelHeader
         title="Network Security"
         subtitle="live socket census, listening surface, ban registry and localhost port sweeps — the iptraf-ng view the cockpit edition had"
-        source="hybrid"
+        source={summaryQ.data?.source ?? 'live'}
         actions={
           <Button size="sm" className="gap-1.5 font-mono text-xs" disabled={sweeping} onClick={() => void runSweep()}>
             <Radar className="h-3.5 w-3.5" aria-hidden />
@@ -454,15 +462,27 @@ export default function NetsecPanel() {
           >
             <DataTable
               rows={bans}
-              headers={['IP', 'Service', 'Jail', 'Reason', 'Strikes', 'Banned at', '']}
+              headers={['IP', 'Service', 'Jail', 'Origin', 'Reason', 'Strikes', 'Banned at', '']}
               keyOf={(b) => b.id}
               maxH="26rem"
-              empty="no banned addresses"
+              empty="no banned addresses — the registry is the operator's workspace (never seeded); fail2ban rows appear here when it runs"
               renderRow={(b) => (
                 <>
                   <TableCell className="font-mono text-xs font-semibold">{b.ip}</TableCell>
                   <TableCell className="font-mono text-xs">{b.service}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{b.jail}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${
+                        b.source === 'fail2ban'
+                          ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
+                          : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      }`}
+                      title={b.source === 'fail2ban' ? 'live fail2ban-client ban list — unban runs fail2ban-client set <jail> unbanip' : 'sysdeck registry — unban lifts the nftables/iptables entry'}
+                    >
+                      {b.source ?? 'registry'}
+                    </span>
+                  </TableCell>
                   <TableCell className="max-w-44 truncate text-xs text-muted-foreground" title={b.reason}>
                     {b.reason}
                   </TableCell>
@@ -502,8 +522,8 @@ export default function NetsecPanel() {
               )}
             />
             <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-              seeded with the classic hostile actors — live nftables enforcement needs the cockpit bridge on a managed
-              host.
+              the registry is the operator&apos;s workspace (never seeded); fail2ban rows appear live when it runs — and
+              ban/unban enforce for real through nft/iptables from this console (root / sudo -n).
             </p>
           </PanelCard>
         </TabsContent>

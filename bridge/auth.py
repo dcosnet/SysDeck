@@ -36,6 +36,10 @@ import subprocess
 import sys
 from typing import Any
 
+# Scrubbed child environment: parsed output stays locale-stable and no
+# console process state leaks into children.
+SCRUBBED_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
+
 IDENTITIES_LICENSE = "LGPL-2.1 (cockpit-identities)"
 IDENTITIES_AUTHOR = "cockpit-project"
 IDENTITIES_URL = "https://github.com/cockpit-project/cockpit-identities"
@@ -120,13 +124,22 @@ def ssh_keys() -> list[dict[str, Any]]:
         m = SSH_KEY_RE.match(line)
         if m:
             key_type = m.group("type")
-            # Derive key bits from type (heuristic — ssh-keygen -l gives exact bits)
-            bits_map = {"ssh-rsa": 4096, "ssh-dss": 1024, "ecdsa-sha2-nistp256": 256,
-                        "ecdsa-sha2-nistp384": 384, "ecdsa-sha2-nistp521": 521,
-                        "ssh-ed25519": 256, "sk-ssh-ed25519@openssh.com": 256}
+            # ssh-keygen -lf reads the REAL key size; unavailable keys
+            # report bits: 0 rather than a per-type guess.
+            bits = 0
+            try:
+                probe = subprocess.run(
+                    ["ssh-keygen", "-lf", "/dev/stdin"],
+                    input=line + "\n", capture_output=True, text=True,
+                    check=False, timeout=5, env=SCRUBBED_ENV,
+                )
+                if probe.returncode == 0:
+                    bits = int(probe.stdout.split()[0])
+            except (ValueError, subprocess.TimeoutExpired, OSError):
+                bits = 0
             identities.append({
                 "keyType": key_type,
-                "bits": bits_map.get(key_type, 0),
+                "bits": bits,
                 "fingerprint": m.group("blob")[:32] + "...",
                 "comment": m.group("comment") or "",
                 "path": "ssh-agent",
@@ -158,7 +171,10 @@ def ssh_keys() -> list[dict[str, Any]]:
 
 
 def kerberos() -> list[dict[str, Any]]:
-    """Kerberos ticket-granting tickets from klist."""
+    """Kerberos ticket-granting tickets from klist.
+
+    Only fields klist actually reports are emitted — the panel renders
+    what the host says, never a guessed key type or kvno."""
     principals: list[dict[str, Any]] = []
     raw = run(["klist"])
 
@@ -174,12 +190,6 @@ def kerberos() -> list[dict[str, Any]]:
             "principal": default_principal,
             "realm": realm,
             "kdc": "",
-            "startTime": "",
-            "endTime": "",
-            "renewUntil": "",
-            "keyType": "aes256-cts",
-            "kvno": 1,
-            "flags": [],
         })
 
     return principals

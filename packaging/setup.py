@@ -21,7 +21,7 @@ import shutil
 import subprocess
 from setuptools import setup, find_packages
 
-VERSION = "0.4.1"
+VERSION = "0.4.3"
 PACKAGE = "sysdeck"
 
 

@@ -1,22 +1,28 @@
-// SysDeck bridge — netsec (network security monitor)
+// SysDeck bridge — netsec (network security monitor, all live)
 // Port of bridge/netsec.py (v0.0.43 iptraf-ng style): the cockpit edition
 // read the same kernel sources iptraf-ng reads (/proc/net/tcp, /dev, snmp)
 // and crossed ss for PID mapping. The web edition keeps the /proc/net/tcp
-// + tcp6 collectors (hex address decode, state table, LISTEN surface)
-// and adds a persistence layer the python edition kept in fail2ban-like
-// state: NetsecBan (seeded with the classic hostile-actor rows) and
-// NetsecScan (each scan writes a row). `scan` is a REAL sweep: it reads
-// the live listening table and connect-tests every port on 127.0.0.1
-// (300ms timeout each, Node net.connect) — no nmap dependency.
+// + tcp6 collectors (hex address decode, state table, LISTEN surface).
+// The ban layer is production:
+//   - bans() merges the operator's NetsecBan registry with REAL
+//     fail2ban-client output when fail2ban runs on this host
+//   - ban() records the row AND enforces it for real — an nftables
+//     element in the sysdeck blacklist set (created on demand), or an
+//     iptables DROP rule when only iptables exists — privilege-gated
+//     (root / sudo -n), honest failure otherwise
+//   - unban() removes the registry row AND the real firewall entry
+// `scan` is a REAL sweep: it reads the live listening table and
+// connect-tests every port on 127.0.0.1 and ::1 (300ms timeout each,
+// Node net.connect) — no nmap dependency.
 import { readFileSync } from 'fs'
 import { connect } from 'net'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, run, which, cached } from './shared'
 
-/** fail() + source → the dispatcher spreads this into a top-level
- *  {ok:false, error, source} envelope. (A bare fail() lacks data/source
- *  keys, so the dispatcher would wrap it as {ok:true, data:{ok:false}}.) */
-function failE(error: string, source: 'live' | 'demo' | 'hybrid' = 'hybrid') {
+/** fail() + source — keeps the source badge on error envelopes. (A bare
+ *  fail() also passes through the dispatcher top-level, but without a
+ *  source the panel cannot tell live-vs-hybrid when a command fails.) */
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
   return { ...fail(error), source }
 }
 
@@ -50,7 +56,7 @@ function decodeHexIp(hex: string): string {
   if (hex.length === 8) {
     // IPv4: one 32-bit word, little-endian
     const n = parseInt(hex, 16)
-    return `${n & 0xff}.${(n >> 8) & 0xff}.${(n >> 16) & 0xff}.${(n >>> 24) & 0xff}`
+    return `${n & 0xff}.${(n >> 8) & 0xff}.${(n >> 16) & 0xff}.${n >>> 24}`
   }
   if (hex.length === 32) {
     // IPv6: four 32-bit words, each little-endian within the word
@@ -96,35 +102,130 @@ function allTcp(): TcpRow[] {
   return [...parseTcp('/proc/net/tcp', 'tcp'), ...parseTcp('/proc/net/tcp6', 'tcp6')]
 }
 
-// ── bans (NetsecBan registry, seeded) ────────────────────────────────
+// ── privilege + real firewall enforcement ─────────────────────────────
 
-async function ensureBansSeeded(): Promise<void> {
-  const count = await db.netsecBan.count()
-  if (count > 0) return
-  await db.netsecBan.createMany({
-    data: [
-      {
-        ip: '185.220.101.34',
-        service: 'sshd',
-        jail: 'sysdeck',
-        reason: 'ssh brute force',
-        strikes: 12,
-      },
-      {
-        ip: '45.155.205.233',
-        service: 'sshd',
-        jail: 'sysdeck',
-        reason: 'credential stuffing',
-        strikes: 8,
-      },
-      {
-        ip: '103.208.220.11',
-        service: 'nginx',
-        jail: 'sysdeck',
-        reason: 'wp-scan',
-        strikes: 3,
-      },
-    ],
+function isRoot(): boolean {
+  return typeof process.geteuid === 'function' && process.geteuid() === 0
+}
+
+function havePasswordlessSudo(): Promise<boolean> {
+  return cached('sudo:-n:true', 60_000, async () => (await run('sudo', ['-n', 'true'], 3000)).rc === 0)
+}
+
+const NFT_BAN_TABLE = 'inet sysdeck'
+const NFT_BAN_SET = 'blacklist'
+
+/** Real nftables enforcement: one atomic `nft -f -` batch piped on
+ *  stdin (no temp file to hijack) that creates the table + named timeout
+ *  set if absent (both guarded by `add`, which is idempotent on existing
+ *  objects) and adds the address with a 30-day timeout. Re-banning an
+ *  already-banned member is a no-op. */
+async function nftBan(ip: string): Promise<{ ok: boolean; command: string; output: string; error?: string }> {
+  const script = [
+    `add table inet sysdeck`,
+    `add set inet sysdeck blacklist { type ipv4_addr; flags timeout; timeout 30d; }`,
+    `add element inet sysdeck blacklist { ${ip} timeout 30d }`,
+  ].join('\n')
+  const args = ['-f', '-']
+  let res: { rc: number; stdout: string; stderr: string }
+  if (isRoot()) {
+    res = await run('nft', args, 10_000, { input: script })
+    return { ok: res.rc === 0, command: 'nft -f - <batch: table sysdeck + set blacklist + element add>', output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  if (await havePasswordlessSudo()) {
+    res = await run('sudo', ['-n', 'nft', ...args], 10_000, { input: script })
+    return { ok: res.rc === 0, command: 'sudo -n nft -f - <batch: table sysdeck + set blacklist + element add>', output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  return { ok: false, command: 'nft -f - <batch: table sysdeck + set blacklist + element add>', output: '', error: 'not authorized (unprivileged, no passwordless sudo)' }
+}
+
+/** Real iptables enforcement (only when nft is absent). */
+async function iptablesBan(ip: string): Promise<{ ok: boolean; command: string; output: string; error?: string }> {
+  const args = ['-I', 'INPUT', '-s', ip, '-j', 'DROP', '-m', 'comment', '--comment', 'sysdeck-netsec-ban']
+  let res: { rc: number; stdout: string; stderr: string }
+  if (isRoot()) {
+    res = await run('iptables', [...args], 10_000)
+    return { ok: res.rc === 0, command: `iptables ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  if (await havePasswordlessSudo()) {
+    res = await run('sudo', ['-n', 'iptables', ...args], 10_000)
+    return { ok: res.rc === 0, command: `sudo -n iptables ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  return { ok: false, command: `iptables ${args.join(' ')}`, output: '', error: 'not authorized (unprivileged, no passwordless sudo)' }
+}
+
+/** Remove a real ban: nft element delete (absent element is fine with -e)
+ *  or iptables rule delete. The result mirrors the firewall's exit code —
+ *  a refused or failed delete reports failure, never a fabricated lift. */
+async function firewallUnban(ip: string): Promise<{ ok: boolean; command: string; output: string; error?: string }> {
+  if (await which('nft')) {
+    const args = ['-e', 'delete', 'element', NFT_BAN_TABLE, NFT_BAN_SET, '{', ip, '}']
+    let res: { rc: number; stdout: string; stderr: string }
+    if (isRoot()) {
+      res = await run('nft', args, 10_000)
+      return { ok: res.rc === 0, command: `nft ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+    }
+    if (await havePasswordlessSudo()) {
+      res = await run('sudo', ['-n', 'nft', ...args], 10_000)
+      return { ok: res.rc === 0, command: `sudo -n nft ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+    }
+  } else if (await which('iptables')) {
+    const args = ['-D', 'INPUT', '-s', ip, '-j', 'DROP', '-m', 'comment', '--comment', 'sysdeck-netsec-ban']
+    let res: { rc: number; stdout: string; stderr: string }
+    if (isRoot()) {
+      res = await run('iptables', [...args], 10_000)
+      return { ok: res.rc === 0, command: `iptables ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+    }
+    if (await havePasswordlessSudo()) {
+      res = await run('sudo', ['-n', 'iptables', ...args], 10_000)
+      return { ok: res.rc === 0, command: `sudo -n iptables ${args.join(' ')}`, output: (res.stdout || res.stderr).trim(), error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+    }
+  }
+  return { ok: false, command: 'nft/iptables unban', output: '', error: 'no firewall binary or not authorized' }
+}
+
+// ── fail2ban live read (when the host runs it) ───────────────────────
+
+interface Fail2BanBans {
+  id: string
+  ip: string
+  jail: string
+  service: string
+  reason: string
+  strikes: number
+  source: 'fail2ban'
+  bannedAt: string
+}
+
+async function fail2banBans(): Promise<{ bans: Fail2BanBans[]; jails: string[]; error?: string }> {
+  // TTL-cached with parallel jail reads: the bans poll lands on one
+  // fail2ban-client sweep per 15 s instead of a serial spawn per jail.
+  return cached('f2b:bans', 15_000, async () => {
+    if (!(await which('fail2ban-client'))) return { bans: [], jails: [] }
+    const st = await run('systemctl', ['is-active', 'fail2ban'], 5000)
+    if (st.rc !== 0 || st.stdout.trim() !== 'active') {
+      return { bans: [], jails: [], error: 'fail2ban-client present but the fail2ban service is not active' }
+    }
+    const useSudo = !isRoot() && (await havePasswordlessSudo())
+    const f2c = async (args: string[]) =>
+      useSudo ? run('sudo', ['-n', 'fail2ban-client', ...args], 10_000) : isRoot() ? run('fail2ban-client', args, 10_000) : { rc: 126, stdout: '', stderr: 'not authorized (unprivileged, no passwordless sudo)' }
+    const jr = await f2c(['status'])
+    if (jr.rc !== 0) {
+      return { bans: [], jails: [], error: `fail2ban-client status failed — ${jr.stderr.trim().split('\n')[0] ?? 'needs privileges'}` }
+    }
+    const jails = [...jr.stdout.matchAll(/Jail list:\s*(.+)/g)][0]?.[1]?.split(',').map((s) => s.trim()).filter(Boolean) ?? []
+    const jailRows = await Promise.all(
+      jails.map(async (jail) => ({ jail, r: await f2c(['status', jail]) })),
+    )
+    const bans: Fail2BanBans[] = []
+    for (const { jail, r } of jailRows) {
+      if (r.rc !== 0) continue
+      const ips = [...r.stdout.matchAll(/Banned IP list:\s*(.*)/g)][0]?.[1] ?? ''
+      for (const ip of ips.split(/\s+/).filter(Boolean)) {
+        bans.push({ id: `fail2ban:${jail}:${ip}`, ip, jail, service: jail, reason: 'banned by fail2ban', strikes: 0, source: 'fail2ban', bannedAt: new Date().toISOString() })
+      }
+    }
+    return { bans, jails }
   })
 }
 
@@ -207,12 +308,32 @@ export const commands = {
   },
 
   bans: async () => {
-    await ensureBansSeeded()
-    const bans = await db.netsecBan.findMany({ orderBy: { bannedAt: 'desc' } })
+    const [registry, f2b, haveNft, haveIpt] = await Promise.all([
+      db.netsecBan.findMany({ orderBy: { bannedAt: 'desc' } }),
+      fail2banBans(),
+      which('nft'),
+      which('iptables'),
+    ])
+    const enforcedNote =
+      haveNft || haveIpt
+        ? `ban/unban enforce for real via ${haveNft ? 'nftables (table sysdeck, set blacklist, 30d timeout)' : 'iptables INPUT DROP'}`
+        : 'no firewall binary on this host — bans are registry-only until one exists'
+    const notes = [enforcedNote]
+    if (f2b.error) notes.push(f2b.error)
+    else if (f2b.bans.length > 0) notes.push(`${f2b.bans.length} live fail2ban ban(s) across jails: ${f2b.jails.join(', ')}`)
     return ok(
-      { bans, count: bans.length },
-      'hybrid',
-      'seeded ban registry (classic hostile-actor rows) — live enforcement requires the cockpit bridge on a managed host',
+      {
+        bans: [
+          ...registry.map((b) => ({ ...b, source: 'registry' as const })),
+          ...f2b.bans,
+        ],
+        count: registry.length + f2b.bans.length,
+        registryCount: registry.length,
+        fail2banCount: f2b.bans.length,
+        fail2banJails: f2b.jails,
+      },
+      'live',
+      notes.join(' — '),
     )
   },
 
@@ -230,22 +351,63 @@ export const commands = {
     await db.auditLog.create({
       data: { module: 'netsec', action: 'ban', detail: `${ip} (${service}) — ${reason}` },
     })
+    // REAL enforcement — nftables preferred, iptables fallback
+    let enforcement: { ok: boolean; command: string; output: string; error?: string } | null = null
+    if (await which('nft')) enforcement = await nftBan(ip)
+    else if (await which('iptables')) enforcement = await iptablesBan(ip)
+    if (!enforcement) {
+      return ok(
+        { ban: row, enforced: false, via: 'registry-only' },
+        'live',
+        'no firewall binary on this host — the ban is recorded in the registry and will be enforceable the moment nft/iptables exists',
+      )
+    }
+    if (!enforcement.ok) {
+      return ok(
+        { ban: row, enforced: false, via: 'none', command: enforcement.command, error: enforcement.error },
+        'live',
+        `registry row saved, but kernel enforcement failed — ${enforcement.error ?? 'unknown error'}. Run the console as root or grant sudo -n, then ban again (the nft batch is idempotent).`,
+      )
+    }
     return ok(
-      { ban: row },
-      'hybrid',
-      'ban recorded in the registry — live nftables/firewall enforcement requires the cockpit bridge on a managed host',
+      { ban: row, enforced: true, via: 'nftables' , command: enforcement.command, output: enforcement.output },
+      'live',
+      `banned for real — ${enforcement.command}`,
     )
   },
 
   unban: async (args: Record<string, unknown>) => {
     const id = String(args.id ?? '')
     if (!id) return failE('id is required')
+    // fail2ban-managed rows → the REAL fail2ban-client unbanip
+    if (id.startsWith('fail2ban:')) {
+      const [, jail, ip] = id.split(':')
+      const unbanRes = isRoot()
+        ? await run('fail2ban-client', ['set', jail, 'unbanip', ip], 10_000)
+        : await run('sudo', ['-n', 'fail2ban-client', 'set', jail, 'unbanip', ip], 10_000)
+      if (unbanRes.rc !== 0) {
+        return failE(`fail2ban-client set ${jail} unbanip ${ip} failed — ${unbanRes.stderr.trim().split('\n')[0] ?? 'needs privileges (root / sudo -n)'}`)
+      }
+      await db.auditLog.create({
+        data: { module: 'netsec', action: 'unban', detail: `${ip} (fail2ban jail ${jail}) — lifted via fail2ban-client` },
+      })
+      return ok(
+        { removed: { ip, service: jail }, kernelEntryRemoved: true, command: `fail2ban-client set ${jail} unbanip ${ip}` },
+        'live',
+        `lifted in fail2ban itself — fail2ban-client set ${jail} unbanip ${ip}`,
+      )
+    }
     try {
       const row = await db.netsecBan.delete({ where: { id } })
+      const res = await firewallUnban(row.ip)
       await db.auditLog.create({
-        data: { module: 'netsec', action: 'unban', detail: `${row.ip} (${row.service})` },
+        data: { module: 'netsec', action: 'unban', detail: `${row.ip} (${row.service}) — kernel entry ${res.ok ? 'removed' : 'left (no binary/privilege)'}` },
       })
-      return ok({ removed: { ip: row.ip, service: row.service } }, 'hybrid')
+      return ok(
+        { removed: { ip: row.ip, service: row.service }, kernelEntryRemoved: res.ok, command: res.command },
+        'live',
+        res.ok ? `registry row removed and kernel entry lifted — ${res.command}` : 'registry row removed; kernel entry could not be lifted (no firewall binary or privilege) — it ages out by its 30d timeout otherwise',
+      )
     } catch {
       return failE('ban not found')
     }
@@ -254,7 +416,7 @@ export const commands = {
   scan: async (args: Record<string, unknown>) => {
     const target = String(args.target ?? 'localhost').trim()
     if (!LOCAL_TARGETS.has(target)) {
-      return failE('the web edition sweeps only this host (localhost / 127.0.0.1 / ::1)', 'live')
+      return failE('this bridge sweeps only this host (localhost / 127.0.0.1 / ::1)')
     }
     const rows = allTcp().filter((r) => r.stateHex === '0A')
     const uniquePorts = [...new Set(rows.map((r) => r.localPort))].sort((a, b) => a - b)
@@ -296,7 +458,6 @@ export const commands = {
   },
 
   summary: async () => {
-    await ensureBansSeeded()
     const rows = allTcp()
     const stateCounts: Record<string, number> = {}
     for (const r of rows) stateCounts[r.state] = (stateCounts[r.state] ?? 0) + 1
@@ -310,8 +471,8 @@ export const commands = {
         bans,
         scans,
       },
-      'hybrid',
-      'socket counts are live from /proc/net/tcp{,6}; bans/scans count the registry',
+      'live',
+      'socket counts are live from /proc/net/tcp{,6}; bans/scans count the operator registry (never seeded)',
     )
   },
 }

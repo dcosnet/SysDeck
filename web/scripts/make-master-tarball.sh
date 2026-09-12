@@ -12,7 +12,7 @@
 #
 # Preconditions:
 #   - master-build/cockpit/ holds the staged + upgraded cockpit tree
-#     (fester.py / klanker.py / bridge.js upgraded, Makefile at 0.4.1)
+#     (fester.py / klanker.py / bridge.js upgraded, Makefile at 0.4.3)
 #   - master-build/klanker-gate/ holds the vendored gateway tree + arch/
 #
 # Output:
@@ -20,7 +20,7 @@
 #   download/ (sandbox mirror)
 set -euo pipefail
 
-VERSION="0.4.1"
+VERSION="0.4.3"
 NAME="sysdeck-${VERSION}-master"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE_PARENT="$ROOT/master-build"
@@ -33,8 +33,8 @@ echo ">>> Building $NAME"
 # ── guards: the cockpit tree must be upgraded before packing ──────────
 grep -q 'start-build' "$STAGE_PARENT/cockpit/bridge/fester.py" || {
     echo "FAIL: master-build/cockpit/bridge/fester.py is not upgraded (no start-build subcommand)"; exit 1; }
-grep -q 'VERSION := 0.4.1' "$STAGE_PARENT/cockpit/Makefile" || {
-    echo "FAIL: master-build/cockpit/Makefile is not bumped to 0.4.1"; exit 1; }
+grep -q 'VERSION := 0.4.3' "$STAGE_PARENT/cockpit/Makefile" || {
+    echo "FAIL: master-build/cockpit/Makefile is not bumped to 0.4.3"; exit 1; }
 test -f "$STAGE_PARENT/cockpit/bridge/klanker.py" || {
     echo "FAIL: master-build/cockpit/bridge/klanker.py missing"; exit 1; }
 grep -q '"journal"' "$STAGE_PARENT/cockpit/bridge/klanker.py" || {
@@ -148,16 +148,16 @@ grep -q 'requireSession' "$ROOT/src/app/api/release/route.ts" || {
     echo "FAIL: release route lacks the session gate"; exit 1; }
 test -f "$ROOT/src/app/api/auth/login/route.ts" || {
     echo "FAIL: login route (src/app/api/auth/login) missing"; exit 1; }
-grep -q 'isAuthenticated' "$ROOT/src/app/page.tsx" || {
+grep -q 'currentSession' "$ROOT/src/app/page.tsx" || {
     echo "FAIL: page.tsx lacks the server-side session gate"; exit 1; }
 grep -q 'LoginScreen' "$ROOT/src/app/page.tsx" || {
     echo "FAIL: page.tsx does not render the login screen"; exit 1; }
 grep -q "sessionOk" "$ROOT/mini-services/fester/index.ts" || {
     echo "FAIL: fester service lacks the shared-secret session check"; exit 1; }
-grep -q 'SYSDECK_WEB_PASSWORD' "$STAGE_PARENT/cockpit/QUICKSTART.md" || {
-    echo "FAIL: QUICKSTART lacks the 10.4 login section"; exit 1; }
-grep -q 'SYSDECK_WEB_PASSWORD' "$ROOT/src/lib/sysdeck/session.ts" || {
-    echo "FAIL: session lib does not read SYSDECK_WEB_PASSWORD"; exit 1; }
+grep -q 'SYSDECK_AUTH_MODE' "$STAGE_PARENT/cockpit/QUICKSTART.md" || {
+    echo "FAIL: QUICKSTART lacks the 10.4 unix-login section"; exit 1; }
+grep -q 'SYSDECK_SESSION_SECURE' "$ROOT/src/lib/sysdeck/session.ts" || {
+    echo "FAIL: session lib lacks the session-cookie surface"; exit 1; }
 
 # 0.3.0 security audit — klanker-gate upstream findings + arch mitigations
 test -f "$STAGE_PARENT/klanker-gate/arch/SECURITY-UPSTREAM.md" || {
@@ -229,7 +229,7 @@ tar -C "$ROOT" -cf - \
     --exclude='mini-services/fester/fester.db-wal' \
     --exclude='mini-services/fester/node_modules' \
     src prisma public mini-services scripts package.json bun.lock \
-    next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json \
+    next.config.ts postcss.config.mjs tsconfig.json \
     components.json eslint.config.mjs Caddyfile \
     | tar -C "$STAGE/web" -xf -
 
@@ -237,17 +237,22 @@ tar -C "$ROOT" -cf - \
 # prisma/schema.prisma → <web root>/db/custom.db); KLANKER_URL keeps the
 # AI Gateway panel pointed at the gateway (vendored at ../klanker-gate,
 # or the Arch-packaged systemd service on the operator's host).
-printf 'DATABASE_URL=file:../db/custom.db\n# KLANKER_URL=http://127.0.0.1:8080\n# KLANKER_ADMIN_TOKEN=\n# SYSDECK_WEB_PASSWORD=   # login password (unset = default "sysdeck" + amber nag)\n# SYSDECK_SESSION_SECURE=1  # add the Secure cookie flag when fronted by TLS\n' > "$STAGE/web/.env"
+printf 'DATABASE_URL=file:../db/custom.db\n# unix-account login (cockpit-style, v0.4.0+):\n#   pam        — host PAM only (the cockpit default posture; run the\n#                service as root so any unix account can sign in)\n#   pam+local  — PAM first, SdUser local accounts as fallback (works\n#                unprivileged — unix_chkpwd only serves the invoking uid)\n#   local      — SdUser console accounts only\nSYSDECK_AUTH_MODE=pam+local\n# SYSDECK_PAM_SERVICE=sysdeck   # ship /etc/pam.d/sysdeck to tailor the stack\n# SYSDECK_PYTHON=python3\n# cockpit module detection (v0.4.1): extra scan roots beyond\n# /usr/share/cockpit and /usr/local/share/cockpit (colon-separated)\n#SYSDECK_COCKPIT_SCAN=/path/to/staged/cockpit\n# KLANKER_URL=http://127.0.0.1:8080\n# KLANKER_ADMIN_TOKEN=\n# SYSDECK_SESSION_SECURE=1  # add the Secure cookie flag when fronted by TLS\n# mutation authorization (v0.4.3): 'admin' gates mutating bridge commands\n# behind an admin session (wheel/sudo/adm or uid 0); 'any' restores the\n# single-operator posture\n#SYSDECK_MUTATIONS=admin\n# X-Forwarded-For defines rate-limit identity only behind a trusted proxy\n#SYSDECK_TRUST_PROXY=1\n' > "$STAGE/web/.env"
 
 cat > "$STAGE/web/README.md" <<'EOF'
-# SysDeck Web Edition
+# SysDeck — the standalone web console
 
-The browser-native rendition of SysDeck: 29 bridge modules behind one
-console — real /proc + /sys collectors where the host allows, honest demo
-datasets (clearly badged) where backends are absent, the Fester DAG
-orchestrator vendored as a dedicated service (`mini-services/fester`),
-and the klanker-gate LLM gateway vendored alongside with Arch
-packaging. klanker-gate ("Frosty Deno") is by TykoDev
+SysDeck's browser-native front end: 30 bridge modules behind one
+console, every one of them reading **real host state** — /proc and /sys
+collectors, systemctl, lsblk, the host's real package manager, live
+service APIs — with honest empty inventories (and install guidance)
+where a backend is absent. Nothing is demo, mock, or seeded. You sign
+in with your Unix account (the host PAM stack, exactly like Cockpit),
+every installed Cockpit module loads into this console's navigation,
+and every SysDeck module can likewise be loaded inside Cockpit — one
+module catalog, two front ends. The Fester DAG orchestrator is vendored
+as a dedicated service (`mini-services/fester`) and the klanker-gate LLM
+gateway alongside with Arch packaging. klanker-gate ("Frosty Deno") is by TykoDev
 (https://github.com/TykoDev/klanker-gate, Apache-2.0) — **not SysDeck
 code**; see `../klanker-gate/ATTRIBUTION.md` and `../THIRD_PARTY.md`.
 
@@ -272,13 +277,13 @@ right under Overview) with copy buttons on every command.
 From the extracted master tarball root, one command does everything
 (install + migrate + fester + web):
 
-    tar xjf sysdeck-0.4.1-master.tar.bz2
-    cd sysdeck-0.4.1-master
+    tar xjf sysdeck-0.4.3-master.tar.bz2
+    cd sysdeck-0.4.3-master
     make web-dev        # bun install + db:push + fester + next dev :3000
 
 Granular equivalent (what `make web-dev` does):
 
-    cd sysdeck-0.3.1-master/web
+    cd sysdeck-0.4.3-master/web
     bun install                     # dependencies
     bun run db:push                 # create + migrate db/custom.db (SQLite)
     bun run dev                     # Next.js on :3000
@@ -288,9 +293,10 @@ Granular equivalent (what `make web-dev` does):
     bun install
     bun run dev                     # bun --hot index.ts
 
-Open http://localhost:3000 — you'll get the **login screen** (cockpit-style
-shared password; default `sysdeck`, nagged until you set
-`SYSDECK_WEB_PASSWORD`). The Fester panel proxies REST through
+Open http://localhost:3000 — you'll get the **login screen**: sign in
+with a **Unix account** (verified by the host PAM stack, the same
+mechanism Cockpit uses; see §10 and `SYSDECK_AUTH_MODE` in §5). The
+Fester panel proxies REST through
 `/api/fester` (server-side) and streams live build events over
 WebSocket through the port gateway (`/?XTransformPort=3010`). Without
 the service running, the Fester panel says so — everything else works.
@@ -321,7 +327,7 @@ Deploy the extracted bundle to `/opt/sysdeck` and run:
 `/etc/systemd/system/sysdeck-web.service`
 
     [Unit]
-    Description=SysDeck Web Edition (Next.js)
+    Description=SysDeck standalone web console (Next.js)
     After=network-online.target
 
     [Service]
@@ -368,11 +374,18 @@ Enable:
 | `KLANKER_URL`        | —                     | AI Gateway panel → live gateway (e.g. http://127.0.0.1:8080) |
 | `KLANKER_ADMIN_TOKEN`| —                     | admin token for that gateway (FROSTY_ADMIN_TOKEN) |
 | `PORT` / `HOSTNAME`  | `3000` / `localhost`  | standalone server bind (use 0.0.0.0 for LAN)  |
-| `SYSDECK_WEB_PASSWORD` | `sysdeck` (default) | the console login password — unset means the default + an amber nag on the login screen until you set it |
+| `SYSDECK_AUTH_MODE` | `pam` | unix login policy: `pam` (host PAM only — run as root), `pam+local` (PAM first, SdUser scrypt fallback), `local` (console accounts only) |
+| `SYSDECK_PAM_SERVICE` | `sysdeck` | PAM stack to use; falls back to `login` when `/etc/pam.d/sysdeck` is absent |
+| `SYSDECK_PYTHON` | `python3` | interpreter that runs `scripts/pam-auth.py` |
+| `SYSDECK_PAM_TIMEOUT_MS` | `8000` | hard timeout for one PAM authentication |
+| `SYSDECK_COCKPIT_SCAN` | — | extra cockpit module scan roots (colon-separated) for staged/DESTDIR trees — detection also always covers /usr/share/cockpit and /usr/local/share/cockpit |
 | `SYSDECK_SESSION_SECURE` | off | set `1` to add the `Secure` cookie flag (front the console with TLS first) |
+| `SYSDECK_MUTATIONS` | `admin` | mutation policy: `admin` gates mutating bridge commands behind an admin session (wheel/sudo/adm or uid 0) — reads stay open to every signed-in unix account; `any` restores the single-operator posture |
+| `SYSDECK_TRUST_PROXY` | off | set `1` to honor `X-Forwarded-For` for rate-limit identity — only behind a trusted proxy; client-supplied headers are ignored by default |
 
-With no `KLANKER_URL`, the AI Gateway panel renders clearly-badged
-demo data (it flips to LIVE automatically when the gateway answers).
+With no `KLANKER_URL`, the AI Gateway panel renders honest empty
+tables (they fill with LIVE data automatically when the gateway
+answers).
 
 ## 6. Reverse proxy + WebSocket gateway
 
@@ -412,7 +425,7 @@ nginx equivalent:
   lsblk data.
 - **Fester panel says service unreachable** — start it:
   `(cd mini-services/fester && bun run dev)`.
-- **AI Gateway shows demo data** — set `KLANKER_URL` +
+- **AI Gateway tables are empty** — set `KLANKER_URL` +
   `KLANKER_ADMIN_TOKEN` in `web/.env`, restart, or install the gateway
   via `../klanker-gate/arch/INSTALL-ARCH.md`.
 - **Edits not appearing** — dev recompiles on save (check dev.log);
@@ -475,8 +488,10 @@ off in one click; its bridge commands stay available for scripts.
 `db/custom.db` is created by `bun run db:push` using `DATABASE_URL` from
 `.env`. The master tarball builder lives at `scripts/make-master-tarball.sh`
 in the canonical development tree. The cockpit edition (bundle root,
-`sudo make install`) remains available but is entirely optional — and
-since 0.3.0 its plugin pages wear this edition's skin
+`sudo make install`) remains available but is entirely optional; the two
+front ends share one module catalog (every module ships both a web bridge
+and a cockpit manifest). Since 0.3.0 the cockpit plugin pages wear this
+console's skin
 (`shared/sysdeck-web.css`), with `sudo make install-branding` theming the
 Cockpit shell chrome to match (see ../QUICKSTART.md §12).
 
@@ -491,16 +506,28 @@ the AI Gateway panel assume the person at the machine is the operator. The
   LAN exposure without an explicit act (change the bind, add a reverse
   proxy, forward the port). The production `start` script pins
   `HOSTNAME=127.0.0.1` the same way.
-- **Cockpit-style login (since 0.3.1).** One shared password
-  (`SYSDECK_WEB_PASSWORD`, constant-time compare, per-IP failure rate
-  limit, attempts audited) buys an HMAC-signed HttpOnly session cookie
-  (12h). The page server-renders a login screen until the cookie
-  verifies, every `/api/*` route answers 401 until signed in, and the
-  fester service verifies the identical token on its REST + WebSocket
-  surface straight from the shared SQLite secret — no unauthenticated
-  path into the console's data. Still LAN-side posture: loopback binds
-  stay the outer boundary, and this is deliberately NOT user accounts
-  or MFA (see ../QUICKSTART.md §10.4 for the recorded decision).
+- **Unix-account login (since 0.4.0), the Cockpit way.** The username
+  + password pair is verified by the **host's PAM stack**
+  (`scripts/pam-auth.py`, a stdlib ctypes client of libpam; service
+  `sysdeck` when `/etc/pam.d/sysdeck` exists, else the stock `login`
+  stack; credentials over stdin, never argv). Success buys an
+  HMAC-signed HttpOnly session cookie **bound to the username**
+  (`v2.<exp>.<userB64>.<hmac>`, 12h). The page server-renders a login
+  screen until the cookie verifies, every `/api/*` route answers 401
+  until signed in, and the fester service verifies the identical token
+  on its REST + WebSocket surface straight from the shared SQLite
+  secret — no unauthenticated path into the console's data.
+- **Auth modes + root.** pam_unix needs root to verify *arbitrary*
+  users (non-root only gets the invoking uid via `unix_chkpwd`), so:
+  run the service as root (like cockpit-ws) for any-account login
+  (`SYSDECK_AUTH_MODE=pam`, the default), or run unprivileged with
+  `pam+local` — PAM first, then the `SdUser` scrypt table managed by
+  `bun scripts/manage-users.mjs list|add|passwd|disable|enable|remove`.
+  Failures rate limit per-IP **and** per-username (5/min each), wrong
+  user and wrong password look identical, and a wedged PAM helper
+  fails CLOSED. 0.3.1 v1 tokens still verify as legacy sessions so
+  upgrades don't log anyone out. Still LAN-side posture: loopback binds
+  stay the outer boundary (see ../QUICKSTART.md §10.4).
 - **Guards stay layered under the login.** The bridge endpoint
   allowlists every module+command, caps request bodies at 256 KB,
   applies a per-IP rate limit, and returns generic errors (full detail

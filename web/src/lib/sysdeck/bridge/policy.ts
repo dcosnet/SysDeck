@@ -1,104 +1,238 @@
-// SysDeck bridge — policy (demo polkit-style rule registry)
+// SysDeck bridge — policy (real polkit surface, all live)
 // Port of bridge/policy.py semantics: the cockpit edition enforced
-// org.sysdeck.* actions through polkit (the operator was prompted via
-// cockpit's superuser channel for org.sysdeck.policy.modify). No
-// polkit daemon exists here, so the web edition manages the same
-// polkit-style allow/deny rules as a seeded PolicyRule registry with
-// scope/subject/effect/priority semantics and full audit history.
+// org.sysdeck.* actions through polkit — the actions ship as REAL
+// .policy XML (packaging/polkit/*.policy → /usr/share/polkit-1/actions)
+// and the operator was prompted via cockpit's superuser channel for
+// org.sysdeck.policy.modify. The web edition:
+//   - scopes: parsed from the REAL .policy XML files (installed dir
+//     first, then the tree) — action ids, descriptions, auth defaults
+//   - rules: the operator's rule registry (unseeded workspace)
+//   - live: reads the host's REAL /etc/polkit-1/rules.d/*.rules state
+//   - sync: materializes the registry into a real polkit rules file
+//     (/etc/polkit-1/rules.d/40-sysdeck.rules, privilege-gated)
+//   - create/update/delete/toggle on the registry, fully audited
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, run, readText } from './shared'
+import { readdir, writeFile } from 'fs/promises'
 
-const SOURCE = 'demo' as const
-const NOTE = 'polkit not present in sandbox — demo policy rule registry (polkit-style scopes/subjects)'
-
-function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
+  return { ...fail(error), source }
 }
 
 async function audit(action: string, detail: string) {
   await db.auditLog.create({ data: { module: 'policy', action, detail } })
 }
 
-// ── the org.sysdeck.* scope catalog ─────────────────────────────────
+// ── real .policy XML parsing ─────────────────────────────────────────
 
-const SCOPES: { scope: string; description: string }[] = [
-  { scope: 'org.sysdeck.policy.modify', description: 'modify the policy rule set itself (create/update/delete/toggle rules)' },
-  { scope: 'org.sysdeck.builder.modify', description: 'create/modify image build profiles and run builds' },
-  { scope: 'org.sysdeck.firewall.apply', description: 'activate firewall rulesets (kernel-level filter changes)' },
-  { scope: 'org.sysdeck.packages.manage', description: 'install or remove system packages (apt/dpkg)' },
-  { scope: 'org.sysdeck.fester.modify', description: 'modify Fester build policies, pipelines and node assignment' },
-  { scope: 'org.sysdeck.hwalert.block', description: 'block/unblock hardware devices and manage the device whitelist' },
-  { scope: 'org.sysdeck.modules3p.modify', description: 'install/uninstall third-party cockpit modules' },
-  { scope: 'org.sysdeck.vault.manage', description: 'lock/unlock LUKS vault entries and create key backups' },
-  { scope: 'org.sysdeck.db.manage', description: 'start/stop database instances and trigger backups' },
-  { scope: 'org.sysdeck.containers.manage', description: 'start/stop/freeze/delete containers and VMs' },
-  { scope: 'org.sysdeck.mesh.manage', description: 'scale Kubernetes deployments (pod count changes)' },
-  { scope: 'org.sysdeck.monitoring.manage', description: 'reconfigure the Prometheus/Grafana monitoring stack' },
+const POLICY_DIRS = [
+  '/usr/share/polkit-1/actions',
+  `${process.cwd()}/../packaging/polkit`,
 ]
 
-// ── lazy seed ───────────────────────────────────────────────────────
-
-const SEED_RULES = [
-  { scope: 'org.sysdeck.builder.modify', subject: 'unix-user:jeremy', effect: 'allow', priority: 50, note: 'primary operator — full builder access' },
-  { scope: 'org.sysdeck.firewall.apply', subject: 'unix-user:jeremy', effect: 'allow', priority: 50, note: 'ruleset activation requires the operator' },
-  { scope: 'org.sysdeck.packages.manage', subject: 'unix-user:nobody', effect: 'deny', priority: 60, note: 'explicit deny — nobody must never install packages' },
-  { scope: 'org.sysdeck.fester.modify', subject: 'group:wheel', effect: 'allow', priority: 40, note: 'wheel members may tune Fester pipelines' },
-  { scope: 'org.sysdeck.hwalert.block', subject: 'unix-user:jeremy', effect: 'allow', priority: 50, note: 'device blocking is a destructive action' },
-  { scope: 'org.sysdeck.modules3p.modify', subject: 'unix-user:jeremy', effect: 'allow', priority: 50, note: 'license acceptance is operator-only by design' },
-]
-
-async function ensureSeeded(): Promise<void> {
-  const count = await db.policyRule.count()
-  if (count > 0) return
-  await db.policyRule.createMany({ data: SEED_RULES })
-  await audit('seed', `seeded ${SEED_RULES.length} polkit-style policy rules (org.sysdeck.* scopes)`)
+interface ScopeDef {
+  scope: string
+  description: string
+  defaults: string
 }
 
-// ── validation helpers ──────────────────────────────────────────────
-
-function validScope(scope: string): boolean {
-  return /^org\.sysdeck\.[a-z0-9-]+\.[a-z0-9-]+$/.test(scope)
+function parsePolicyXml(xml: string): ScopeDef[] {
+  const out: ScopeDef[] = []
+  const actionRe = /<action id="([^"]+)">([\s\S]*?)<\/action>/g
+  let m: RegExpExecArray | null
+  while ((m = actionRe.exec(xml)) !== null) {
+    const body = m[2]
+    const desc =
+      body.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)?.[1]?.trim() ?? ''
+    const defAllow = body.match(/<allow_(active|inactive)>([^<]+)<\/allow_\1>/g) ?? []
+    out.push({
+      scope: m[1],
+      description: desc || '(no description in policy file)',
+      defaults: defAllow.map((d) => d.replace(/<\/?allow_(?:active|inactive)>/g, '')).join(' / ') || 'auth_admin',
+    })
+  }
+  return out
 }
+
+async function loadScopes(): Promise<{ scopes: ScopeDef[]; files: string[] }> {
+  const scopes = new Map<string, ScopeDef>()
+  const files: string[] = []
+  for (const dir of POLICY_DIRS) {
+    let entries: string[]
+    try {
+      entries = await readdir(dir)
+    } catch {
+      continue
+    }
+    for (const e of entries) {
+      if (!e.startsWith('org.sysdeck.') || !e.endsWith('.policy')) continue
+      const xml = await readText(`${dir}/${e}`)
+      if (!xml) continue
+      files.push(e)
+      for (const s of parsePolicyXml(xml)) scopes.set(s.scope, s)
+    }
+  }
+  return { scopes: [...scopes.values()].sort((a, b) => a.scope.localeCompare(b.scope)), files }
+}
+
+// ── validation helpers ───────────────────────────────────────────────
 
 function validSubject(subject: string): boolean {
   return /^(unix-user|group|netgroup|user):[a-zA-Z0-9._-]+$/.test(subject)
 }
 
-// ── commands ────────────────────────────────────────────────────────
+// ── real polkit state + sync ─────────────────────────────────────────
+
+const RULES_PATH = '/etc/polkit-1/rules.d/40-sysdeck.rules'
+
+async function liveRules(): Promise<{ files: string[]; sysdeckFile: string | null }> {
+  let entries: string[]
+  try {
+    entries = await readdir('/etc/polkit-1/rules.d')
+  } catch {
+    return { files: [], sysdeckFile: null }
+  }
+  const rules = entries.filter((e) => e.endsWith('.rules'))
+  let sysdeckFile: string | null = null
+  if (rules.includes('40-sysdeck.rules')) {
+    sysdeckFile = await readText(RULES_PATH)
+  }
+  return { files: rules, sysdeckFile }
+}
+
+function isRoot(): boolean {
+  return typeof process.geteuid === 'function' && process.geteuid() === 0
+}
+
+/** Materialize the operator's registry as a REAL polkit .rules file
+ *  (polkit's own JS dialect). */
+async function syncForReal(): Promise<{ ok: boolean; command: string; error?: string }> {
+  const rules = await db.policyRule.findMany({ where: { enabled: true }, orderBy: [{ priority: 'desc' }] })
+  const lines = [
+    '// /etc/polkit-1/rules.d/40-sysdeck.rules — generated by the sysdeck policy panel',
+    '// (org.sysdeck.policy.modify). Regenerate it from the panel after edits.',
+    '',
+    'polkit.addRule(function(action, subject) {',
+    '    if (!action.id.startsWith("org.sysdeck.")) {',
+    '        return polkit.Result.NOT_HANDLED;',
+    '    }',
+  ]
+  for (const r of rules) {
+    const [kind, name] = r.subject.split(':')
+    const subj =
+      kind === 'group'
+        ? `subject.isInGroup("${name}")`
+        : `subject.user === "${name}"`
+    lines.push(
+      `    // ${r.note ?? r.scope} — priority ${r.priority}`,
+      `    if (action.id === "${r.scope}" && ${subj}) {`,
+      `        return polkit.Result.${r.effect === 'allow' ? 'YES' : 'NO'};`,
+      '    }',
+    )
+  }
+  lines.push('    return polkit.Result.NOT_HANDLED;', '});', '')
+  const content = lines.join('\n')
+  if (isRoot()) {
+    try {
+      await writeFile(RULES_PATH, content)
+      return { ok: true, command: `write ${RULES_PATH} (${rules.length} rules)` }
+    } catch (err) {
+      return { ok: false, command: `write ${RULES_PATH}`, error: String(err).split('\n')[0] }
+    }
+  }
+  // sudo -n via tee: the ruleset rides stdin (argv never carries file
+  // content), and the write is verified byte-for-byte after it lands.
+  const r = await run('sudo', ['-n', 'tee', RULES_PATH], 15_000, { input: content })
+  if (r.rc !== 0) {
+    return {
+      ok: false,
+      command: `write ${RULES_PATH}`,
+      error: 'org.sysdeck.policy.modify — not authorized: this console process is unprivileged and has no passwordless sudo',
+    }
+  }
+  const landed = await readText(RULES_PATH)
+  if (landed !== content) {
+    return {
+      ok: false,
+      command: `write ${RULES_PATH}`,
+      error: `verification failed — on-disk ruleset differs from the generated one (${landed.length} vs ${content.length} bytes); regenerate with policy.sync`,
+    }
+  }
+  return { ok: true, command: `sudo -n tee ${RULES_PATH} (${rules.length} rules, verified)` }
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   rules: async () => {
-    await ensureSeeded()
     const rules = await db.policyRule.findMany({ orderBy: [{ priority: 'desc' }, { scope: 'asc' }] })
-    return ok({ rules, count: rules.length }, SOURCE, NOTE)
+    const { files } = await liveRules()
+    return ok(
+      { rules, count: rules.length, rulesDirFiles: files },
+      'live',
+      rules.length
+        ? `operator rule registry (${rules.length} rules) — run policy.sync to materialize them into ${RULES_PATH}`
+        : `no rules yet — create one from the scope catalog below; live /etc/polkit-1/rules.d: ${files.length ? files.join(', ') : 'no .rules files on this host'}`,
+    )
   },
 
   scopes: async () => {
-    await ensureSeeded()
-    return ok({ scopes: SCOPES, count: SCOPES.length }, SOURCE, NOTE)
+    const { scopes, files } = await loadScopes()
+    return ok(
+      { scopes, count: scopes.length, policyFiles: files },
+      'live',
+      scopes.length
+        ? `real org.sysdeck.* polkit actions parsed from ${files.length} .policy XML files (packaging/polkit → /usr/share/polkit-1/actions)`
+        : 'no sysdeck .policy files found (neither installed nor in the tree) — the cockpit edition ships them under packaging/polkit/',
+    )
+  },
+
+  live: async () => {
+    const { files, sysdeckFile } = await liveRules()
+    return ok(
+      {
+        rulesDir: '/etc/polkit-1/rules.d',
+        files,
+        sysdeckFile,
+        polkitd: await run('systemctl', ['is-active', 'polkit'], 5000).then((r) => (r.rc === 0 ? 'active' : 'inactive')),
+      },
+      'live',
+      files.length ? 'real /etc/polkit-1/rules.d listing' : 'no /etc/polkit-1/rules.d on this host (polkit absent or no local rules)',
+    )
+  },
+
+  sync: async () => {
+    const res = await syncForReal()
+    await audit('sync', `${res.command} → ${res.ok ? 'written' : 'FAILED'}`)
+    if (!res.ok) {
+      return failE(res.error ?? 'sync failed', 'hybrid')
+    }
+    return ok(
+      { written: RULES_PATH, command: res.command },
+      'live',
+      'the registry is now the live polkit rules file — reload polkit (systemctl reload polkit) applies it',
+    )
   },
 
   create: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const scope = String(args.scope ?? '').trim()
     const subject = String(args.subject ?? '').trim()
     const effect = String(args.effect ?? 'allow').trim().toLowerCase()
     const priority = Number.isInteger(args.priority) ? Number(args.priority) : 50
     const note = args.note ? String(args.note).trim() : null
     if (!scope) return failE('scope is required (e.g. org.sysdeck.builder.modify)')
-    if (!validScope(scope)) return failE(`invalid scope '${scope}' — must look like org.sysdeck.<module>.<action>`)
-    if (!SCOPES.some((s) => s.scope === scope)) return failE(`unknown scope '${scope}' — call policy.scopes for the catalog`)
+    const { scopes } = await loadScopes()
+    if (!scopes.some((s) => s.scope === scope)) return failE(`unknown scope '${scope}' — call policy.scopes for the real action catalog (${scopes.length} actions)`)
     if (!subject) return failE('subject is required (unix-user:<name> or group:<name>)')
     if (!validSubject(subject)) return failE(`invalid subject '${subject}' — expected unix-user:<name> or group:<name>`)
     if (!['allow', 'deny'].includes(effect)) return failE('effect must be allow or deny')
     if (priority < 0 || priority > 100) return failE('priority must be 0-100')
     const row = await db.policyRule.create({ data: { scope, subject, effect, priority, note } })
     await audit('policy.create', `${effect} ${scope} for ${subject} (priority ${priority})`)
-    return ok({ rule: row }, SOURCE)
+    return ok({ rule: row }, 'live')
   },
 
   update: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '').trim()
     if (!id) return failE('id is required')
     const rule = await db.policyRule.findUnique({ where: { id } })
@@ -123,38 +257,35 @@ export const commands = {
     if (Object.keys(data).length === 0) return failE('nothing to update — pass effect, priority, subject and/or note')
     const row = await db.policyRule.update({ where: { id }, data })
     await audit('policy.update', `rule ${rule.scope} ${rule.subject}: ${Object.entries(data).map(([k, v]) => `${k}=${v}`).join(', ')}`)
-    return ok({ rule: row }, SOURCE)
+    return ok({ rule: row }, 'live')
   },
 
   delete: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '').trim()
     if (!id) return failE('id is required')
     const rule = await db.policyRule.findUnique({ where: { id } })
     if (!rule) return failE('rule not found')
     await db.policyRule.delete({ where: { id } })
     await audit('policy.delete', `removed ${rule.effect} ${rule.scope} for ${rule.subject}`)
-    return ok({ deleted: { id, scope: rule.scope, subject: rule.subject } }, SOURCE)
+    return ok({ deleted: { id, scope: rule.scope, subject: rule.subject } }, 'live')
   },
 
   toggle: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '').trim()
     if (!id) return failE('id is required')
     const rule = await db.policyRule.findUnique({ where: { id } })
     if (!rule) return failE('rule not found')
     const row = await db.policyRule.update({ where: { id }, data: { enabled: !rule.enabled } })
     await audit('policy.toggle', `${rule.scope} ${rule.subject} → ${row.enabled ? 'enabled' : 'disabled'}`)
-    return ok({ rule: row, enabled: row.enabled }, SOURCE)
+    return ok({ rule: row, enabled: row.enabled }, 'live')
   },
 
   audit: async () => {
-    await ensureSeeded()
     const rows = await db.auditLog.findMany({
       where: { OR: [{ module: 'policy' }, { action: { contains: 'policy' } }] },
       orderBy: { ts: 'desc' },
       take: 50,
     })
-    return ok({ entries: rows, count: rows.length }, SOURCE, 'AuditLog rows filtered module=policy OR action contains "policy"')
+    return ok({ entries: rows, count: rows.length }, 'live', 'AuditLog rows filtered module=policy OR action contains "policy"')
   },
 }

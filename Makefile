@@ -30,13 +30,13 @@
 # Distro support: Arch Linux, Debian/Ubuntu, Fedora/RHEL/CentOS.
 
 PACKAGE := sysdeck
-VERSION := 0.4.1
+VERSION := 0.4.3
 LIB_DIR := $(DESTDIR)/usr/lib/$(PACKAGE)
 PYTHON_DIR := $(LIB_DIR)/bridge
 SHARE_DIR := $(DESTDIR)/usr/share/$(PACKAGE)
-# v0.0.31: firewall templates (pre-built nftables rulesets the operator
-# selects from the panel — applied via the org.sysdeck.firewall.modify
-# polkit action). Two are shipped; operators can drop more in.
+# Firewall templates (pre-built nftables rulesets the operator selects
+# from the panel — applied via the org.sysdeck.firewall.modify polkit
+# action). Seven topologies ship; operators can drop more in.
 FIREWALL_TEMPLATES_DIR := $(SHARE_DIR)/firewall/templates
 
 # Python bridge helpers (called via `python3 -m sysdeck.bridge.<module>`).
@@ -55,6 +55,7 @@ POLKIT_FILE := packaging/polkit/org.sysdeck.policy
 # Diagnostic + smoke-test scripts.
 DIAGNOSE_SCRIPT := sysdeck-diagnose.sh
 SMOKE_TEST_SCRIPT := cockpit-smoke-test.sh
+UNINSTALL_SCRIPT := sysdeck-uninstall.sh
 
 # Generator script (regenerates plugins/ and shared/).
 GENERATOR := scripts/generate-plugins.py
@@ -124,6 +125,7 @@ install:
 	install -d $(DESTDIR)/usr/share/$(PACKAGE)
 	install -m 0755 $(DIAGNOSE_SCRIPT)   $(DESTDIR)/usr/share/$(PACKAGE)/$(DIAGNOSE_SCRIPT)
 	install -m 0755 $(SMOKE_TEST_SCRIPT) $(DESTDIR)/usr/share/$(PACKAGE)/$(SMOKE_TEST_SCRIPT)
+	install -m 0755 $(UNINSTALL_SCRIPT) $(DESTDIR)/usr/share/$(PACKAGE)/$(UNINSTALL_SCRIPT)
 	# v0.0.31: firewall templates — pre-built nftables rulesets the
 	# operator selects from the Firewall panel. The bridge firewall.py
 	# `templates` and `apply-template` subcommands read this directory.
@@ -373,7 +375,7 @@ dist: check
 	    plugins shared bridge tests packaging compat standalone-plugins \
 	    prometheus scripts firewall \
 	    Makefile README.md QUICKSTART.md BLOG.md LICENSE QA.md worklog.md THIRD_PARTY.md docs \
-	    sysdeck-diagnose.sh cockpit-smoke-test.sh
+	    sysdeck-diagnose.sh cockpit-smoke-test.sh sysdeck-uninstall.sh
 	@echo ">>> $(PACKAGE)-$(VERSION).tar.bz2 ready"
 
 # distcheck: verify the tarball extracts into <package>-<version>/ and
@@ -456,5 +458,5 @@ master:
 	    bridge plugins shared tests packaging compat standalone-plugins \
 	    prometheus scripts firewall docs web \
 	    Makefile README.md QUICKSTART.md BLOG.md LICENSE QA.md THIRD_PARTY.md \
-	    sysdeck-diagnose.sh cockpit-smoke-test.sh
+	    sysdeck-diagnose.sh cockpit-smoke-test.sh sysdeck-uninstall.sh
 	@echo ">>> $(PACKAGE)-$(VERSION)-master.tar.bz2 ready"

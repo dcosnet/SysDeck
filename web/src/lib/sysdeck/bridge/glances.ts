@@ -16,7 +16,7 @@
 // summary/processes/history instead.
 import os from 'os'
 import { readFileSync, readdirSync } from 'fs'
-import { run, ok } from './shared'
+import { run, ok, cached } from './shared'
 
 const CLK_TCK = 100 // USER_HZ on Linux
 const PAGE = 4096 // x86_64 page size (rss is reported in pages)
@@ -59,8 +59,6 @@ interface Sample {
 
 let prev: Sample | null = null
 const history: { t: number; cpuPct: number; memPct: number }[] = []
-let passwdCache: { name: string; uid: number }[] | null = null
-
 // ── /proc parsers ────────────────────────────────────────────────────
 
 function parseCpuLine(line: string): CpuTimes {
@@ -159,24 +157,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// ── /etc/passwd uid → name ───────────────────────────────────────────
+// ── /etc/passwd uid → name ─────────────────────────────────────────────────
 
+let uidMap: Map<number, string> | null = null
 function userName(uid: number): string {
-  if (!passwdCache) {
+  if (!uidMap) {
     try {
-      passwdCache = readFileSync('/etc/passwd', 'utf-8')
-        .split('\n')
-        .filter((l) => l.includes(':'))
-        .map((l) => {
-          const f = l.split(':')
-          return { name: f[0] ?? '?', uid: Number(f[2] ?? -1) }
-        })
+      uidMap = new Map(
+        readFileSync('/etc/passwd', 'utf-8')
+          .split('\n')
+          .filter((l) => l.includes(':'))
+          .map((l) => {
+            const f = l.split(':')
+            return [Number(f[2] ?? -1), f[0] ?? '?'] as const
+          }),
+      )
     } catch {
-      passwdCache = []
+      uidMap = new Map()
     }
   }
-  const hit = passwdCache.find((p) => p.uid === uid)
-  return hit?.name ?? String(uid)
+  return uidMap.get(uid) ?? String(uid)
 }
 
 function procUid(pid: number): number {
@@ -316,7 +316,7 @@ async function fullSnapshot(topCount: number) {
   // Delta base: previous request's sample, or a 300ms double-sample on
   // the first call so even a single-shot render shows real rates.
   const first = sample()
-  let a = prev
+  let a: Sample | null = prev
   let b = first
   if (!prev) {
     await sleep(300)
@@ -324,6 +324,11 @@ async function fullSnapshot(topCount: number) {
     a = first
   }
   prev = b
+  if (!a) {
+    // unreachable (prev-or-double-sample above always yields a base) —
+    // kept for the type system; fall back to self-delta (zero rates)
+    a = b
+  }
 
   const dTotal = b.cpu.total - a.cpu.total
   const dIdle = b.cpu.idle + b.cpu.iowait - (a.cpu.idle + a.cpu.iowait)
@@ -404,10 +409,20 @@ async function fullSnapshot(topCount: number) {
   }
 }
 
-export const commands = {
-  summary: async () => ok(await fullSnapshot(12), 'live'),
+/** One shared sweep: the summary (4 s), processes (3 s) and history
+ *  polls land on a single TTL-cached fullSnapshot instead of running
+ *  the whole pass (df spawn, /proc scan, history push) per command. */
+async function snapshotCore() {
+  return cached('glances:snapshot', 2500, async () => fullSnapshot(30))
+}
 
-  processes: async () => ok({ procs: (await fullSnapshot(30)).topProcs }, 'live'),
+export const commands = {
+  summary: async () => {
+    const s = await snapshotCore()
+    return ok({ ...s, topProcs: s.topProcs.slice(0, 12) }, 'live')
+  },
+
+  processes: async () => ok({ procs: (await snapshotCore()).topProcs }, 'live'),
 
   history: async () => ok({ samples: [...history] }, 'live', 'ring buffer of the last 60 summary calls'),
 

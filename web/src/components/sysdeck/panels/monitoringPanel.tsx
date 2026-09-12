@@ -258,7 +258,7 @@ export default function MonitoringPanel() {
 # ${prom.hint ?? 'cockpit-ws owns 9090 — run Prometheus on 9095'}
 apt install prometheus
 # /etc/default/prometheus: ARGS="--web.listen-address=127.0.0.1:9095"
-systemctl restart prometheus  # needs systemd (absent in this container)`}
+systemctl restart prometheus  # needs systemd`}
               />
               <HintCard title="Port guidance — why 9095?">
                 <p>
@@ -293,7 +293,7 @@ systemctl restart prometheus  # needs systemd (absent in this container)`}
                 distro="not-installed"
                 hint={`# real 1.5s probe of ${graf.url}
 apt install grafana
-systemctl restart grafana  # needs systemd (absent in this container)`}
+systemctl restart grafana  # needs systemd`}
               />
               <HintCard title="Probe result">
                 <p>
@@ -302,8 +302,8 @@ systemctl restart grafana  # needs systemd (absent in this container)`}
                 </p>
                 <p className="font-mono text-xs text-foreground">{graf.responder ?? 'no response'}</p>
                 <p>
-                  on this sandbox, port 3000 is owned by the SysDeck web edition itself — a 404 HTML answer, not
-                  Grafana&apos;s health JSON.
+                  a port owned by another HTTP service answers 404 HTML instead of Grafana&apos;s health JSON — the probe
+                  result distinguishes the two.
                 </p>
               </HintCard>
             </>
@@ -313,8 +313,8 @@ systemctl restart grafana  # needs systemd (absent in this container)`}
 
       <p className="mt-4 pb-2 text-xs text-muted-foreground">
         HYBRID: the native metrics tab is REAL (live /proc ring buffer, 5s poll); the Prometheus/Grafana tabs are real
-        availability probes — neither daemon exists in this sandbox, so their install guidance is shown instead. Charts
-        render after the first couple of poll samples.
+        availability probes — when neither daemon is installed, their install guidance is shown instead. Charts render
+        after the first couple of poll samples.
       </p>
     </div>
   )

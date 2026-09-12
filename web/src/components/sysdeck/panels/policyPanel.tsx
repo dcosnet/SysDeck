@@ -1,9 +1,11 @@
 'use client'
 
 // Policy panel — polkit-style allow/deny rule registry over the
-// org.sysdeck.* scope catalog, with a full audit trail. No polkit daemon
-// exists in this sandbox, so rules are persisted demo state — the same
-// scope/subject/effect/priority semantics the cockpit edition enforced.
+// org.sysdeck.* scope catalog, with a full audit trail. Scopes are parsed
+// from the REAL .policy XML files; the rules registry is the operator's
+// workspace; sync materializes it into /etc/polkit-1/rules.d/
+// 40-sysdeck.rules (privilege-gated) — the same scope/subject/effect/
+// priority semantics the cockpit edition enforced.
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -400,7 +402,7 @@ export default function PolicyPanel() {
       <PanelHeader
         title="Policy"
         subtitle="polkit-style allow/deny rules over the org.sysdeck.* scope catalog — who may do what"
-        source="demo"
+        source={scopesQ.data?.source ?? 'live'}
         actions={<CreateRuleDialog scopes={scopes} onCreate={createRule} />}
       />
 

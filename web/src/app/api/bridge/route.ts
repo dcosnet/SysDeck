@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { BRIDGE_MODULES } from '@/lib/sysdeck/bridge'
-import { requireSession } from '@/lib/sysdeck/session'
+import { isMutation } from '@/lib/sysdeck/bridge/mutations'
+import { SYSDECK_VERSION } from '@/lib/sysdeck/registry'
+import { currentSession, requireSession } from '@/lib/sysdeck/session'
+import { consoleUser } from '@/lib/sysdeck/users'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +19,11 @@ export const dynamic = 'force-dynamic'
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
 const RATE_WINDOW_MS = 10_000
 const RATE_MAX = 240 // 24 req/s sustained — panels poll every 5-30s
+
+// X-Forwarded-For defines rate-limit identity only when the operator
+// opts in — a client-supplied header must never shape limits on a
+// loopback-bound console. Direct connections share the 'local' bucket.
+const TRUST_PROXY = process.env.SYSDECK_TRUST_PROXY === '1'
 
 const rateBuckets = new Map<string, { windowStart: number; count: number }>()
 
@@ -36,12 +44,15 @@ function rateLimited(ip: string, now = Date.now()): boolean {
 }
 
 function clientIp(req: Request): string {
-  // Behind the local port gateway the forwarding headers are set; a
-  // direct connection has no X-Forwarded-For, so fall back to 'local'.
-  const fwd = req.headers.get('x-forwarded-for')
+  const fwd = TRUST_PROXY ? req.headers.get('x-forwarded-for') : null
   if (fwd) return fwd.split(',')[0].trim()
   return 'local'
 }
+
+// Mutation policy: 'admin' (default) gates the mutation registry behind
+// an admin session; 'any' restores the single-operator posture for
+// consoles where every login IS the operator.
+const MUTATIONS_REQUIRE_ADMIN = process.env.SYSDECK_MUTATIONS !== 'any'
 
 export async function POST(req: Request) {
   const denied = await requireSession(req)
@@ -92,19 +103,35 @@ export async function POST(req: Request) {
   }
 
   const args = body.args ?? {}
+
+  // ── mutation authorization (cockpit-shaped) ─────────────────────────
+  // Any signed-in unix account may look; commands that change operator
+  // state or the host require an admin session. The OS boundary (root /
+  // sudo -n with honest refusal) remains the enforcement of last resort.
+  if (MUTATIONS_REQUIRE_ADMIN && isMutation(modName, command)) {
+    const session = await currentSession()
+    const user = session?.user
+    const profile = user ? await consoleUser(user) : null
+    if (!profile?.isAdmin) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `${modName}.${command} requires an admin session (wheel/sudo/adm or uid 0) — sign in as an admin, or set SYSDECK_MUTATIONS=any for the single-operator posture`,
+          module: modName,
+          command,
+        },
+        { status: 403 },
+      )
+    }
+  }
+
   try {
     const out = await handler(args)
-    // Commands may return {data, source, note} envelopes, plain data, or
-    // the {ok:false, error} envelope from fail() — the error envelope
-    // passes through top-level so panels see command-level failures.
-    if (
-      out &&
-      typeof out === 'object' &&
-      ('data' in (out as Record<string, unknown>) ||
-        'source' in (out as Record<string, unknown>) ||
-        'error' in (out as Record<string, unknown>)) &&
-      'ok' in (out as Record<string, unknown>)
-    ) {
+    // Envelope contract: handlers return a BridgeResponse — an object
+    // with a boolean `ok` key — or plain data, which is wrapped. The
+    // boolean type check keeps plain data models that happen to carry an
+    // `ok` field from being misread as envelopes.
+    if (out && typeof out === 'object' && 'ok' in (out as Record<string, unknown>) && typeof (out as Record<string, unknown>).ok === 'boolean') {
       return NextResponse.json({ ...(out as object), module: modName, command })
     }
     return NextResponse.json({ ok: true, data: out, module: modName, command })
@@ -141,6 +168,6 @@ export async function GET(req: Request) {
     ok: true,
     db: dbOk,
     modules: Object.keys(BRIDGE_MODULES).length,
-    version: '0.4.1',
+    version: SYSDECK_VERSION,
   })
 }

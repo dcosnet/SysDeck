@@ -3,9 +3,26 @@
 // os.cpus, df, /proc/net/dev, /proc directory scan. No mock numbers here.
 import os from 'os'
 import { readFileSync, statfsSync, readdirSync } from 'fs'
-import { ok } from './shared'
+import { ok, run, cached } from './shared'
 import { readText } from './shared'
 import type { HostTicker } from '../types'
+
+/** /etc/os-release PRETTY_NAME — the display name of the running distro.
+ *  Static for the host's lifetime; cached long. */
+async function distroPretty(): Promise<string> {
+  return cached('overview:distro', 3_600_000, async () => {
+    const t = await readText('/etc/os-release')
+    const m = t.match(/^PRETTY_NAME=?"?([^"\n]+)"?/m)
+    return m?.[1] ?? os.type()
+  })
+}
+
+/** Logged-in user sessions (utmp via `who`) — one row per session. */
+async function loginSessions(): Promise<number> {
+  const r = await run('who', [], 3000)
+  if (r.rc !== 0) return 0
+  return r.stdout.split('\n').filter((l) => l.trim().length > 0).length
+}
 
 interface CpuSnapshot {
   idle: number
@@ -144,11 +161,11 @@ export const commands = {
           hostname: os.hostname(),
           kernel: os.release(),
           arch: os.arch(),
-          distro: 'Debian container',
+          distro: await distroPretty(),
           cpuModel: cpus[0]?.model?.trim() ?? 'unknown',
           cores: cpus.length,
           uptimeS: Math.round(uptimeS),
-          bootUsers: 0,
+          bootUsers: await loginSessions(),
         },
         cpu: { pct: cpuPct(), load1: load[0] ?? 0, load5: load[1] ?? 0, load15: load[2] ?? 0 },
         memory: {

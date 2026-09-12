@@ -1,10 +1,11 @@
 'use client'
 
 // Containers panel — incus / libvirt / podman / firecracker inventory.
-// The sandbox has none of those daemons, so the bridge keeps a realistic
-// demo inventory (15 rows, honestly labeled). start/stop/freeze/delete/exec
-// mutate the demo registry (+ AuditLog rows); exec answers known commands
-// with simulated shell output (unknown commands → rc 127, like the demo sh).
+// The bridge aggregates EVERY runtime actually present on the host
+// (podman ps -a --format json, docker, incus list, lxc-list, virsh list
+// --all, firecracker sockets) — no seeded rows. start/stop/freeze/delete
+// run the runtime's real command; exec runs the runtime's real exec and
+// streams its actual output.
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -177,7 +178,7 @@ function ExecDialog({
         variant="outline"
         className="gap-1.5 font-mono text-xs"
         disabled={ctr?.state !== 'running'}
-        title={ctr?.state === 'running' ? 'open a simulated shell' : 'only running instances accept exec'}
+        title={ctr?.state === 'running' ? 'open an exec shell' : 'only running instances accept exec'}
         onClick={() => {
           setResult(null)
           setError(null)
@@ -193,7 +194,8 @@ function ExecDialog({
             exec — <span className="text-muted-foreground">{ctr?.name}</span>
           </DialogTitle>
           <DialogDescription>
-            simulated shell on the demo instance — known commands answer canned output, unknown ones fail like the demo <Mono>sh</Mono>
+            real exec through the instance&apos;s runtime — the command runs inside the container/VM and the output below
+            is exactly what it answered
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2">
@@ -289,7 +291,7 @@ export default function ContainersPanel() {
   if (summary.isLoading || list.isLoading) {
     return (
       <div>
-        <PanelHeader title="Containers" subtitle="incus · libvirt · podman · firecracker — unified fleet" source="demo" />
+        <PanelHeader title="Containers" subtitle="incus · libvirt · podman · firecracker — unified fleet" />
         <PanelSkeleton />
       </div>
     )
@@ -298,7 +300,7 @@ export default function ContainersPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Containers" subtitle="incus · libvirt · podman · firecracker — unified fleet" source="demo" />
+        <PanelHeader title="Containers" subtitle="incus · libvirt · podman · firecracker — unified fleet" />
         <ErrorCard error={summary.data?.error ?? 'containers.summary failed'} />
       </div>
     )
@@ -311,7 +313,7 @@ export default function ContainersPanel() {
       <PanelHeader
         title="Containers"
         subtitle="incus · libvirt · podman · firecracker — unified fleet · 6s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -468,9 +470,10 @@ export default function ContainersPanel() {
         </PanelCard>
 
         <p className="pb-2 text-xs text-muted-foreground">
-          incus / podman / libvirt / firecracker are not present in this sandbox — the fleet above is the bridge&apos;s demo
-          registry (mutated in-place by start/stop/freeze/delete, every action audited). freeze applies CRIU checkpoints to
-          containers only; the bridge refuses VMs.
+          no container runtimes are installed on this host (probed: podman, docker, incus, lxc, virsh, firecracker) — the
+          fleet is empty, nothing is fabricated. Install any of them and instances appear here live on the next poll;
+          start/stop/freeze/delete/exec run the runtime&apos;s own commands (freeze applies to containers only — the bridge
+          refuses VMs).
         </p>
       </div>
 
@@ -479,7 +482,7 @@ export default function ContainersPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle className="font-mono">delete {deleteTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Removes the {deleteTarget?.driver} {deleteTarget?.kind} from the demo registry. The bridge refuses deletes
+              Removes the {deleteTarget?.driver} {deleteTarget?.kind} via the runtime&apos;s real delete command. The bridge refuses deletes
               while an instance is running — stop it first.
             </AlertDialogDescription>
           </AlertDialogHeader>

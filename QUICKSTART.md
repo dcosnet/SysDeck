@@ -1,9 +1,9 @@
 # SysDeck — Quick Start
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
-Version: **0.2.0** (Master Edition)
+Version: **0.4.3** (Master Edition)
 
-Five-minute path from tarball to 26 sidebar entries in your Cockpit — plus the Web Edition with Fester pre-integrated (section 9).
+Two five-minute paths: run the console standalone (no Cockpit required — section 9), or install the full plugin suite into an existing Cockpit (sections 1–8). Either way every module also loads in the other front end.
 
 ---
 
@@ -128,6 +128,23 @@ sudo systemctl restart cockpit.socket
 
 `make uninstall` removes every trace of every prior version (the v0.0.9-v0.0.19 single-plugin `/usr/share/cockpit/sysdeck/` directory, the v0.0.20+ multi-plugin `/usr/share/cockpit/sysdeck-*/` directories, the Python bridge helpers, the diagnostic scripts, the firewall templates, the AppStream metainfo, the polkit policy, and any pacman-installed `sysdeck` package).
 
+Or use the **quiet uninstaller** — same coverage, silent on success, idempotent, and it restarts cockpit.socket itself (so the sidebar flushes in one step):
+
+```bash
+sudo ./sysdeck-uninstall.sh                 # quiet; also handles the
+                                            # 0.3.0 branding skin (restores
+                                            # the distro branding.css backup)
+                                            # + dpkg/rpm copies + python
+                                            # site-packages links
+sudo ./sysdeck-uninstall.sh -n              # dry-run: list what would go
+sudo ./sysdeck-uninstall.sh --purge-state   # also drop /var/lib/sysdeck
+                                            # (builder artifacts — operator
+                                            # data, off by default)
+sudo ./sysdeck-uninstall.sh --no-restart    # skip the cockpit.socket restart
+```
+
+It prints nothing on success — including when nothing was installed — and leaves operator data alone (`/etc/sysdeck/`, `/var/lib/sysdeck/` unless `--purge-state`, `/etc/pam.d/sysdeck`, and any third-party cockpit modules). `make install` also drops the script at `/usr/share/sysdeck/sysdeck-uninstall.sh`, so it stays available on boxes that installed via package manager and no longer have the tarball.
+
 ## 7. Where to go next
 
 - [README.md](./README.md) — full module catalog, architecture, coding standards.
@@ -140,9 +157,9 @@ sudo systemctl restart cockpit.socket
 
 Open the in-panel error view: every SysDeck plugin's `index.html` installs `window.addEventListener('error')` and `'unhandledrejection'` handlers that replace the "Loading…" placeholder with the actual error message on the page — no devtools required. The same page tells you whether `cockpit.js` itself loaded, whether `bridge.js` imported cleanly, and whether the panel's `mount()` threw.
 
-## 9. The Web Edition (master tarball)
+## 9. The standalone web console (master tarball, no Cockpit required)
 
-The master tarball also ships the **SysDeck Web Edition** at `web/` — a standalone browser console (no cockpit required) with 29 bridge modules, real `/proc` / `/sys` collectors, and **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1):
+The master tarball ships the **SysDeck web console** at `web/` — a standalone server-management console that signs you in with your Unix account (PAM, the same mechanism Cockpit uses), reads real host state through 30 bridge modules (`/proc`, `/sys`, lsblk, systemctl, the real package manager...), detects and loads every installed Cockpit module into its own navigation, and carries **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1). Every module in this console can equally be loaded inside Cockpit itself — one module catalog, two front ends:
 
 ```bash
 make web-dev        # fester service in the background (:3010) + web console (:3000)
@@ -152,7 +169,7 @@ Manual equivalent:
 
 ```bash
 make fester-start                              # terminal 1: fester on :3010
-cd web && bun install && bun run db:push       # terminal 2: web edition setup
+cd web && bun install && bun run db:push       # terminal 2: console setup
 bun run dev                                    #            web console on :3000
 ```
 
@@ -372,14 +389,59 @@ This is the piece that makes the console/host pair 100% compatible:
 install a cockpit module on the box, and it shows up here — no cockpit
 login required to browse it.
 
+### 10.6 The zero-demo release (v0.4.2)
+
+Every web-console module now ships production implementations only — no
+demo, mock, stub, or seeded data anywhere in the codebase:
+
+- **Sensors** parse the real `sensors -j` (lm-sensors) JSON — the exact
+  source the cockpit edition reads — with raw sysfs collectors as the
+  fallback. No sensors → an honest empty panel.
+- **Netsec bans enforce for real** — an atomic nftables batch (`table
+  inet sysdeck`, `blacklist` set, 30-day timeouts) or an iptables DROP
+  rule, privilege-gated like every mutation; the live fail2ban ban list
+  is merged when fail2ban runs, and fail2ban rows unban through the
+  real `fail2ban-client set <jail> unbanip`.
+- **The firewall panel reads the host's actual kernel ruleset** (new
+  live-ruleset tab: `nft -j list ruleset` / `iptables-save`) and the
+  template catalog covers all seven shipped topologies.
+- The bridge `DataSource` type no longer admits a `'demo'` value — the
+  compiler itself rejects any reintroduction. Absent backends always
+  render honest empty inventories with install guidance.
+
+
+### 10.7 The MoE QA pass (v0.4.3)
+
+A multi-expert audit hardened every axis of the console:
+
+- Privileged writes ride stdin and verify themselves (polkit rules
+  byte-for-byte post-write; `nft -f -` / `iptables-restore` piped
+  rulesets; PIN off argv; `mktemp` staging everywhere `/tmp` was
+  predictable).
+- Mutating bridge commands require an admin session (wheel/sudo/adm);
+  reads stay open to every signed-in unix account. Set
+  `SYSDECK_MUTATIONS=any` for single-operator consoles.
+- Dry-runs preview exactly what apply executes (the shipped template
+  script verbatim); unbans/applies report the firewall's real exit
+  code; rule comments are injection-guarded.
+- `X-Forwarded-For` defines rate-limit identity only behind an opted-in
+  proxy (`SYSDECK_TRUST_PROXY=1`).
+- The polling layer shares TTL + single-flight probes across panels —
+  one subprocess sweep per window, not a spawn storm per tick — and
+  the Python bridges match the web side's chains (sensors `sensors -j`
+  → sysfs; dnf `check-update` rc 100 = updates exist; timeouts on
+  every spawn).
+
+
+
 ## 11. Run without Cockpit (the complete standalone runbook, v0.3.0)
 
 The web edition needs **nothing from sections 1–8** — no cockpit, no Python
 bridge, no systemd, no root. One Bun runtime serves the whole console:
 
 ```bash
-tar xjf sysdeck-0.4.1-master.tar.bz2
-cd sysdeck-0.4.1-master
+tar xjf sysdeck-0.4.3-master.tar.bz2
+cd sysdeck-0.4.3-master
 make web-dev          # bun install + db:push + fester + next dev :3000
 ```
 

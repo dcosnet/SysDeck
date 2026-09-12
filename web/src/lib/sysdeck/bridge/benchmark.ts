@@ -15,7 +15,7 @@ import { ok, fail } from './shared'
 /** fail() + source → the dispatcher spreads this into a top-level
  *  {ok:false, error, source} envelope. (A bare fail() lacks data/source
  *  keys, so the dispatcher would wrap it as {ok:true, data:{ok:false}}.) */
-function failE(error: string, source: 'live' | 'demo' | 'hybrid' = 'live') {
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
   return { ...fail(error), source }
 }
 

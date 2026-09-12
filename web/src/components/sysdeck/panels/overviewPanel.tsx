@@ -444,7 +444,7 @@ export default function OverviewPanel() {
                   <Waves className="h-4.5 w-4.5 text-primary" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">SysDeck v0.4.1</p>
+                  <p className="text-sm font-semibold">SysDeck v0.4.3</p>
                   <p className="font-mono text-[10px] text-muted-foreground">dcos.net · 30 bridge modules</p>
                 </div>
               </div>
@@ -468,7 +468,7 @@ export default function OverviewPanel() {
             title="Master tarball"
             actions={
               <Badge variant="outline" className="font-mono text-[10px]">
-                v{release.data?.version ?? '0.4.1'}
+                v{release.data?.version ?? '0.4.3'}
               </Badge>
             }
           >
@@ -483,12 +483,12 @@ export default function OverviewPanel() {
               </p>
               <Button asChild size="sm" className="w-full gap-2 font-mono text-xs">
                 <a
-                  href={release.data?.url ?? '/download/sysdeck-0.4.1-master.tar.bz2'}
+                  href={release.data?.url ?? '/download/sysdeck-0.4.3-master.tar.bz2'}
                   download
                   aria-label="Download the SysDeck master tarball"
                 >
                   <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden />
-                  sysdeck-0.4.1-master.tar.bz2
+                  sysdeck-0.4.3-master.tar.bz2
                 </a>
               </Button>
               <KV k="size" v={fmtBytes(release.data?.sizeBytes)} />

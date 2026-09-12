@@ -14,8 +14,8 @@
 //     console panel that covers the domain (podman/machines →
 //     Containers & VMs, packagekit → Packages, and so on);
 //   · detection is pure filesystem — it works with cockpit stopped or
-//     absent; when no tree exists the panel shows a clearly-badged
-//     typical-distro set so the surface stays explorable.
+//     absent; with no cockpit tree the panel says so and lists nothing
+//     (the catalog fills the moment a tree exists).
 import { useMemo } from 'react'
 import {
   ArrowRight,
@@ -96,7 +96,7 @@ export function CockpitModulesPanel() {
         subtitle={
           cockpitDetected
             ? 'Every cockpit module detected on this host — loaded into this console.'
-            : 'No cockpit tree on this host — a typical distro install is shown, clearly badged.'
+            : 'No cockpit tree on this host — nothing to list; modules appear the moment one is installed.'
         }
         source={res.source}
       />
@@ -126,7 +126,6 @@ export function CockpitModulesPanel() {
                   return <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
                 })()}
                 {m.label}
-                {m.source === 'demo' ? <StateBadge state="demo" /> : null}
               </td>
               <td className="font-mono text-xs text-muted-foreground">{m.name}</td>
               <td className="font-mono text-xs text-muted-foreground">{m.pkg ?? '—'}</td>
@@ -184,7 +183,7 @@ interface InfoPayload {
   fileCount: number
   manifest: unknown
   backendVersion: string | null
-  source: 'live' | 'demo'
+  source: 'live' | 'unavailable'
   error?: string
 }
 
@@ -310,8 +309,8 @@ export function CockpitModulePanel({ mod }: { mod: CockpitModuleInfo | null }) {
       <PanelCard title="Shipped files">
         {infoQ.isLoading ? (
           <p className="py-4 text-center text-sm text-muted-foreground">scanning…</p>
-        ) : info?.error ? (
-          <p className="py-4 text-center text-sm text-red-400">{info.error}</p>
+        ) : infoQ.data && !infoQ.data.ok ? (
+          <p className="py-4 text-center font-mono text-xs text-red-600 dark:text-red-400">{infoQ.data.error}</p>
         ) : (
           <DataTable<InfoRow>
             rows={info?.files ?? []}

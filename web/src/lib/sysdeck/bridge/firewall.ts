@@ -1,33 +1,50 @@
-// SysDeck bridge — firewall (demo ruleset registry)
+// SysDeck bridge — firewall (real ruleset registry + real apply, live)
 // Port of bridge/firewall.py semantics (2710 lines): the cockpit edition
-// shipped executable templates in firewall/templates/*.sh (public-webserver,
-// vps-webserver, ai-llm, remote-admin, no-services, cilium, sysdeck-fw)
-// and managed nftables/iptables rulesets. No nft/iptables binary exists
-// in this sandbox, so the web edition ports the TEMPLATE TOPOLOGIES
-// verbatim from the tarball headers into a static catalog, and manages
-// a seeded FwRuleset/FwRule registry. `apply --dryRun` returns the exact
-// nft script that WOULD be applied (realistic `nft list ruleset` syntax).
+// shipped EXECUTABLE templates in firewall/templates/*.sh (public-
+// webserver, vps-webserver, ai-llm, remote-admin, no-services, cilium,
+// sysdeck-fw) and managed nftables/iptables rulesets, applied through
+// the org.sysdeck.firewall.modify polkit action. The web edition:
+//   - keeps the template catalog (topologies ported verbatim — the
+//     scripts themselves ship in the tarball and install to
+//     /usr/share/sysdeck/firewall/templates/)
+//   - the ruleset registry is the OPERATOR'S workspace (created
+//     explicitly, never seeded)
+//   - apply() runs the REAL thing: the shipped template script when the
+//     ruleset came from a template, else the synthesized nft/iptables
+//     script via `nft -f` / `iptables-restore` — privilege-gated
+//     (root / sudo -n), honest failure otherwise, dry-run shows the
+//     exact script
+//   - live: reads the host's REAL active ruleset (nft -j list ruleset /
+//     iptables-save) when a firewall binary exists
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, run, which, cached, readText } from './shared'
+import { access } from 'fs/promises'
+import { existsSync } from 'fs'
 
-const SOURCE = 'demo' as const
-const NOTE = 'nft/iptables not present in sandbox — demo ruleset registry; template topologies ported verbatim from firewall/templates/*.sh (v0.0.47/v0.0.44)'
-
-function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
+  return { ...fail(error), source }
 }
 
 async function audit(action: string, detail: string) {
   await db.auditLog.create({ data: { module: 'firewall', action, detail } })
 }
 
-// ── template catalog (real topologies from the tarball) ─────────────
+// ── template catalog (topologies ported verbatim from firewall/templates) ──
 
-interface TemplatePort {
+interface FwPort {
   port: number
-  proto: 'tcp' | 'udp'
-  dir: 'in' | 'loopback' | 'blocked'
+  proto: string
+  dir: string
   comment: string
+}
+
+interface FwRuleSeed {
+  chain: string
+  action: string
+  proto: string
+  port?: string
+  source?: string
+  comment?: string
 }
 
 interface Template {
@@ -35,68 +52,22 @@ interface Template {
   name: string
   description: string
   backend: string
-  ports: TemplatePort[]
-  rules: { chain: string; action: string; proto: string; port?: string; source?: string; comment: string }[]
+  ports: FwPort[]
+  rules: FwRuleSeed[]
 }
 
 const TEMPLATES: Template[] = [
   {
     id: 'public-webserver',
-    name: 'Public Web Server',
+    name: 'Public Webserver',
     description:
-      'Public server variant for a web stack. Varnish (80) is the public cache front, Caddy HTTPS (443) public; Caddy HTTP backend (8080) and MariaDB (3306) are loopback-only and never exposed. SSH rate-limited with auto-ban. Caddy admin API (2019) loopback-only.',
+      'Public webserver with SSH: input default-drop, established/related accepted, loopback accepted, SSH rate-limited (4 new conns/min with an auto-ban abuse set), HTTP/HTTPS open, plus the ports the operator marked public (OpenWebUI 3000, Hermes 8000, Odysseus 8001, ollama 11434). Bogon and invalid-flag filtering, synproxy option for SYN floods.',
     backend: 'nftables',
     ports: [
-      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — public, rate-limited (4 new conns/min) + brute-force auto-ban set' },
-      { port: 80, proto: 'tcp', dir: 'in', comment: 'Varnish cache frontend — public (ACME http-01 + redirect to :443)' },
-      { port: 443, proto: 'tcp', dir: 'in', comment: 'Caddy HTTPS — public, terminates TLS' },
-      { port: 8080, proto: 'tcp', dir: 'loopback', comment: 'Caddy HTTP backend — loopback only (Varnish cache-miss target)' },
-      { port: 3306, proto: 'tcp', dir: 'blocked', comment: 'MariaDB — dropped, never exposed (defense in depth)' },
-      { port: 2019, proto: 'tcp', dir: 'loopback', comment: 'Caddy admin API — loopback only' },
-    ],
-    rules: [
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '80', comment: 'varnish cache front (public)' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '443', comment: 'caddy https (public)' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '8080', source: '127.0.0.1', comment: 'caddy HTTP backend (loopback)' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', port: '8080', comment: 'caddy backend — drop non-loopback' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', port: '3306', comment: 'mariadb never exposed' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '9090', source: '192.168.1.0/24', comment: 'cockpit admin CIDR' },
-    ],
-  },
-  {
-    id: 'vps-webserver',
-    name: 'VPS Web Server',
-    description:
-      'Service-aware firewall for VPS web servers. Auto-detects SSH, Caddy, Varnish, Forgejo and adapts. When Varnish is detected the DEFAULT topology is cache-front-of-origin: Varnish on :80 (public), Caddy HTTP backend :8080 loopback-only, Caddy HTTPS :443 public. Aggressive SSH rate limiting when pubkey-only auth is detected.',
-    backend: 'nftables',
-    ports: [
-      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — rate-limited, aggressive when pubkey-only auth detected' },
-      { port: 80, proto: 'tcp', dir: 'in', comment: 'Varnish (public) when detected — otherwise Caddy HTTP' },
-      { port: 443, proto: 'tcp', dir: 'in', comment: 'Caddy HTTPS — public' },
-      { port: 8080, proto: 'tcp', dir: 'loopback', comment: 'Caddy HTTP backend — loopback-only when Varnish is detected' },
-      { port: 3000, proto: 'tcp', dir: 'in', comment: 'Forgejo HTTP (only when forgejo is installed/detected)' },
-    ],
-    rules: [
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '22', comment: 'ssh (rate-limited)' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '80', comment: 'varnish / caddy http (public)' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '443', comment: 'caddy https (public)' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', port: '8080', comment: 'caddy backend — loopback only when varnish detected' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', comment: 'default drop' },
-    ],
-  },
-  {
-    id: 'ai-llm',
-    name: 'AI LLM Stack',
-    description:
-      'Public server variant for self-hosted AI LLM stacks: Ollama (11434), OpenWebUI (3000), Hermes (8000), Odysseus (8001) and SSH (22). All four AI service ports are public per the v0.0.44 directive (the operator reaches them over VPN/trusted network); SSH is rate-limited with auto-ban.',
-    backend: 'nftables',
-    ports: [
-      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — rate-limited with auto-ban' },
-      { port: 11434, proto: 'tcp', dir: 'in', comment: 'Ollama API — public per user directive (set OLLAMA_HOST to loopback to restrict)' },
+      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — rate-limited 4/min with abuse set' },
+      { port: 80, proto: 'tcp', dir: 'in', comment: 'HTTP' },
+      { port: 443, proto: 'tcp', dir: 'in', comment: 'HTTPS' },
+      { port: 11434, proto: 'tcp', dir: 'in', comment: 'ollama api — public per user directive' },
       { port: 3000, proto: 'tcp', dir: 'in', comment: 'OpenWebUI — public per user directive' },
       { port: 8000, proto: 'tcp', dir: 'in', comment: 'Hermes function-calling gateway — public per user directive' },
       { port: 8001, proto: 'tcp', dir: 'in', comment: 'Odysseus agent runtime — public per user directive' },
@@ -105,6 +76,52 @@ const TEMPLATES: Template[] = [
       { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related' },
       { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback' },
       { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '22', comment: 'ssh (rate-limited)' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '11434', comment: 'ollama api (public)' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '3000', comment: 'openwebui (public)' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '8000', comment: 'hermes (public)' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '8001', comment: 'odysseus (public)' },
+      { chain: 'INPUT', action: 'drop', proto: 'tcp', comment: 'default drop' },
+    ],
+  },
+  {
+    id: 'vps-webserver',
+    name: 'VPS Webserver',
+    description:
+      'Service-aware firewall for VPS web servers. Auto-detects SSH, Caddy, Varnish, Forgejo and adapts rules accordingly. Varnish-on-80 + Caddy-HTTP-on-8080 (loopback) is the explicit default cache topology per v0.0.47. Aggressive SSH rate limiting when pubkey-only auth is detected.',
+    backend: 'nftables',
+    ports: [
+      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — rate-limited (aggressive when pubkey-only auth is detected)' },
+      { port: 80, proto: 'tcp', dir: 'in', comment: 'Varnish cache front (public) — or Caddy HTTP direct when no Varnish' },
+      { port: 443, proto: 'tcp', dir: 'in', comment: 'Caddy HTTPS (public)' },
+      { port: 8080, proto: 'tcp', dir: 'loopback', comment: 'Caddy HTTP backend (loopback-only when Varnish fronts :80)' },
+      { port: 3000, proto: 'tcp', dir: 'in', comment: 'Forgejo (when detected)' },
+    ],
+    rules: [
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '22', comment: 'ssh (rate-limited + auto-ban)' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '80', comment: 'varnish cache front / caddy http' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '443', comment: 'caddy https' },
+      { chain: 'INPUT', action: 'drop', proto: 'tcp', comment: 'default drop' },
+    ],
+  },
+  {
+    id: 'ai-llm',
+    name: 'AI / LLM Stack',
+    description:
+      'Public server variant for self-hosted AI LLM stacks. Exposes Ollama (11434), OpenWebUI (3000), Hermes (8000), Odysseus (8001) and SSH (22) — all AI service ports public per operator directive so the stack is reachable from anywhere; SSH is rate-limited with auto-ban. Designed for a personal / team AI workstation accessible over a trusted network or VPN.',
+    backend: 'nftables',
+    ports: [
+      { port: 22, proto: 'tcp', dir: 'in', comment: 'SSH — rate-limited with auto-ban' },
+      { port: 11434, proto: 'tcp', dir: 'in', comment: 'Ollama API — public per user directive (honor OLLAMA_HOST)' },
+      { port: 3000, proto: 'tcp', dir: 'in', comment: 'OpenWebUI — public' },
+      { port: 8000, proto: 'tcp', dir: 'in', comment: 'Hermes function-calling gateway — public' },
+      { port: 8001, proto: 'tcp', dir: 'in', comment: 'Odysseus agent runtime — public' },
+    ],
+    rules: [
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback' },
+      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '22', comment: 'ssh (rate-limited + auto-ban)' },
       { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '11434', comment: 'ollama api (public)' },
       { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '3000', comment: 'openwebui (public)' },
       { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '8000', comment: 'hermes (public)' },
@@ -183,45 +200,7 @@ const TEMPLATES: Template[] = [
   },
 ]
 
-// ── lazy seed ───────────────────────────────────────────────────────
-
-async function ensureSeeded(): Promise<void> {
-  const count = await db.fwRuleset.count()
-  if (count > 0) return
-  await db.fwRuleset.create({
-    data: {
-      name: 'edge-fleet',
-      backend: 'nftables',
-      template: 'public-webserver',
-      active: true,
-      appliedAt: new Date(Date.now() - 86400000),
-    },
-  })
-  await db.fwRule.createMany({
-    data: TEMPLATES[0].rules.map((r, i) => ({ ...r, ruleset: 'edge-fleet', position: i + 1 })),
-  })
-  await db.fwRuleset.create({
-    data: {
-      name: 'lab-default',
-      backend: 'iptables',
-      template: 'no-services',
-      active: false,
-      appliedAt: null,
-    },
-  })
-  await db.fwRule.createMany({
-    data: [
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', comment: 'ct state established,related', position: 1, ruleset: 'lab-default' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', source: '127.0.0.1/8', comment: 'loopback', position: 2, ruleset: 'lab-default' },
-      { chain: 'INPUT', action: 'accept', proto: 'tcp', port: '22', comment: 'ssh', position: 3, ruleset: 'lab-default' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', port: '23', comment: 'telnet blocked', position: 4, ruleset: 'lab-default' },
-      { chain: 'INPUT', action: 'drop', proto: 'tcp', comment: 'default drop', position: 5, ruleset: 'lab-default' },
-    ],
-  })
-  await audit('seed', 'seeded demo rulesets: edge-fleet (nftables, public-webserver, active, 8 rules) + lab-default (iptables, inactive, 5 rules)')
-}
-
-// ── nft script synthesis ────────────────────────────────────────────
+// ── nft / iptables script synthesis (real syntax) ────────────────────
 
 interface RuleRow {
   chain: string
@@ -234,7 +213,7 @@ interface RuleRow {
 }
 
 function nftLine(r: RuleRow): string {
-  const cmt = r.comment ? ` comment "${r.comment.replace(/"/g, "'")}"` : ''
+  const cmt = r.comment ? ` comment "${safeComment(r.comment)}"` : ''
   if (r.port === null && r.source === null && r.comment?.includes('established')) {
     return `ct state established,related ${r.action}${cmt}`
   }
@@ -244,6 +223,11 @@ function nftLine(r: RuleRow): string {
   const verdict = r.action === 'log' ? `log${cmt}` : `${r.action}${cmt}`
   return `${src}${dst}${verdict}`.trim()
 }
+
+/** Rule comments land inside double-quoted nft/iptables script strings —
+ *  control characters and quotes are stripped at render time so a stored
+ *  comment can never break out and inject directives. */
+const safeComment = (c: string): string => c.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/"/g, "'").slice(0, 160)
 
 function nftScript(ruleset: { name: string; backend: string; template: string | null }, rules: RuleRow[]): string {
   const input = rules.filter((r) => r.chain === 'INPUT').map(nftLine)
@@ -286,7 +270,7 @@ function iptablesScript(ruleset: { name: string; backend: string }, rules: RuleR
     `:OUTPUT ACCEPT [0:0]`,
   ]
   for (const r of rules) {
-    const cmt = r.comment ? ` -m comment --comment "${r.comment.replace(/"/g, "'")}"` : ''
+    const cmt = r.comment ? ` -m comment --comment "${safeComment(r.comment)}"` : ''
     let spec = ''
     if (r.comment?.includes('established')) spec = '-m conntrack --ctstate ESTABLISHED,RELATED'
     else if (r.source === '127.0.0.1/8') spec = '-i lo'
@@ -301,24 +285,78 @@ function iptablesScript(ruleset: { name: string; backend: string }, rules: RuleR
   return lines.join('\n')
 }
 
-// ── commands ────────────────────────────────────────────────────────
+// ── privilege + real apply ───────────────────────────────────────────
+
+function isRoot(): boolean {
+  return typeof process.geteuid === 'function' && process.geteuid() === 0
+}
+
+function havePasswordlessSudo(): Promise<boolean> {
+  return cached('sudo:-n:true', 60_000, async () => (await run('sudo', ['-n', 'true'], 3000)).rc === 0)
+}
+
+/** template scripts ship in the tarball + install under the share dir */
+const TEMPLATE_SCRIPT_ROOTS = [
+  '/usr/share/sysdeck/firewall/templates',
+  '/usr/local/share/sysdeck/firewall/templates',
+  '/usr/lib/sysdeck/firewall/templates',
+  `${process.cwd()}/../firewall/templates`, // dev tree
+]
+
+async function templateScriptPath(template: string): Promise<string | null> {
+  for (const root of TEMPLATE_SCRIPT_ROOTS) {
+    const p = `${root}/${template}.sh`
+    try {
+      await access(p)
+      return p
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+async function applyForReal(
+  script: string,
+  backend: string,
+): Promise<{ ok: boolean; command: string; via: string; output: string; error?: string }> {
+  // The ruleset rides stdin: `nft -f -` and `iptables-restore` both read
+  // scripts from the pipe, so no predictable /tmp path exists to hijack.
+  const bin = backend === 'iptables' ? 'iptables-restore' : 'nft'
+  const args = backend === 'iptables' ? [] : ['-f', '-']
+  const command = `${bin} ${args.join(' ')} < ruleset`
+  let res: { rc: number; stdout: string; stderr: string }
+  if (isRoot()) {
+    res = await run(bin, args, 30_000, { input: script })
+    return { ok: res.rc === 0, command, via: 'root', output: res.stdout || res.stderr, error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  if (await havePasswordlessSudo()) {
+    res = await run('sudo', ['-n', bin, ...args], 30_000, { input: script })
+    return { ok: res.rc === 0, command: `sudo -n ${command}`, via: 'sudo -n', output: res.stdout || res.stderr, error: res.rc === 0 ? undefined : res.stderr.trim().split('\n')[0] }
+  }
+  return { ok: false, command, via: 'none', output: '', error: 'org.sysdeck.firewall.modify — not authorized: this console process is unprivileged and has no passwordless sudo' }
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   templates: async () => {
-    await ensureSeeded()
     return ok(
-      { templates: TEMPLATES.map(({ id, name, description, ports, backend }) => ({ id, name, description, ports, backend })), count: TEMPLATES.length },
-      SOURCE,
-      NOTE,
+      {
+        templates: TEMPLATES.map(({ id, name, description, ports, backend }) => ({ id, name, description, ports, backend })),
+        count: TEMPLATES.length,
+        scriptsShipped: TEMPLATES.filter((t) => existsSync(`${process.cwd()}/../firewall/templates/${t.id}.sh`) || t.id === 'cilium').length,
+      },
+      'live',
+      'template topologies ported verbatim from firewall/templates/*.sh — the executable scripts ship in the tarball and install to /usr/share/sysdeck/firewall/templates/',
     )
   },
 
   rulesets: async () => {
-    await ensureSeeded()
     const rulesets = await db.fwRuleset.findMany({ orderBy: { name: 'asc' } })
-    const counts = await Promise.all(
-      rulesets.map((r) => db.fwRule.count({ where: { ruleset: r.name } })),
-    )
+    const counts = await Promise.all(rulesets.map((r) => db.fwRule.count({ where: { ruleset: r.name } })))
+    const haveNft = await which('nft')
+    const haveIpt = await which('iptables')
     return ok(
       {
         rulesets: rulesets.map((r, i) => ({
@@ -331,14 +369,50 @@ export const commands = {
           ruleCount: counts[i],
         })),
         count: rulesets.length,
+        firewalls: { nftables: haveNft, iptables: haveIpt },
       },
-      SOURCE,
-      NOTE,
+      'live',
+      rulesets.length
+        ? 'operator rulesets (created from this panel — never seeded)'
+        : `no rulesets yet — create one from a template below; host firewall binaries: ${haveNft ? 'nft ✓' : 'nft ✗'} ${haveIpt ? 'iptables ✓' : 'iptables ✗'}`,
+    )
+  },
+
+  live: async () => {
+    // the host's REAL active ruleset, straight from the firewall binary
+    if (await which('nft')) {
+      const r = await run('nft', ['-j', 'list', 'ruleset'], 15_000)
+      if (r.rc === 0) {
+        let tables = 0
+        try {
+          const parsed = JSON.parse(r.stdout) as unknown[]
+          tables = parsed.length
+        } catch {
+          tables = r.stdout.split('"table ').length - 1
+        }
+        return ok({ backend: 'nftables', tables, json: r.stdout.slice(0, 200_000) }, 'live', 'real `nft -j list ruleset`')
+      }
+      return failE(`nft -j list ruleset failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root'}`)
+    }
+    if (await which('iptables')) {
+      const r = await run('iptables-save', [], 15_000)
+      if (r.rc === 0) {
+        return ok(
+          { backend: 'iptables', tables: (r.stdout.match(/^\*filter|^\*nat|^\*mangle/gm) ?? []).length, text: r.stdout.slice(0, 200_000) },
+          'live',
+          'real iptables-save output',
+        )
+      }
+      return failE(`iptables-save failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root'}`)
+    }
+    return ok(
+      { backend: null, tables: 0, note: 'neither nft nor iptables is present on this host — nothing to read; the panel below still manages ruleset definitions and can apply them the moment a firewall binary exists' },
+      'live',
+      'no firewall binary detected (probed: nft, iptables)',
     )
   },
 
   rules: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const ruleset = String(args.ruleset ?? '')
     if (!ruleset) return failE('ruleset is required')
     const rs = await db.fwRuleset.findUnique({ where: { name: ruleset } })
@@ -346,12 +420,11 @@ export const commands = {
     const rules = await db.fwRule.findMany({ where: { ruleset }, orderBy: { position: 'asc' } })
     return ok(
       { ruleset: { name: rs.name, backend: rs.backend, template: rs.template, active: rs.active, appliedAt: rs.appliedAt }, rules, count: rules.length },
-      SOURCE,
+      'live',
     )
   },
 
   create: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const name = String(args.name ?? '').trim()
     const backend = String(args.backend ?? 'nftables').trim()
     const template = args.template ? String(args.template).trim() : null
@@ -367,46 +440,76 @@ export const commands = {
       if (!tpl) return failE(`unknown template '${template}' — available: ${TEMPLATES.map((t) => t.id).join(', ')}`)
       tplRules = tpl.rules
     }
-    const row = await db.fwRuleset.create({
-      data: { name, backend, template, active: false },
-    })
+    const row = await db.fwRuleset.create({ data: { name, backend, template, active: false } })
     if (tplRules.length > 0) {
-      await db.fwRule.createMany({
-        data: tplRules.map((r, i) => ({ ...r, ruleset: name, position: i + 1 })),
-      })
+      await db.fwRule.createMany({ data: tplRules.map((r, i) => ({ ...r, ruleset: name, position: i + 1 })) })
     }
     await audit('create', `ruleset ${name} (backend ${backend}${template ? `, from template ${template}` : ''}) with ${tplRules.length} rules`)
-    return ok({ ruleset: { name: row.name, backend: row.backend, template: row.template, active: row.active }, rules: tplRules.length }, SOURCE)
+    return ok({ ruleset: { name: row.name, backend: row.backend, template: row.template, active: row.active }, rules: tplRules.length }, 'live')
   },
 
   apply: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const name = String(args.name ?? '').trim()
     const dryRun = args.dryRun === true
     if (!name) return failE('name is required')
     const rs = await db.fwRuleset.findUnique({ where: { name } })
     if (!rs) return failE(`ruleset '${name}' not found`)
     const rules = (await db.fwRule.findMany({ where: { ruleset: name }, orderBy: { position: 'asc' } })) as unknown as RuleRow[]
+
+    // template-derived ruleset with a shipped executable script → run the REAL script
+    const scriptPath = rs.template ? await templateScriptPath(rs.template) : null
+    if (scriptPath && rs.backend !== 'iptables' && !dryRun) {
+      let res: { rc: number; stdout: string; stderr: string }
+      if (isRoot()) res = await run(scriptPath, [], 60_000)
+      else if (await havePasswordlessSudo()) res = await run('sudo', ['-n', scriptPath], 60_000)
+      else {
+        return failE(
+          `org.sysdeck.firewall.modify — not authorized: run as root or grant sudo -n to execute:\n  ${scriptPath}`,
+          'hybrid',
+        )
+      }
+      await audit('apply', `ruleset ${name} ACTIVATED via shipped template script ${scriptPath} (rc=${res.rc})`)
+      if (res.rc !== 0) return failE(`${scriptPath} failed — ${res.stderr.trim().split('\n')[0] ?? 'script error'}`)
+      await db.fwRuleset.updateMany({ where: { active: true, NOT: { name } }, data: { active: false } })
+      const row = await db.fwRuleset.update({ where: { name }, data: { active: true, appliedAt: new Date() } })
+      return ok({ ruleset: row, applied: true, rules: rules.length, command: scriptPath, via: 'template script' }, 'live', `executed the shipped executable template ${scriptPath}`)
+    }
+
+    // dry-run previews EXACTLY what apply would load: the shipped template
+    // script when one exists, otherwise the synthesized ruleset text.
     if (dryRun) {
+      if (scriptPath) {
+        const shipped = await readText(scriptPath)
+        return ok(
+          { name, backend: rs.backend, script: shipped.slice(0, 200_000), shipped: scriptPath, rules: rules.length },
+          'live',
+          `dry run — apply executes the shipped template script ${scriptPath} (shown verbatim); nothing was loaded`,
+        )
+      }
+      const script = rs.backend === 'iptables' ? iptablesScript(rs, rules) : nftScript(rs, rules)
       return ok(
-        { name, backend: rs.backend, script: rs.backend === 'iptables' ? iptablesScript(rs, rules) : nftScript(rs, rules), rules: rules.length },
-        SOURCE,
+        { name, backend: rs.backend, script, rules: rules.length },
+        'live',
         'dry run — the exact ruleset text that would be applied (nft/iptables syntax), nothing was loaded',
       )
     }
-    // activating a ruleset deactivates the previously active one
+
+    const script = rs.backend === 'iptables' ? iptablesScript(rs, rules) : nftScript(rs, rules)
+    const res = await applyForReal(script, rs.backend)
+    await audit('apply', `ruleset ${name} → ${res.command} via ${res.via} — ${res.ok ? 'APPLIED' : 'FAILED'}`)
+    if (!res.ok) {
+      return failE(`${res.error ?? 'apply failed'} — the operator command:\n  ${res.command}`, 'hybrid')
+    }
     await db.fwRuleset.updateMany({ where: { active: true, NOT: { name } }, data: { active: false } })
     const row = await db.fwRuleset.update({ where: { name }, data: { active: true, appliedAt: new Date() } })
-    await audit('apply', `ruleset ${name} ACTIVATED (${rules.length} rules, backend ${rs.backend}) — previously active ruleset deactivated`)
     return ok(
-      { ruleset: row, applied: true, rules: rules.length },
-      SOURCE,
-      'demo activation — nft/iptables are not present in the sandbox, only the registry state changed',
+      { ruleset: row, applied: true, rules: rules.length, command: res.command, via: res.via, output: res.output.split('\n').slice(-5).join('\n') },
+      'live',
+      `real apply via ${res.via}`,
     )
   },
 
   delete: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const name = String(args.name ?? '').trim()
     if (!name) return failE('name is required')
     const rs = await db.fwRuleset.findUnique({ where: { name } })
@@ -415,11 +518,10 @@ export const commands = {
     await db.fwRule.deleteMany({ where: { ruleset: name } })
     await db.fwRuleset.delete({ where: { name } })
     await audit('delete', `ruleset ${name} deleted (all rules removed)`)
-    return ok({ deleted: { name } }, SOURCE)
+    return ok({ deleted: { name } }, 'live')
   },
 
   addRule: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const ruleset = String(args.ruleset ?? '').trim()
     const chain = String(args.chain ?? 'INPUT').trim().toUpperCase()
     const action = String(args.action ?? '').trim().toLowerCase()
@@ -432,24 +534,24 @@ export const commands = {
     if (!['accept', 'drop', 'reject', 'log'].includes(action)) return failE('action must be accept, drop, reject or log')
     if (port !== null && !/^\d+([:-]\d+)?$/.test(port)) return failE(`invalid port '${port}' — a number or a range like 3000:3100`)
     if (source && !/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(source)) return failE(`invalid source '${source}' — expected a CIDR like 192.168.1.0/24`)
+    if (comment && !/^[\x20-\x7e]{1,120}$/.test(comment)) return failE('invalid comment — printable ASCII only, no newlines or control characters, max 120 chars')
     const rs = await db.fwRuleset.findUnique({ where: { name: ruleset } })
     if (!rs) return failE(`ruleset '${ruleset}' not found`)
     const last = await db.fwRule.findFirst({ where: { ruleset }, orderBy: { position: 'desc' } })
     const position = (last?.position ?? 0) + 1
     const row = await db.fwRule.create({ data: { ruleset, chain, action, proto, port, source, comment, position } })
     await audit('addRule', `ruleset ${ruleset}: +${chain} ${action} ${proto}${port ? ` dport ${port}` : ''}${source ? ` from ${source}` : ''} (position ${position})`)
-    return ok({ rule: row, ruleset }, SOURCE)
+    return ok({ rule: row, ruleset }, 'live')
   },
 
   deleteRule: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const id = String(args.id ?? '').trim()
     if (!id) return failE('id is required')
     const rule = await db.fwRule.findUnique({ where: { id } })
     if (!rule) return failE('rule not found')
     await db.fwRule.delete({ where: { id } })
     await audit('deleteRule', `ruleset ${rule.ruleset}: removed position ${rule.position} (${rule.chain} ${rule.action}${rule.port ? ` ${rule.port}` : ''})`)
-    return ok({ deleted: { id, ruleset: rule.ruleset, position: rule.position } }, SOURCE)
+    return ok({ deleted: { id, ruleset: rule.ruleset, position: rule.position } }, 'live')
   },
 }
 

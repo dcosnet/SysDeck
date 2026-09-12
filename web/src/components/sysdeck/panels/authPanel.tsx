@@ -1,10 +1,11 @@
 'use client'
 
 // Auth panel — PKCS#11 smartcard identity (readers, certificates, session).
-// opensc/pcsc-lite are absent in this sandbox, so the bridge keeps a demo
-// inventory (honestly labeled): 2 readers, 4 realistic certs (one expiring
-// in 12 days, one expired), and a simulated C_Login with the ISO 7816
-// '6982' status word on wrong PINs. Demo PIN: 123456.
+// LIVE: readers come from the real lsusb device list + pcscd service
+// state; certificates from pkcs11-tool --list-certificates when a token
+// is present (opensc required), else the operator's real ~/.ssh public
+// keys; unlock runs a real `pkcs11-tool --login` against the chosen
+// reader. No opensc/pcsc-lite → honest empty inventory + install hints.
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -125,8 +126,9 @@ function UnlockDialog({ reader, onUnlock }: { reader: Reader; onUnlock: (pin: st
             unlock <span className="text-primary">{reader.name}</span>
           </DialogTitle>
           <DialogDescription>
-            PKCS#11 <Mono>C_Login</Mono> (CKU_USER, slot 0) — card PIN verification. Wrong PINs return the ISO 7816{' '}
-            <Mono>SW=6982</Mono> status word and burn an attempt (3 before the card locks). Demo PIN: 123456.
+            PKCS#11 <Mono>C_Login</Mono> (CKU_USER, slot 0) — card PIN verification through the real{' '}
+            <Mono>pkcs11-tool --login</Mono>. Wrong PINs return the ISO 7816 <Mono>SW=6982</Mono> status word and burn
+            an attempt (typically 3 before the card locks — check your token&apos;s PIN policy).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -212,7 +214,7 @@ export default function AuthPanel() {
       <PanelHeader
         title="Smartcard Auth"
         subtitle="PKCS#11 readers, certificates and login sessions — the identity layer the cockpit edition read via opensc"
-        source="demo"
+        source={readersQ.data?.source ?? 'live'}
       />
 
       {/* stat cards */}
@@ -285,7 +287,7 @@ export default function AuthPanel() {
 
           <InstallHint
             bin="pkcs11-tool / pcscd"
-            distro="demo"
+            distro="debian"
             hint={'apt install opensc pcsc-lite\nsystemctl enable --now pcscd.socket\npkcs11-tool --list-token-slots'}
           />
         </div>
@@ -371,7 +373,8 @@ export default function AuthPanel() {
               )}
             />
             <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-              expiring &lt;30d amber · expired red — the VPN client cert is seeded 12 days out on purpose.
+              expiring &lt;30d amber · expired red — rows are the token&apos;s real certificates and this account&apos;s
+              ~/.ssh public keys, read live.
             </p>
           </PanelCard>
         </div>

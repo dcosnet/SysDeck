@@ -1,229 +1,359 @@
-// SysDeck bridge — jellyfin (demo media server)
+// SysDeck bridge — jellyfin (real media server bridge, all live)
 // Port of bridge/jellyfin.py semantics: the cockpit edition surfaced the
-// jellyfin systemd service state, port, web URL and libraries. No
-// jellyfin daemon exists in this sandbox, so the web edition keeps the
-// same surface over seeded MediaItem / MediaSession rows plus library
-// aggregates in SdKv (full catalog counts: 2.1k movies, 2.4k series
-// rows, 28k music tracks) — the item rows are a realistic sample.
+// jellyfin systemd service state, port, web URL and libraries. The web
+// edition does exactly that against the REAL host:
+//   - service state via systemctl is-active jellyfin.service
+//   - port from /etc/jellyfin/network.xml (default 8096)
+//   - version via the public /System/Info/Public endpoint (no auth)
+//   - libraries by scanning /var/lib/jellyfin/root/default/ (real file
+//     counts, real du sizes, real media extensions)
+//   - live sessions/playback via the Jellyfin API when the operator
+//     provides JELLYFIN_API_KEY (honest empty otherwise)
+//   - start/stop/restart run the real systemctl (privilege-gated)
+// Absent server → honest "not installed" with the install hint.
+import { ok, fail, run, which, readText } from './shared'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
-
-const SOURCE = 'demo' as const
-const NOTE = 'jellyfin daemon not present in sandbox — demo media inventory'
+import { readdir, stat } from 'fs/promises'
 
 function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+  return { ...fail(error), source: 'live' }
 }
 
 async function audit(action: string, detail: string) {
   await db.auditLog.create({ data: { module: 'jellyfin', action, detail } })
 }
 
-// ── library aggregates (SdKv) + item samples (MediaItem) ────────────
+const MEDIA_ROOT = '/var/lib/jellyfin/root/default'
+const VIDEO_EXT = new Set(['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mpg', '.mpeg', '.m4v'])
+const AUDIO_EXT = new Set(['.mp3', '.flac', '.wav', '.aac', '.ogg', '.m4a', '.opus', '.wma'])
+const API_KEY = process.env.JELLYFIN_API_KEY ?? ''
 
-interface Library {
+async function serviceState(): Promise<string> {
+  const r = await run('systemctl', ['is-active', 'jellyfin.service'], 5000)
+  return r.rc === 0 ? r.stdout.trim() : 'inactive'
+}
+
+async function webPort(): Promise<number> {
+  const xml = await readText('/etc/jellyfin/network.xml')
+  const m = xml.match(/<Port>(\d+)<\/Port>/)
+  return m ? Number(m[1]) : 8096
+}
+
+interface PublicInfo {
+  Version?: string
+  OperatingSystem?: string
+  ServerName?: string
+}
+
+async function publicInfo(port: number): Promise<PublicInfo | null> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/System/Info/Public`, { signal: AbortSignal.timeout(3000) })
+    if (!res.ok) return null
+    return (await res.json()) as PublicInfo
+  } catch {
+    return null
+  }
+}
+
+// ── real library scan ────────────────────────────────────────────────
+
+interface ScannedLib {
   name: string
   kind: string
   items: number
-  tracks?: number
+  tracks: number
   sizeMb: number
 }
 
-const LIBRARIES: Library[] = [
-  { name: 'Movies', kind: 'movie', items: 2148, sizeMb: 1843200 },
-  { name: 'TV Shows', kind: 'series', items: 2361, sizeMb: 3276800 },
-  { name: 'Music', kind: 'music', items: 1, tracks: 28412, sizeMb: 430080 },
-  { name: 'Photos', kind: 'photo', items: 304, sizeMb: 131072 },
-]
-
-const SAMPLE_MOVIES = [
-  { title: 'Blade Runner 2049', year: 2017, sizeMb: 58432, note: '2160p HDR10 Dolby Vision remux' },
-  { title: 'Dune: Part Two', year: 2024, sizeMb: 72704, note: '2160p HDR10+ remux' },
-  { title: 'The Matrix', year: 1999, sizeMb: 51200, note: '2160p HDR remux' },
-  { title: 'Interstellar', year: 2014, sizeMb: 18944, note: '1080p Blu-ray' },
-  { title: 'Arrival', year: 2016, sizeMb: 15360, note: '1080p Blu-ray' },
-  { title: 'Mad Max: Fury Road', year: 2015, sizeMb: 22016, note: '2160p HDR' },
-  { title: '2001: A Space Odyssey', year: 1968, sizeMb: 17408, note: '1080p Blu-ray' },
-  { title: 'Blade Runner (Final Cut)', year: 1982, sizeMb: 10240, note: '1080p Blu-ray' },
-  { title: 'Sicario', year: 2015, sizeMb: 9216, note: '1080p Blu-ray' },
-  { title: 'Ex Machina', year: 2014, sizeMb: 12288, note: '1080p Blu-ray' },
-  { title: 'Her', year: 2013, sizeMb: 7168, note: '1080p Blu-ray' },
-  { title: 'The Empire Strikes Back', year: 1980, sizeMb: 8960, note: '1080p Blu-ray (Despecialized)' },
-]
-
-const SAMPLE_SERIES = [
-  { title: 'Severance', year: 2022, sizeMb: 46080, note: 'S1+S2 1080p' },
-  { title: 'The Expanse', year: 2015, sizeMb: 96256, note: 'S1-S6 1080p' },
-  { title: 'Andor', year: 2022, sizeMb: 51200, note: 'S1+S2 1080p' },
-  { title: 'Better Call Saul', year: 2015, sizeMb: 88064, note: 'S1-S6 1080p' },
-  { title: 'Dark', year: 2017, sizeMb: 40960, note: 'S1-S3 1080p' },
-  { title: 'Foundation', year: 2021, sizeMb: 58368, note: 'S1+S2 1080p' },
-  { title: 'The Bear', year: 2022, sizeMb: 14336, note: 'S1-S3 1080p' },
-  { title: 'Shōgun', year: 2024, sizeMb: 52224, note: 'S1 1080p' },
-]
-
-const SAMPLE_PHOTOS = [
-  { title: 'Iceland 2025', year: 2025, sizeMb: 2048, note: '402 RAW + timelapse' },
-  { title: 'Studio portraits', year: 2024, sizeMb: 1024, note: 'portfolio selects' },
-  { title: 'Family archive 1990s', year: 1994, sizeMb: 4096, note: 'scanned negatives' },
-  { title: 'Aurora timelapse', year: 2025, sizeMb: 6144, note: '4K prores' },
-]
-
-// session transport methods (MediaSession rows carry user/device/item/
-// state; the play method lives here so summary can count transcodes).
-// Keyed by user so re-seeds can't orphan entries.
-const SESSION_METHODS: Record<string, { method: string; detail: string }> = {
-  default: { method: 'direct', detail: 'direct play 1080p' },
-}
-
-async function ensureSeeded(): Promise<void> {
-  // concurrency-safe: panel agents may poll while this seeds — every
-  // step is guarded + idempotent, races degrade to no-ops.
-  if ((await db.mediaItem.count()) === 0) {
+async function scanLibrary(dir: string, name: string): Promise<ScannedLib> {
+  let items = 0
+  let tracks = 0
+  let bytes = 0
+  const kind = name.toLowerCase().includes('music') || name.toLowerCase().includes('audio') ? 'music' : name.toLowerCase().includes('photo') || name.toLowerCase().includes('photo') ? 'photos' : name.toLowerCase().includes('show') || name.toLowerCase().includes('series') ? 'tvshows' : 'movies'
+  async function walk(d: string, depth: number): Promise<void> {
+    if (depth > 4) return
+    let entries: import('fs').Dirent[]
     try {
-      await db.mediaItem.createMany({
-        data: [
-          ...SAMPLE_MOVIES.map((m) => ({ kind: 'movie', title: m.title, library: 'Movies', sizeMb: m.sizeMb, year: m.year, playCount: Math.floor(Math.random() * 9) })),
-          ...SAMPLE_SERIES.map((s) => ({ kind: 'series', title: s.title, library: 'TV Shows', sizeMb: s.sizeMb, year: s.year, playCount: Math.floor(Math.random() * 30) })),
-          { kind: 'music', title: 'Music Library (28,412 tracks)', library: 'Music', sizeMb: 430080, year: null, playCount: 8421 },
-          ...SAMPLE_PHOTOS.map((p) => ({ kind: 'photo', title: p.title, library: 'Photos', sizeMb: p.sizeMb, year: p.year, playCount: 0 })),
-        ],
-      })
+      entries = await readdir(d, { withFileTypes: true })
     } catch {
-      /* concurrent seed won */
+      return
+    }
+    for (const e of entries) {
+      const full = `${d}/${e.name}`
+      if (e.isDirectory()) {
+        await walk(full, depth + 1)
+        continue
+      }
+      const ext = e.name.slice(e.name.lastIndexOf('.')).toLowerCase()
+      if (!VIDEO_EXT.has(ext) && !AUDIO_EXT.has(ext)) continue
+      items++
+      if (AUDIO_EXT.has(ext)) tracks++
+      try {
+        const s = await stat(full)
+        bytes += s.size
+      } catch {
+        continue
+      }
     }
   }
-  if ((await db.mediaSession.count()) === 0) {
-    try {
-      await db.mediaSession.createMany({
-        data: [
-          { user: 'jeremy', device: 'iPhone 16', item: 'Dune: Part Two', state: 'playing', startedAt: new Date(Date.now() - 640000) },
-          { user: 'maya', device: 'Firefox on Linux', item: 'Severance S02E05', state: 'paused', startedAt: new Date(Date.now() - 4100000) },
-          { user: 'guest-tv', device: 'LG webOS TV', item: 'Jellyfin home', state: 'idle', startedAt: new Date(Date.now() - 180000) },
-        ],
-      })
-    } catch {
-      /* concurrent seed won */
-    }
+  await walk(dir, 0)
+  return { name, kind, items, tracks, sizeMb: Math.round(bytes / 1048576) }
+}
+
+async function scanLibraries(): Promise<ScannedLib[]> {
+  let entries: import('fs').Dirent[]
+  try {
+    entries = await readdir(MEDIA_ROOT, { withFileTypes: true })
+  } catch {
+    return []
   }
-  // methods keyed by user (stable across re-seeds)
-  await db.sdKv.upsert({
-    where: { key: 'jellyfin.methods' },
-    create: {
-      key: 'jellyfin.methods',
-      value: JSON.stringify({
-        jeremy: { method: 'transcode', detail: '4K HDR → 1080p H.264 (remote, 18 Mbps limit)' },
-        maya: { method: 'direct', detail: 'direct play 1080p' },
-        'guest-tv': { method: 'idle', detail: 'idle on home screen' },
-      }),
-    },
-    update: {},
-  })
+  const libs: ScannedLib[] = []
+  for (const e of entries) {
+    if (!e.isDirectory()) continue
+    libs.push(await scanLibrary(`${MEDIA_ROOT}/${e.name}`, e.name))
+  }
+  return libs
 }
 
-async function getMethods(): Promise<Record<string, { method: string; detail: string }>> {
-  const row = await db.sdKv.findUnique({ where: { key: 'jellyfin.methods' } })
-  return row ? (JSON.parse(row.value) as typeof SESSION_METHODS) : SESSION_METHODS
+// ── live sessions (API key gated — honest empty without one) ─────────
+
+interface JfSession {
+  Id: string
+  UserName?: string
+  DeviceName?: string
+  NowPlayingItem?: { Name?: string }
+  PlayState?: {IsPaused?: boolean; PlayMethod?: string}
 }
 
-// ── commands ────────────────────────────────────────────────────────
+async function liveSessions(port: number): Promise<JfSession[] | null> {
+  if (!API_KEY) return null
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/Sessions?api_key=${API_KEY}`, { signal: AbortSignal.timeout(3000) })
+    if (!res.ok) return null
+    return (await res.json()) as JfSession[]
+  } catch {
+    return null
+  }
+}
+
+// ── commands ─────────────────────────────────────────────────────────
 
 export const commands = {
   summary: async () => {
-    await ensureSeeded()
-    const sessions = await db.mediaSession.findMany()
-    const methods = await getMethods()
-    const transcode = sessions.filter((s) => methods[s.user]?.method === 'transcode' && s.state === 'playing').length
-    const items = LIBRARIES.filter((l) => l.kind !== 'music').reduce((sum, l) => sum + l.items, 0)
+    const installed = (await which('jellyfin')) || (await serviceState()).includes('active') || await readText('/etc/jellyfin/network.xml').then((t) => t.length > 0)
+    const svc = await serviceState()
+    const port = await webPort()
+    const info = await publicInfo(port)
+    if (!installed && !info) {
+      return ok(
+        { installed: false, service: svc, libraries: 0, items: 0, tracks: 0, sessions: 0, playing: 0, transcode: 0, totalSizeMb: 0 },
+        'live',
+        'jellyfin not detected on this host — install it (Arch: pacman -S jellyfin · Debian: apt install jellyfin) and the service, port, version and libraries go live here',
+      )
+    }
+    const libs = await scanLibraries()
+    const sessions = (await liveSessions(port)) ?? []
+    const playing = sessions.filter((s) => s.NowPlayingItem).length
     return ok(
       {
-        libraries: LIBRARIES.length,
-        items,
-        tracks: LIBRARIES.find((l) => l.kind === 'music')?.tracks ?? 0,
+        installed: true,
+        service: svc,
+        port,
+        version: info?.Version ?? null,
+        serverName: info?.ServerName ?? null,
+        libraries: libs.length,
+        items: libs.reduce((a, l) => a + l.items, 0),
+        tracks: libs.reduce((a, l) => a + l.tracks, 0),
         sessions: sessions.length,
-        playing: sessions.filter((s) => s.state === 'playing').length,
-        transcode,
-        totalSizeMb: LIBRARIES.reduce((sum, l) => sum + l.sizeMb, 0),
+        playing,
+        transcode: sessions.filter((s) => s.PlayState?.PlayMethod === 'Transcode').length,
+        totalSizeMb: libs.reduce((a, l) => a + l.sizeMb, 0),
       },
-      SOURCE,
-      NOTE,
+      'live',
+      `real systemd state + ${port} public-info probe + ${MEDIA_ROOT} scan${API_KEY ? ' + live Sessions API' : ' (set JELLYFIN_API_KEY for live sessions/playback control)'}`,
     )
   },
 
   libraries: async () => {
-    await ensureSeeded()
-    const rows = await db.mediaItem.findMany()
-    const libraries = LIBRARIES.map((l) => {
-      const sample = rows.filter((r) => r.library === l.name)
-      const sampleSizeMb = sample.reduce((sum, r) => sum + r.sizeMb, 0)
-      return {
-        ...l,
-        sizeHuman: `${(l.sizeMb / 1024 / 1024).toFixed(1)} TB`.replace('0.4 TB', '420 GB'),
-        sampleItems: sample.length,
-        sampleSizeMb,
-      }
-    })
-    return ok({ libraries, count: libraries.length }, SOURCE, NOTE + ' — aggregate counts in SdKv, item rows are a sample')
-  },
-
-  items: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
-    const library = String(args.library ?? '')
-    const limit = Math.max(1, Math.min(200, Number(args.limit) || 50))
-    if (!library) return failE('library is required (Movies | TV Shows | Music | Photos)')
-    if (!LIBRARIES.some((l) => l.name === library)) return failE(`unknown library '${library}'`)
-    const rows = await db.mediaItem.findMany({ where: { library }, orderBy: { title: 'asc' }, take: limit })
+    const libs = await scanLibraries()
+    if (!libs.length) {
+      const svc = await serviceState()
+      return ok({ libraries: [], count: 0 }, 'live', svc === 'active' ? `no libraries under ${MEDIA_ROOT} yet — add one in the Jellyfin dashboard` : 'jellyfin is not active — start the service to scan its libraries')
+    }
     return ok(
       {
-        library,
-        items: rows.map((r) => ({ ...r, sizeHuman: `${(r.sizeMb / 1024).toFixed(1)} GB` })),
-        returned: rows.length,
-        note: 'sample rows — full catalog is aggregate-only',
+        libraries: libs.map((l) => ({
+          name: l.name,
+          kind: l.kind,
+          items: l.items,
+          tracks: l.tracks,
+          sizeMb: l.sizeMb,
+          sizeHuman: fmtSize(l.sizeMb),
+          sampleItems: Math.min(l.items, 200),
+        })),
+        count: libs.length,
       },
-      SOURCE,
-      NOTE,
+      'live',
+      `real scan of ${MEDIA_ROOT}`,
     )
   },
 
   sessions: async () => {
-    await ensureSeeded()
-    const rows = await db.mediaSession.findMany({ orderBy: { startedAt: 'desc' } })
-    const methods = await getMethods()
+    const port = await webPort()
+    const live = await liveSessions(port)
+    if (live === null) {
+      return ok(
+        { sessions: [], count: 0 },
+        'live',
+        API_KEY ? `Sessions API unreachable at 127.0.0.1:${port}` : 'live sessions need a Jellyfin API key — set JELLYFIN_API_KEY (Jellyfin dashboard → API Keys) and this goes live',
+      )
+    }
+    const now = Date.now()
     return ok(
       {
-        sessions: rows.map((s) => ({
-          ...s,
-          method: methods[s.user]?.method ?? 'direct',
-          methodDetail: methods[s.user]?.detail ?? 'direct play',
-        })),
-        count: rows.length,
+        sessions: live
+          .filter((s) => s.UserName || s.NowPlayingItem)
+          .map((s) => ({
+            id: s.Id,
+            user: s.UserName ?? '',
+            device: s.DeviceName ?? '',
+            item: s.NowPlayingItem?.Name ?? '',
+            state: s.NowPlayingItem ? (s.PlayState?.IsPaused ? 'paused' : 'playing') : 'idle',
+            startedAt: new Date(now).toISOString(),
+            method: s.PlayState?.PlayMethod === 'Transcode' ? 'transcode' : s.NowPlayingItem ? 'direct' : 'idle',
+            methodDetail: s.PlayState?.PlayMethod ?? '',
+          })),
+        count: live.length,
       },
-      SOURCE,
-      NOTE,
+      'live',
+      'live Jellyfin Sessions API',
     )
   },
 
+  items: async (args: Record<string, unknown>) => {
+    const library = String(args.library ?? '')
+    const limit = Math.max(1, Math.min(500, Number(args.limit) || 200))
+    const dir = `${MEDIA_ROOT}/${library}`
+    let entries: import('fs').Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return failE(`library '${library}' not found under ${MEDIA_ROOT}`)
+    }
+    const items: {
+      id: string
+      kind: string
+      title: string
+      library: string
+      sizeMb: number
+      year?: number
+      addedAt: string
+      playCount: number
+      sizeHuman: string
+    }[] = []
+    async function walk(d: string, depth: number): Promise<void> {
+      if (depth > 4 || items.length >= limit) return
+      let ents: import('fs').Dirent[]
+      try {
+        ents = await readdir(d, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const e of ents) {
+        if (items.length >= limit) return
+        const full = `${d}/${e.name}`
+        if (e.isDirectory()) {
+          await walk(full, depth + 1)
+          continue
+        }
+        const ext = e.name.slice(e.name.lastIndexOf('.')).toLowerCase()
+        if (!VIDEO_EXT.has(ext) && !AUDIO_EXT.has(ext)) continue
+        try {
+          const s = await stat(full)
+          const sizeMb = Math.round(s.size / 1048576)
+          const year = e.name.match(/\((19|20)\d{2}\)/)?.[0]?.replace(/[()]/g, '')
+          items.push({
+            id: full.slice(MEDIA_ROOT.length),
+            kind: AUDIO_EXT.has(ext) ? 'audio' : 'video',
+            title: e.name.replace(/\.[^.]+$/, ''),
+            library,
+            sizeMb,
+            year: year ? Number(year) : undefined,
+            addedAt: new Date(s.mtimeMs).toISOString(),
+            playCount: 0,
+            sizeHuman: fmtSize(sizeMb),
+          })
+        } catch {
+          continue
+        }
+      }
+    }
+    await walk(dir, 0)
+    return ok({ library, items, returned: items.length }, 'live', `real file scan of ${dir}`)
+  },
+
   play: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const sessionId = String(args.sessionId ?? '')
     if (!sessionId) return failE('sessionId is required')
-    const session = await db.mediaSession.findUnique({ where: { id: sessionId } })
-    if (!session) return failE('session not found')
-    if (session.state === 'playing') return failE(`${session.user}'s session is already playing`)
-    const row = await db.mediaSession.update({ where: { id: sessionId }, data: { state: 'playing' } })
-    await audit('play', `session ${session.user} (${session.device}) — ${session.item} → playing`)
-    return ok({ session: row, state: 'playing' }, SOURCE, `${session.user} → playing — demo state transition`)
+    if (!API_KEY) return failE('playback control needs JELLYFIN_API_KEY — set it and the Sessions API goes live')
+    const port = await webPort()
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/Sessions/${sessionId}/Playing/Resume?api_key=${API_KEY}`, { method: 'POST', signal: AbortSignal.timeout(3000) })
+      if (!res.ok && res.status !== 204) return failE(`Jellyfin returned HTTP ${res.status}`)
+    } catch {
+      return failE('Jellyfin Sessions API unreachable')
+    }
+    return ok({ sessionId, state: 'playing' }, 'live')
   },
 
   pause: async (args: Record<string, unknown>) => {
-    await ensureSeeded()
     const sessionId = String(args.sessionId ?? '')
     if (!sessionId) return failE('sessionId is required')
-    const session = await db.mediaSession.findUnique({ where: { id: sessionId } })
-    if (!session) return failE('session not found')
-    if (session.state !== 'playing') return failE(`${session.user}'s session is not playing (state: ${session.state})`)
-    const row = await db.mediaSession.update({ where: { id: sessionId }, data: { state: 'paused' } })
-    await audit('pause', `session ${session.user} (${session.device}) — ${session.item} → paused`)
-    return ok({ session: row, state: 'paused' }, SOURCE, `${session.user} → paused — demo state transition`)
+    if (!API_KEY) return failE('playback control needs JELLYFIN_API_KEY — set it and the Sessions API goes live')
+    const port = await webPort()
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/Sessions/${sessionId}/Playing/Pause?api_key=${API_KEY}`, { method: 'POST', signal: AbortSignal.timeout(3000) })
+      if (!res.ok && res.status !== 204) return failE(`Jellyfin returned HTTP ${res.status}`)
+    } catch {
+      return failE('Jellyfin Sessions API unreachable')
+    }
+    return ok({ sessionId, state: 'paused' }, 'live')
   },
+
+  start: async () => {
+    const r = await run('systemctl', ['start', 'jellyfin.service'], 30_000)
+    await audit('start', `systemctl start jellyfin → rc=${r.rc}`)
+    if (r.rc !== 0) return failE(`systemctl start jellyfin failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root/polkit'}`)
+    return ok({ service: 'active' }, 'live')
+  },
+
+  stop: async () => {
+    const r = await run('systemctl', ['stop', 'jellyfin.service'], 30_000)
+    await audit('stop', `systemctl stop jellyfin → rc=${r.rc}`)
+    if (r.rc !== 0) return failE(`systemctl stop jellyfin failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root/polkit'}`)
+    return ok({ service: 'inactive' }, 'live')
+  },
+
+  restart: async () => {
+    const r = await run('systemctl', ['restart', 'jellyfin.service'], 60_000)
+    await audit('restart', `systemctl restart jellyfin → rc=${r.rc}`)
+    if (r.rc !== 0) return failE(`systemctl restart jellyfin failed — ${r.stderr.trim().split('\n')[0] ?? 'needs root/polkit'}`)
+    return ok({ service: 'active' }, 'live')
+  },
+
+  webStatus: async () => {
+    const svc = await serviceState()
+    const port = await webPort()
+    const info = await publicInfo(port)
+    return ok(
+      { running: svc === 'active', port, url: `http://127.0.0.1:${port}`, version: info?.Version ?? null },
+      'live',
+    )
+  },
+}
+
+function fmtSize(mb: number): string {
+  if (mb >= 1024 * 1024) return `${(mb / 1024 / 1024).toFixed(1)} TB`
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
+  return `${mb} MB`
 }

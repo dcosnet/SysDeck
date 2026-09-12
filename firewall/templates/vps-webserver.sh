@@ -422,7 +422,9 @@ SCRIPT_VERSION="2.1.0"
 NFT_CMD="$(command -v nft 2>/dev/null || echo "")"
 TABLE_NAME="firewall"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-RULES_FILE="/tmp/nftables-rules-${TIMESTAMP}.nft"
+RULES_FILE="$(mktemp /tmp/nftables-rules-XXXXXX.nft)"
+# a fresh mktemp name per run — no predictable /tmp path for a root write
+trap 'rm -f "$RULES_FILE"' EXIT
 SAVED_RULES="/etc/nftables/firewall.rules"
 
 # OS/Service detection results (set by detect functions)

@@ -1,10 +1,10 @@
 'use client'
 
 // Sensors panel — hardware readings grouped by adapter.
-// The bridge reads the same sysfs sources lm-sensors reads and — when
-// this container's sparse /sys/class/hwmon yields fewer than 3 real
-// readings — supplements a clearly-labeled demo chip set (reading rows
-// carry demo:true). Real rows are always first and unflagged.
+// The bridge prefers the real `sensors -j` output (lm-sensors, the same
+// source the cockpit edition reads) and falls back to the sysfs sources
+// lm-sensors itself reads (/sys/class/hwmon + /sys/class/thermal).
+// Every row is a real reading from this host — nothing is supplemented.
 
 import { useMemo } from 'react'
 import { Flame, Thermometer, Wind, Zap, Boxes } from 'lucide-react'
@@ -29,7 +29,6 @@ interface SensorReading {
   value: number
   unit: string
   critical?: number
-  demo?: boolean
 }
 
 interface SensorAdapter {
@@ -61,34 +60,18 @@ const TEMP_TONE_CLS: Record<'good' | 'warn' | 'bad', string> = {
   bad: 'text-red-500',
 }
 
-/** demo marker: italic + tooltip, per the honesty contract */
-function ReadingLabel({ r }: { r: SensorReading }) {
-  return r.demo ? (
-    <span className="italic text-muted-foreground" title="supplemented dataset">
-      {r.label}
-      <sup className="ml-0.5 font-mono text-[9px] not-italic text-amber-500/80" aria-label="demo reading">
-        d
-      </sup>
-    </span>
-  ) : (
-    <span>{r.label}</span>
-  )
-}
-
 // ── panel ────────────────────────────────────────────────────────────
 
 export default function SensorsPanel() {
   const q = useBridgeQuery<SensorsSummary>('sensors', 'summary', undefined, { refetchInterval: 5000 })
   const data = q.data?.data
-  const source = q.data?.source ?? 'hybrid'
+  const source = q.data?.source ?? 'live'
 
   const temps = useMemo(() => (data?.adapters ?? []).filter((a) => a.kind === 'temp'), [data])
   const fans = useMemo(() => (data?.adapters ?? []).filter((a) => a.kind === 'fan'), [data])
   const volts = useMemo(() => (data?.adapters ?? []).filter((a) => a.kind === 'voltage'), [data])
 
   const readings = data?.adapters?.reduce((n, a) => n + a.readings.length, 0) ?? 0
-  const demoCount =
-    data?.adapters?.reduce((n, a) => n + a.readings.filter((r) => r.demo).length, 0) ?? 0
   const hottest = useMemo(() => {
     let best: SensorReading | null = null
     for (const a of temps) {
@@ -133,11 +116,10 @@ export default function SensorsPanel() {
           hint="RPM tachometers"
         />
         <StatCard
-          label="Supplemented"
-          value={demoCount}
-          icon={<Flame className="h-4 w-4" aria-hidden />}
-          tone={demoCount > 0 ? 'warn' : 'default'}
-          hint={demoCount > 0 ? 'italic rows — demo chip set' : 'all rows real sysfs'}
+          label="Voltages"
+          value={volts.reduce((n, a) => n + a.readings.length, 0)}
+          icon={<Zap className="h-4 w-4" aria-hidden />}
+          hint="power rails"
         />
       </div>
 
@@ -166,9 +148,7 @@ export default function SensorsPanel() {
                   return (
                     <div key={r.label}>
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-sm">
-                          <ReadingLabel r={r} />
-                        </span>
+                        <span className="truncate text-sm">{r.label}</span>
                         <span className={`font-mono text-lg font-semibold tabular-nums ${TEMP_TONE_CLS[tone]}`}>
                           {r.value.toFixed(1)}
                           <span className="text-xs font-normal text-muted-foreground">{r.unit}</span>
@@ -214,9 +194,7 @@ export default function SensorsPanel() {
             renderRow={(r) => (
               <>
                 <TableCell className="font-mono text-xs text-muted-foreground">{r.adapter}</TableCell>
-                <TableCell className="text-sm">
-                  <ReadingLabel r={r} />
-                </TableCell>
+                <TableCell className="text-sm">{r.label}</TableCell>
                 <TableCell className="text-right font-mono text-sm tabular-nums">
                   {r.value.toFixed(0)} <span className="text-xs text-muted-foreground">{r.unit}</span>
                 </TableCell>
@@ -244,9 +222,7 @@ export default function SensorsPanel() {
               return (
                 <>
                   <TableCell className="font-mono text-xs text-muted-foreground">{r.adapter}</TableCell>
-                  <TableCell className="text-sm">
-                    <ReadingLabel r={r} />
-                  </TableCell>
+                  <TableCell className="text-sm">{r.label}</TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
                     <span className={off ? 'text-amber-500' : 'text-foreground'}>
                       {r.value.toFixed(2)} <span className="text-xs text-muted-foreground">{r.unit}</span>
@@ -259,13 +235,7 @@ export default function SensorsPanel() {
         </PanelCard>
       </div>
 
-      {demoCount > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          <sup className="font-mono text-[9px] text-amber-500/80">d</sup>{' '}
-          <span className="italic">italic readings are a supplemented dataset</span> —{' '}
-          {q.data?.note ?? '/sys/class/hwmon is sparse in this container, so the bridge models the chips every lm-sensors user knows (coretemp / nct6798 / it8620).'}
-        </p>
-      ) : null}
+      {q.data?.note ? <p className="text-xs text-muted-foreground">{q.data.note}</p> : null}
     </div>
   )
 }

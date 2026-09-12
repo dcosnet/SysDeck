@@ -172,8 +172,8 @@ export default function RunbookPanel() {
         </p>
         <CodeBlock
           label="bundle root"
-          code={`tar xjf sysdeck-0.4.1-master.tar.bz2
-cd sysdeck-0.4.1-master
+          code={`tar xjf sysdeck-0.4.3-master.tar.bz2
+cd sysdeck-0.4.3-master
 make web-dev        # bun install + db:push + fester + next dev :3000`}
         />
         <p className="text-xs">Then open <span className="font-mono">http://localhost:3000</span>. Done — that is the whole console.</p>
@@ -301,8 +301,8 @@ sudo systemctl enable --now sysdeck-web.service sysdeck-fester.service`}
           </table>
         </div>
         <Note>
-          With no <span className="font-mono">KLANKER_URL</span>, the AI Gateway panel renders clearly-badged demo
-          data (it flips to <span className="font-mono">LIVE</span> automatically when the gateway answers). On Arch,
+          With no <span className="font-mono">KLANKER_URL</span>, the AI Gateway panel renders honest empty tables
+          (it fills with <span className="font-mono">LIVE</span> data automatically when the gateway answers). On Arch,
           the gateway is one package away — <span className="font-mono">klanker-gate/arch/INSTALL-ARCH.md</span>.
         </Note>
       </Step>
@@ -349,9 +349,9 @@ location / {
               'The SQLite file was never created — run bun run db:push in web/, and check DATABASE_URL points at db/custom.db relative to the bundle layout.',
             ],
             ['Port 3000 already in use', 'Start with PORT=3001 bun run dev (or stop the other listener). Every URL stays relative.'],
-            ['Panels show a DEMO badge', 'Expected — the host lacks that backend (docker/kubectl/pacman). Panels badged LIVE read real /proc, /sys, lsblk data.'],
+            ['Panels show an N/A or empty inventory', 'Expected — the host lacks that backend (docker/kubectl/xmrig). Every panel reads real host state; absent backends yield honest empty tables, never fabricated rows. Install the backend and the panel fills on the next poll.'],
             ['Fester panel says service unreachable', 'The mini-service is not running: (cd mini-services/fester && bun run dev). REST is proxied server-side; only the event stream needs the port gateway.'],
-            ['AI Gateway shows demo data', 'Set KLANKER_URL + KLANKER_ADMIN_TOKEN in web/.env, restart, or install the gateway via klanker-gate/arch/INSTALL-ARCH.md.'],
+            ['AI Gateway tables are empty', 'Set KLANKER_URL + KLANKER_ADMIN_TOKEN in web/.env, restart, or install the gateway via klanker-gate/arch/INSTALL-ARCH.md.'],
             ['Edits not appearing', 'Dev recompiles on save (check dev.log); production needs bun run build again.'],
           ].map(([sym, fix]) => (
             <div key={sym} className="rounded-md border bg-card/60 p-2.5">

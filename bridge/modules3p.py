@@ -45,6 +45,10 @@ import subprocess
 import sys
 import tempfile
 import time
+
+# Scrubbed child environment: parsed output stays locale-stable and no
+# console process state leaks into children.
+SCRUBBED_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable
 
@@ -289,7 +293,10 @@ def _pacman_has(pkg: str) -> bool:
     # Treat missing pacman as "not installed via pacman" rather than crashing.
     if shutil.which("pacman") is None:
         return False
-    r = subprocess.run(["pacman", "-Q", pkg], capture_output=True, text=True)
+    r = subprocess.run(
+        ["pacman", "-Q", pkg], capture_output=True, text=True,
+        timeout=5, env=SCRUBBED_ENV,
+    )
     return r.returncode == 0
 
 
@@ -315,7 +322,7 @@ def missing_deps(entry: CatalogEntry) -> list[str]:
                 continue
             r = subprocess.run(
                 ["systemctl", "is-active", "--quiet", dep],
-                capture_output=True,
+                capture_output=True, timeout=5, env=SCRUBBED_ENV,
             )
             if r.returncode != 0:
                 out.append(dep)
@@ -465,6 +472,7 @@ def _install_pacman(entry: CatalogEntry) -> None:
     subprocess.run(
         ["pacman", "-S", "--noconfirm", "--needed", pkg],
         check=True, capture_output=True, text=True,
+        timeout=600, env=SCRUBBED_ENV,
     )
 
 
@@ -476,6 +484,7 @@ def _install_git(entry: CatalogEntry) -> None:
     subprocess.run(
         ["git", "clone", "--depth", "1", repo, dest],
         check=True, capture_output=True, text=True,
+        timeout=600, env=SCRUBBED_ENV,
     )
 
 
@@ -490,12 +499,14 @@ def _install_deb_tar(entry: CatalogEntry) -> None:
         subprocess.run(
             ["curl", "-fsSL", spec["url"], "-o", deb],
             check=True, capture_output=True, text=True,
+            timeout=600, env=SCRUBBED_ENV,
         )
         extract_dir = os.path.join(tmp, "extract")
         os.makedirs(extract_dir, exist_ok=True)
         subprocess.run(
             ["bsdtar", "-xf", deb, "-C", extract_dir],
             check=True, capture_output=True, text=True,
+            timeout=60, env=SCRUBBED_ENV,
         )
         data_tar = os.path.join(extract_dir, "data.tar.xz")
         if not os.path.exists(data_tar):
@@ -505,6 +516,7 @@ def _install_deb_tar(entry: CatalogEntry) -> None:
         subprocess.run(
             ["tar", "-xf", data_tar, "-C", dest, "--strip-components=4"],
             check=True, capture_output=True, text=True,
+            timeout=60, env=SCRUBBED_ENV,
         )
 
 
@@ -519,11 +531,13 @@ def _install_tarball(entry: CatalogEntry) -> None:
         subprocess.run(
             ["curl", "-fsSL", spec["url"], "-o", tarball],
             check=True, capture_output=True, text=True,
+            timeout=600, env=SCRUBBED_ENV,
         )
         subprocess.run(
             ["tar", "-xf", tarball, "-C", dest,
              f"--strip-components={spec.get('strip', 1)}"],
             check=True, capture_output=True, text=True,
+            timeout=60, env=SCRUBBED_ENV,
         )
 
 
@@ -543,6 +557,7 @@ def uninstall(entry_id: str) -> dict[str, Any]:
             subprocess.run(
                 ["pacman", "-R", "--noconfirm", pkg],
                 check=True, capture_output=True, text=True,
+                timeout=600, env=SCRUBBED_ENV,
             )
         else:
             dest = _dest_path(entry)

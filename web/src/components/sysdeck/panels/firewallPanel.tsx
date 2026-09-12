@@ -1,11 +1,12 @@
 'use client'
 
-// Firewall panel — nftables/iptables ruleset manager.
-// Bridge source is DEMO: the registry (rulesets/rules) is persisted in the
-// db, template topologies are ported verbatim from the cockpit edition's
-// firewall/templates/*.sh, and `apply` runs a dry-run first (the exact nft
-// script) before the registry activation — no nft binary exists in this
-// sandbox, so kernel-level apply is simulated and honestly labeled.
+// Firewall panel — nftables/iptables ruleset manager (production).
+// The bridge reads the host's REAL active ruleset (`nft -j list ruleset` /
+// iptables-save) on the live tab, persists the operator's ruleset
+// registry in the db, and `apply` executes the REAL thing — the shipped
+// template script for template-derived rulesets, else the synthesized
+// nft/iptables-restore script — privilege-gated (root / sudo -n), honest
+// refusal otherwise. Dry-run shows the exact ruleset text.
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
+import type { DataSource } from '@/lib/sysdeck/types'
 import {
   DataTable,
   ErrorCard,
@@ -406,8 +408,10 @@ function ApplyDialog({ name, onApply }: { name: string; onApply: (name: string) 
             <pre className="p-3 font-mono text-xs leading-relaxed text-zinc-300">{script ?? ''}</pre>
           </ScrollArea>
           <p className="text-xs text-muted-foreground">
-            Confirming activates this ruleset in the registry (and deactivates the previously active one). On this
-            sandbox the nft/iptables load itself is simulated — the kernel never changes here.
+            Confirming activates this ruleset in the registry (and deactivates the previously active one) and loads it
+            into the kernel — the shipped template script for template rulesets, or the synthesized ruleset piped to
+            <Mono> nft -f -</Mono> / <Mono>iptables-restore</Mono> — privilege-gated (root / sudo -n, honest refusal
+            otherwise).
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
@@ -535,6 +539,72 @@ function CreateRulesetDialog({
   )
 }
 
+// ── live ruleset (the host's real active firewall) ──────────────────
+
+interface LiveResponse {
+  backend: 'nftables' | 'iptables' | null
+  tables?: number
+  json?: string
+  text?: string
+  note?: string
+}
+
+function LiveRulesetCard() {
+  const q = useBridgeQuery<LiveResponse>('firewall', 'live', undefined, { refetchInterval: 15000 })
+  const d = q.data?.data
+  return (
+    <PanelCard
+      title={
+        <span className="flex items-center gap-2">
+          <Flame className="h-4 w-4 text-primary" aria-hidden />
+          host ruleset · live read
+        </span>
+      }
+      actions={
+        <span className="flex items-center gap-2">
+          {d?.backend ? <StateBadge state="active" /> : <StateBadge state="unavailable" />}
+          <Badge variant="outline" className="font-mono text-[10px]">{d?.backend ?? 'no binary'}</Badge>
+        </span>
+      }
+    >
+      {q.isLoading && !q.data ? (
+        <PanelSkeleton lines={4} />
+      ) : q.data && !q.data.ok ? (
+        <div className="space-y-2">
+          <p className="text-sm text-red-500">{q.data.error}</p>
+          <p className="text-xs text-muted-foreground">
+            reading the active ruleset needs the firewall binary and, on most hosts, root privileges — run the console as
+            root or grant <Mono>sudo -n</Mono> for <Mono>nft -j list ruleset</Mono> / <Mono>iptables-save</Mono>.
+          </p>
+        </div>
+      ) : d?.backend === null ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          neither nft nor iptables is present on this host — ruleset management below stays fully functional and the
+          moment a firewall binary exists this tab shows the real kernel ruleset.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              backend: <Mono>{d?.backend}</Mono>
+            </span>
+            <span>
+              tables: <Mono>{d?.tables ?? 0}</Mono>
+            </span>
+            <span>source: <Mono>real {d?.backend === 'iptables' ? 'iptables-save' : 'nft -j list ruleset'}</Mono></span>
+          </div>
+          <ScrollArea className="h-64 rounded-md border border-border/60">
+            <pre className="p-3 font-mono text-[10px] leading-relaxed text-zinc-300">
+              {(d?.json ?? d?.text ?? '').trim() || '(empty ruleset — no tables loaded)'}
+            </pre>
+          </ScrollArea>
+          {q.data?.note ? <p className="font-mono text-[10px] text-muted-foreground">{q.data.note}</p> : null}
+        </div>
+      )}
+    </PanelCard>
+  )
+}
+
 // ── panel ────────────────────────────────────────────────────────────
 
 export default function FirewallPanel() {
@@ -554,10 +624,10 @@ export default function FirewallPanel() {
     const res = await action('firewall', 'apply', { name })
     if (res.ok) {
       toast.success(`ruleset ${name} applied`, {
-        description: 'activated in the registry — the nft load is simulated on this host',
+        description: `real load executed — ${String((res.data as { command?: string })?.command ?? 'nft/iptables-restore')}`,
       })
     } else {
-      toast.error('apply failed', { description: res.error })
+      toast.error('apply refused', { description: res.error, duration: 9000 })
     }
   }
 
@@ -609,21 +679,38 @@ export default function FirewallPanel() {
   if (rulesetsQ.isLoading && !rulesetsQ.data) return <PanelSkeleton lines={4} />
   if (rulesetsQ.data && !rulesetsQ.data.ok) return <ErrorCard error={rulesetsQ.data.error ?? 'firewall.rulesets failed'} />
 
+  const bridgeSource: DataSource = (rulesetsQ.data?.source ?? 'live') as DataSource
+
   return (
     <div className="space-y-4 pb-2">
       <PanelHeader
         title="Firewall"
-        subtitle="nftables/iptables ruleset manager — 7 real topologies ported verbatim from the cockpit edition's firewall/templates/*.sh"
-        source="demo"
+        subtitle="nftables/iptables ruleset manager — 7 real topologies ported verbatim from the cockpit edition's firewall/templates/*.sh · live ruleset reads · privilege-gated applies"
+        source={bridgeSource}
         actions={<CreateRulesetDialog templates={templates} onCreate={createRuleset} />}
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue="live">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="live">live ruleset</TabsTrigger>
           <TabsTrigger value="overview">overview</TabsTrigger>
           <TabsTrigger value="rulesets">rulesets</TabsTrigger>
           <TabsTrigger value="templates">templates</TabsTrigger>
         </TabsList>
+
+        {/* ── live ruleset (the host's real kernel firewall) ── */}
+        <TabsContent value="live" className="mt-4 space-y-4">
+          <LiveRulesetCard />
+          <HintCard title="What this tab reads">
+            <p>
+              The bridge runs the real firewall binary on every poll: <Mono>nft -j list ruleset</Mono> on nftables hosts,
+              <Mono> iptables-save</Mono> on legacy hosts. Privilege is required on most systems — run the console as
+              root (like the cockpit edition&apos;s org.sysdeck.firewall.modify polkit channel) or grant{' '}
+              <Mono>sudo -n</Mono> for those two binaries. With neither binary present the tab says so and the
+              ruleset management below stays fully functional.
+            </p>
+          </HintCard>
+        </TabsContent>
 
         {/* ── overview ── */}
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -671,11 +758,14 @@ export default function FirewallPanel() {
             )}
           </PanelCard>
 
-          <HintCard title="Honesty note">
+          <HintCard title="How apply works">
             <p>
-              Ruleset state is persisted (rulesets, rules, activation, apply history in the audit log) — but the actual{' '}
-              <Mono>nft</Mono>/<Mono>iptables-restore</Mono> load is simulated on this host: no nft binary exists in this
-              sandbox. The dry-run scripts are the exact syntax the cockpit bridge would load on a managed host.
+              Ruleset state is persisted (rulesets, rules, activation, apply history in the audit log) and{' '}
+              <b>apply is real</b>: template-derived rulesets execute the shipped script from{' '}
+              <Mono>/usr/share/sysdeck/firewall/templates/</Mono>, custom rulesets load the synthesized{' '}
+              <Mono>nft -f</Mono> / <Mono>iptables-restore</Mono> script. The load runs as root or via{' '}
+              <Mono>sudo -n</Mono>; unprivileged consoles refuse honestly with the exact operator command. Dry-run
+              shows the exact ruleset text before anything is loaded. Watch the result on the live ruleset tab.
             </p>
           </HintCard>
         </TabsContent>

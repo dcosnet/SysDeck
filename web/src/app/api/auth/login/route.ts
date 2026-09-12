@@ -38,6 +38,11 @@ const MAX_FAILURES = 5 // per IP AND per username per window
 type Bucket = { windowStart: number; failures: number }
 const failBuckets = new Map<string, Bucket>()
 
+// X-Forwarded-For defines lockout identity only when the operator opts
+// in — a client-supplied header must never shape auth limits on a
+// loopback-bound console. Direct connections share the 'local' bucket.
+const TRUST_PROXY = process.env.SYSDECK_TRUST_PROXY === '1'
+
 function bucket(key: string, now = Date.now()): Bucket {
   let b = failBuckets.get(key)
   if (!b || now - b.windowStart > FAIL_WINDOW_MS) {
@@ -53,7 +58,7 @@ function bucket(key: string, now = Date.now()): Bucket {
 }
 
 function clientIp(req: Request): string {
-  const fwd = req.headers.get('x-forwarded-for')
+  const fwd = TRUST_PROXY ? req.headers.get('x-forwarded-for') : null
   if (fwd) return fwd.split(',')[0].trim()
   return 'local'
 }

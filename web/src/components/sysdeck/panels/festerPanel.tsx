@@ -451,6 +451,10 @@ function foldEvents(events: Fev[]): Map<string, DagAction> {
   return map
 }
 
+// Running replay fold per journal (see ReplayBody's frame memo) — keyed by
+// the immutable events array so an old journal's fold state GCs with it.
+const replayFolds = new WeakMap<Fev[], { cursor: number; map: Map<string, DagAction> }>()
+
 // ── DAG layout (depth-based layering; x = index, y = depth) ─────────────────
 
 interface LaidDag {
@@ -494,18 +498,23 @@ function layoutDag(actions: Map<string, DagAction>, compact = false): LaidDag {
 
   const pos = new Map<string, { x: number; y: number }>()
   byDepth.forEach((row, d) => {
+    let ordered: string[]
     if (d > 0) {
-      // order by mean x of already-placed deps → fewer edge crossings
-      const score = (name: string): number => {
+      // order by mean x of already-placed deps → fewer edge crossings.
+      // Scores are computed once per node (decorate-sort-undecorate),
+      // never per comparison.
+      const scored = row.map((name) => {
         const a = actions.get(name)
         const xs = (a?.deps ?? []).filter((dep) => pos.has(dep)).map((dep) => pos.get(dep)!.x)
-        return xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : Number.MAX_SAFE_INTEGER
-      }
-      row.sort((n1, n2) => score(n1) - score(n2) || n1.localeCompare(n2))
+        return { name, s: xs.length ? xs.reduce((acc, v) => acc + v, 0) / xs.length : Number.MAX_SAFE_INTEGER }
+      })
+      scored.sort((p, q) => p.s - q.s || p.name.localeCompare(q.name))
+      ordered = scored.map((p) => p.name)
     } else {
-      row.sort()
+      ordered = [...row].sort()
     }
-    row.forEach((name, i) => pos.set(name, { x: 16 + i * (NW + GX), y: 16 + d * (NH + GY) }))
+    ordered.forEach((name, i) => pos.set(name, { x: 16 + i * (NW + GX), y: 16 + d * (NH + GY) }))
+    byDepth[d] = ordered
   })
 
   const maxRow = Math.max(1, ...byDepth.map((r) => r.length))
@@ -1875,8 +1884,24 @@ function ReplayBody({ buildId }: { buildId: string }) {
     return () => window.clearInterval(t)
   }, [playing, speed, events.length])
 
-  const frame = useMemo(() => foldEvents(events.slice(0, cursor + 1)), [events, cursor])
-  const upTo = events.slice(0, cursor + 1)
+  // Incremental replay fold: a forward step folds only the newly covered
+  // events onto the running map (O(delta + nodes)); a backward move,
+  // scrub, or new journal refolds. The running fold is keyed by the
+  // immutable events array (WeakMap — an old journal's state GCs with
+  // it), no ref is touched during render, and the returned Map is
+  // always a fresh object so downstream memos recompute.
+  const frame = useMemo(() => {
+    let fold = replayFolds.get(events)
+    if (!fold || cursor < fold.cursor) {
+      const map = foldEvents(events.slice(0, cursor + 1))
+      replayFolds.set(events, { cursor, map })
+      return map
+    }
+    for (let i = fold.cursor + 1; i <= cursor; i++) foldEvent(fold.map, events[i]!)
+    fold.cursor = cursor
+    return new Map(fold.map)
+  }, [events, cursor])
+  const upTo = useMemo(() => events.slice(0, cursor + 1), [events, cursor])
   const current = events[cursor]
 
   return (

@@ -1,10 +1,11 @@
 'use client'
 
 // Fleet panel — node registry + live localhost host.
-// The localhost entry is REAL (live /proc metrics on every poll); the
-// helios/theia/selene/ares peers are a seeded demo registry whose
-// metrics random-walk server-side. addNode/removeNode run through the
-// bridge with audit rows (useBridgeAction + toasts).
+// The localhost entry is REAL (live /proc metrics on every poll);
+// operator-added nodes are probed with real TCP connects (port 22) per
+// poll — remote cpu/mem stay null without an agent on that node, never
+// fabricated. addNode/removeNode run through the bridge with audit rows
+// (useBridgeAction + toasts).
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -27,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableCell } from '@/components/ui/table'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 // panel mounts its own (only one panel is live at a time, so no duplicates)
@@ -171,6 +173,7 @@ export default function FleetPanel() {
   const summary = useBridgeQuery<FleetSummary>('fleet', 'summary', undefined, { refetchInterval: 5000 })
   const action = useBridgeAction()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<FleetNode | null>(null)
 
   const data = summary.data?.data
   const nodes = useMemo(() => data?.fleetNodes ?? [], [data])
@@ -210,7 +213,7 @@ export default function FleetPanel() {
     <div className="space-y-4 pb-2">
       <PanelHeader
         title="Fleet"
-        subtitle="node registry and live host metrics — a fleet-of-one live; peers are a demo registry with drifting metrics"
+        subtitle="node registry and live host metrics — localhost /proc per poll; remote nodes probed with real TCP connects"
         source="hybrid"
         actions={<AddNodeDialog onAdd={addNode} />}
       />
@@ -278,7 +281,7 @@ export default function FleetPanel() {
                       className="h-6 w-6 text-muted-foreground hover:text-red-500"
                       aria-label={`Remove node ${n.name}`}
                       title={`remove ${n.name} from the registry`}
-                      onClick={() => void removeNode(n)}
+                      onClick={() => setRemoveTarget(n)}
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     </Button>
@@ -288,7 +291,8 @@ export default function FleetPanel() {
             )}
           />
           <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-            localhost metrics are live /proc per poll; demo peers random-walk server-side; offline nodes report null metrics.
+            localhost metrics are live /proc per poll; remote nodes are probed with real TCP connects (port 22) —
+            remote cpu/mem stay null without an agent on that node, never fabricated.
           </p>
         </PanelCard>
 
@@ -368,11 +372,36 @@ export default function FleetPanel() {
             </div>
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <HardDrive className="h-3.5 w-3.5" aria-hidden />
-              fleet-of-one live — peers are seeded demo rows
+              localhost metrics live — add real peers with add-node (probed per poll)
             </div>
           </PanelCard>
         </div>
       </div>
+
+      {/* destructive actions confirm — one pattern across every panel */}
+      <AlertDialog open={removeTarget !== null} onOpenChange={(o) => !o && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-mono">remove node {removeTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes the registry row for {removeTarget?.host}. The node itself is untouched — re-register it
+              anytime. Cockpit peers are managed in /etc/cockpit/machines.d, not here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => {
+                if (removeTarget) void removeNode(removeTarget)
+                setRemoveTarget(null)
+              }}
+            >
+              Remove node
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

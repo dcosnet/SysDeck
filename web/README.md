@@ -1,11 +1,16 @@
-# SysDeck Web Edition
+# SysDeck — the standalone web console
 
-The browser-native rendition of SysDeck: 29 bridge modules behind one
-console — real /proc + /sys collectors where the host allows, honest demo
-datasets (clearly badged) where backends are absent, the Fester DAG
-orchestrator vendored as a dedicated service (`mini-services/fester`),
-and the klanker-gate LLM gateway vendored alongside with Arch
-packaging. klanker-gate ("Frosty Deno") is by TykoDev
+SysDeck's browser-native front end: 30 bridge modules behind one
+console, every one of them reading **real host state** — /proc and /sys
+collectors, systemctl, lsblk, the host's real package manager, live
+service APIs — with honest empty inventories (and install guidance)
+where a backend is absent. Nothing is demo, mock, or seeded. You sign
+in with your Unix account (the host PAM stack, exactly like Cockpit),
+every installed Cockpit module loads into this console's navigation,
+and every SysDeck module can likewise be loaded inside Cockpit — one
+module catalog, two front ends. The Fester DAG orchestrator is vendored
+as a dedicated service (`mini-services/fester`) and the klanker-gate LLM
+gateway alongside with Arch packaging. klanker-gate ("Frosty Deno") is by TykoDev
 (https://github.com/TykoDev/klanker-gate, Apache-2.0) — **not SysDeck
 code**; see `../klanker-gate/ATTRIBUTION.md` and `../THIRD_PARTY.md`.
 
@@ -30,13 +35,13 @@ right under Overview) with copy buttons on every command.
 From the extracted master tarball root, one command does everything
 (install + migrate + fester + web):
 
-    tar xjf sysdeck-0.4.1-master.tar.bz2
-    cd sysdeck-0.4.1-master
+    tar xjf sysdeck-0.4.3-master.tar.bz2
+    cd sysdeck-0.4.3-master
     make web-dev        # bun install + db:push + fester + next dev :3000
 
 Granular equivalent (what `make web-dev` does):
 
-    cd sysdeck-0.3.1-master/web
+    cd sysdeck-0.4.3-master/web
     bun install                     # dependencies
     bun run db:push                 # create + migrate db/custom.db (SQLite)
     bun run dev                     # Next.js on :3000
@@ -46,9 +51,10 @@ Granular equivalent (what `make web-dev` does):
     bun install
     bun run dev                     # bun --hot index.ts
 
-Open http://localhost:3000 — you'll get the **login screen** (cockpit-style
-shared password; default `sysdeck`, nagged until you set
-`SYSDECK_WEB_PASSWORD`). The Fester panel proxies REST through
+Open http://localhost:3000 — you'll get the **login screen**: sign in
+with a **Unix account** (verified by the host PAM stack, the same
+mechanism Cockpit uses; see §10 and `SYSDECK_AUTH_MODE` in §5). The
+Fester panel proxies REST through
 `/api/fester` (server-side) and streams live build events over
 WebSocket through the port gateway (`/?XTransformPort=3010`). Without
 the service running, the Fester panel says so — everything else works.
@@ -79,7 +85,7 @@ Deploy the extracted bundle to `/opt/sysdeck` and run:
 `/etc/systemd/system/sysdeck-web.service`
 
     [Unit]
-    Description=SysDeck Web Edition (Next.js)
+    Description=SysDeck standalone web console (Next.js)
     After=network-online.target
 
     [Service]
@@ -132,9 +138,12 @@ Enable:
 | `SYSDECK_PAM_TIMEOUT_MS` | `8000` | hard timeout for one PAM authentication |
 | `SYSDECK_COCKPIT_SCAN` | — | extra cockpit module scan roots (colon-separated) for staged/DESTDIR trees — detection also always covers /usr/share/cockpit and /usr/local/share/cockpit |
 | `SYSDECK_SESSION_SECURE` | off | set `1` to add the `Secure` cookie flag (front the console with TLS first) |
+| `SYSDECK_MUTATIONS` | `admin` | mutation policy: `admin` gates mutating bridge commands behind an admin session (wheel/sudo/adm or uid 0) — reads stay open to every signed-in unix account; `any` restores the single-operator posture |
+| `SYSDECK_TRUST_PROXY` | off | set `1` to honor `X-Forwarded-For` for rate-limit identity — only behind a trusted proxy; client-supplied headers are ignored by default |
 
-With no `KLANKER_URL`, the AI Gateway panel renders clearly-badged
-demo data (it flips to LIVE automatically when the gateway answers).
+With no `KLANKER_URL`, the AI Gateway panel renders honest empty
+tables (they fill with LIVE data automatically when the gateway
+answers).
 
 ## 6. Reverse proxy + WebSocket gateway
 
@@ -174,7 +183,7 @@ nginx equivalent:
   lsblk data.
 - **Fester panel says service unreachable** — start it:
   `(cd mini-services/fester && bun run dev)`.
-- **AI Gateway shows demo data** — set `KLANKER_URL` +
+- **AI Gateway tables are empty** — set `KLANKER_URL` +
   `KLANKER_ADMIN_TOKEN` in `web/.env`, restart, or install the gateway
   via `../klanker-gate/arch/INSTALL-ARCH.md`.
 - **Edits not appearing** — dev recompiles on save (check dev.log);
@@ -237,8 +246,10 @@ off in one click; its bridge commands stay available for scripts.
 `db/custom.db` is created by `bun run db:push` using `DATABASE_URL` from
 `.env`. The master tarball builder lives at `scripts/make-master-tarball.sh`
 in the canonical development tree. The cockpit edition (bundle root,
-`sudo make install`) remains available but is entirely optional — and
-since 0.3.0 its plugin pages wear this edition's skin
+`sudo make install`) remains available but is entirely optional; the two
+front ends share one module catalog (every module ships both a web bridge
+and a cockpit manifest). Since 0.3.0 the cockpit plugin pages wear this
+console's skin
 (`shared/sysdeck-web.css`), with `sudo make install-branding` theming the
 Cockpit shell chrome to match (see ../QUICKSTART.md §12).
 

@@ -1,22 +1,30 @@
-// SysDeck bridge — modules (3rd-party cockpit module installer)
+// SysDeck bridge — modules (3rd-party cockpit module installer, live)
 // Port of bridge/modules3p.py (v0.0.46): a catalog-driven installer for
-// third-party Cockpit modules. The CATALOG below is ported verbatim
-// from the python file (real names, licenses, authors, source URLs).
-// Design rules preserved: (1) the catalog is the single source of
-// truth; (2) no silent installs — install() refuses without
+// third-party Cockpit modules. The CATALOG is ported verbatim from the
+// python file (real names, licenses, authors, source URLs). Design
+// rules preserved: (1) the catalog is the single source of truth;
+// (2) no silent installs — install() refuses without
 // acceptLicense=true (the front-end renders the license inline next to
 // the Install button, the click IS the acceptance gesture); (3) every
-// install/uninstall is audited. The cockpit-modules registry itself is
-// only reachable on a managed host, so pulls are simulated; dependency
-// checks (depends[]) are REAL which() probes.
+// install/uninstall is audited. Installs are REAL:
+//   - distro-package entries install via the host's REAL package
+//     manager (pacman on Arch, apt on Debian, dnf on Fedora — the
+//     bridge detects it)
+//   - git entries REALLY clone into /usr/local/share/cockpit/<dest>
+//     (a cockpit scan root — the module goes live)
+//   - deb-tar entries are REALLY downloaded (curl) and extracted
+//     (dpkg-deb -x) into /usr/local/share/cockpit/<dest>
+//   - tarball entries are REALLY downloaded and untarred with strip
+// All writes are privilege-gated (root / sudo -n) with the exact
+// operator command shown on honest denial. depends[] checks are real
+// which() probes.
 import { db } from '@/lib/db'
-import { ok, fail, which } from './shared'
+import { ok, fail, which, run } from './shared'
+import { writeFile, rm, mkdir, readdir, mkdtemp } from 'fs/promises'
+import { existsSync } from 'fs'
 
-const SOURCE = 'demo' as const
-const NOTE = 'catalog ported verbatim from bridge/modules3p.py; installs are simulated pulls (registry reachable only on a managed host); depends[] checks are real which() probes'
-
-function failE(error: string) {
-  return { ...fail(error), source: SOURCE }
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
+  return { ...fail(error), source }
 }
 
 async function audit(action: string, detail: string) {
@@ -180,11 +188,53 @@ function findEntry(id: string): CatalogEntry | undefined {
   return CATALOG.find((e) => e.id === id)
 }
 
-// ── installed-state (Module3pInstall registry) ──────────────────────
+// ── installed-state (Module3pInstall registry + REAL filesystem) ─────
+
+const COCKPIT_LOCAL = '/usr/local/share/cockpit'
 
 async function installedIds(): Promise<Set<string>> {
   const rows = await db.module3pInstall.findMany({ select: { moduleId: true } })
   return new Set(rows.map((r) => r.moduleId))
+}
+
+// ── privilege model ──────────────────────────────────────────────────
+
+function isRoot(): boolean {
+  return typeof process.geteuid === 'function' && process.geteuid() === 0
+}
+
+let sudoProbe: { at: number; ok: boolean } | null = null
+async function havePasswordlessSudo(): Promise<boolean> {
+  if (sudoProbe && Date.now() - sudoProbe.at < 60_000) return sudoProbe.ok
+  const r = await run('sudo', ['-n', 'true'], 3000)
+  sudoProbe = { at: Date.now(), ok: r.rc === 0 }
+  return sudoProbe.ok
+}
+
+async function privilegedRun(cmd: string, args: string[], timeoutMs = 180_000): Promise<{ rc: number; stdout: string; stderr: string; command: string } | null> {
+  if (isRoot()) {
+    const r = await run(cmd, args, timeoutMs)
+    return { ...r, command: [cmd, ...args].join(' ') }
+  }
+  if (await havePasswordlessSudo()) {
+    const r = await run('sudo', ['-n', cmd, ...args], timeoutMs)
+    return { ...r, command: `sudo -n ${cmd} ${args.join(' ')}` }
+  }
+  return null
+}
+
+// ── host package-manager detection (for distro-package entries) ─────
+
+async function hostManager(): Promise<{ mgr: 'pacman' | 'apt' | 'dnf' | 'zypper' | null; installArgs: (pkg: string) => string[] }> {
+  for (const [mgr, args] of [
+    ['pacman', ['-S', '--noconfirm', '--needed']],
+    ['apt', ['install', '-y']],
+    ['dnf', ['install', '-y']],
+    ['zypper', ['--non-interactive', 'install']],
+  ] as const) {
+    if (await which(mgr)) return { mgr: mgr as 'pacman' | 'apt' | 'dnf' | 'zypper', installArgs: (pkg: string) => [...args, pkg] }
+  }
+  return { mgr: null, installArgs: () => [] }
 }
 
 // ── commands ────────────────────────────────────────────────────────
@@ -210,8 +260,8 @@ export const commands = {
         count: CATALOG.length,
         installedCount: CATALOG.filter((e) => installed.has(e.id)).length,
       },
-      SOURCE,
-      NOTE,
+      'live',
+      'catalog ported verbatim from bridge/modules3p.py — installs are real (package manager / git clone / curl+extract)',
     )
   },
 
@@ -226,15 +276,25 @@ export const commands = {
       if (!(await which(dep))) missingDeps.push(dep)
     }
     const installRow = await db.module3pInstall.findUnique({ where: { moduleId: id } })
+    // real filesystem presence for git/tarball installs
+    const dest = typeof entry.installSpec.dest === 'string' ? `${COCKPIT_LOCAL}/${entry.installSpec.dest}` : null
+    let onDisk = false
+    if (dest) {
+      try {
+        onDisk = (await readdir(dest)).length > 0
+      } catch {
+        onDisk = false
+      }
+    }
     return ok(
       {
         ...entry,
         installed: installed.has(id),
+        onDisk,
         missingDeps,
         installRecord: installRow ?? null,
       },
-      SOURCE,
-      NOTE,
+      'live',
     )
   },
 
@@ -245,10 +305,7 @@ export const commands = {
     if (!entry) return failE(`unknown module id: ${id}`)
     const installed = await installedIds()
     if (installed.has(id)) {
-      return ok(
-        { id: entry.id, status: 'already-installed', message: `${entry.name} is already installed` },
-        SOURCE,
-      )
+      return ok({ id: entry.id, status: 'already-installed', message: `${entry.name} is already installed` }, 'live')
     }
     if (args.acceptLicense !== true) {
       return failE(
@@ -259,14 +316,101 @@ export const commands = {
     for (const dep of entry.depends) {
       if (!(await which(dep))) missingDeps.push(dep)
     }
-    // simulated pull: the cockpit-modules registry is only reachable on
-    // a managed host — the install record + audit row are written here.
+
+    let command = ''
+    let note = ''
+    if (entry.kind === 'pacman') {
+      const { mgr, installArgs } = await hostManager()
+      if (!mgr) return failE('no package manager detected on this host (probed pacman, apt, dnf, zypper)')
+      const pkg = String(entry.installSpec.pkg ?? entry.id)
+      const res = await privilegedRun(mgr, installArgs(pkg))
+      command = `${mgr} ${installArgs(pkg).join(' ')}`
+      if (!res) {
+        return failE(`org.sysdeck.modules3p.modify — not authorized: run as root or grant sudo -n to execute:\n  ${command}`, 'hybrid')
+      }
+      note = `real install via ${mgr}`
+      if (res.rc !== 0) {
+        await audit('install-fail', `${entry.id}: ${command} → rc=${res.rc} — ${res.stderr.trim().split('\n')[0] ?? 'package manager error'}`)
+        return failE(`${command} failed — ${res.stderr.trim().split('\n')[0] ?? 'package manager error'}`)
+      }
+    } else {
+      const dest = String(entry.installSpec.dest ?? entry.id)
+      const target = `${COCKPIT_LOCAL}/${dest}`
+      if (!(await which('curl')) && (entry.kind === 'deb-tar' || entry.kind === 'tarball')) {
+        return failE('curl not installed — downloads need curl on the host')
+      }
+      if (entry.kind === 'git') {
+        if (!(await which('git'))) return failE('git not installed — git-clone installs need git on the host')
+        const repo = String(entry.installSpec.repo)
+        await mkdir(COCKPIT_LOCAL, { recursive: true }).catch(() => undefined)
+        const res = await privilegedRun('git', ['clone', '--depth', '1', repo, target])
+        command = `git clone --depth 1 ${repo} ${target}`
+        if (!res) {
+          return failE(`org.sysdeck.modules3p.modify — not authorized: run as root or grant sudo -n to execute:\n  ${command}`, 'hybrid')
+        }
+        note = 'real git clone into a cockpit scan root'
+        if (res.rc !== 0) {
+          await audit('install-fail', `${entry.id}: ${command} → rc=${res.rc} — ${res.stderr.trim().split('\n')[0] ?? 'git error'}`)
+          return failE(`${command} failed — ${res.stderr.trim().split('\n')[0] ?? 'git error (repo moved? network?)'}`)
+        }
+      } else {
+        // deb-tar / tarball: real download + real extract. Staging lands in
+        // a mkdtemp dir — a predictable /tmp path would be a symlink-race
+        // target for the privileged copy that follows.
+        const url = String(entry.installSpec.url)
+        const tmp = await mkdtemp('/tmp/sysdeck-module-')
+        const dl = await run('curl', ['-fsSL', '-o', `${tmp}/dl`, url], 120_000)
+        command = `curl -fsSL ${url} && extract → ${target}`
+        if (dl.rc !== 0) {
+          await audit('install-fail', `${entry.id}: download ${url} → rc=${dl.rc}`)
+          return failE(`download failed — ${url} (${dl.stderr.trim().split('\n')[0] ?? 'network error'})`)
+        }
+        let res: { rc: number; stdout: string; stderr: string; command: string } | null
+        if (entry.kind === 'deb-tar') {
+          // dpkg-deb -x <deb> <dir> extracts usr/share/cockpit/<dest>...
+          await mkdir(`${tmp}/x`, { recursive: true })
+          const ex = await run('dpkg-deb', ['-x', `${tmp}/dl`, `${tmp}/x`], 60_000)
+          if (ex.rc !== 0) {
+            await audit('install-fail', `${entry.id}: dpkg-deb -x → rc=${ex.rc}`)
+            return failE(`dpkg-deb extraction failed — ${ex.stderr.trim().split('\n')[0] ?? 'not a .deb or dpkg-deb absent'}`)
+          }
+          // move the extracted module content into the scan root
+          const inner = `${tmp}/x/usr/share/cockpit`
+          let srcDir = inner
+          if (!existsSync(inner)) srcDir = `${tmp}/x`
+          const mv = await privilegedRun('cp', ['-r', srcDir, target])
+          res = mv
+          command = `dpkg-deb -x → cp -r ${srcDir} ${target}`
+        } else {
+          const strip = Number(entry.installSpec.strip ?? 0)
+          const tarArgs = ['-xf', `${tmp}/dl`, '-C', tmp, ...(strip ? ['--strip-components', String(strip)] : [])]
+          const ex = await run('tar', tarArgs, 60_000)
+          if (ex.rc !== 0) {
+            await audit('install-fail', `${entry.id}: tar extraction → rc=${ex.rc}`)
+            return failE(`tar extraction failed — ${ex.stderr.trim().split('\n')[0] ?? 'archive error'}`)
+          }
+          const mv = await privilegedRun('cp', ['-r', tmp, target])
+          res = mv
+          command = `tar -x → cp -r ${tmp} ${target}`
+        }
+        if (!res) {
+          return failE(`org.sysdeck.modules3p.modify — not authorized: run as root or grant sudo -n to write:\n  ${target}`, 'hybrid')
+        }
+        note = 'real download + extraction into a cockpit scan root'
+        if (res.rc !== 0) {
+          await audit('install-fail', `${entry.id}: ${command} → rc=${res.rc}`)
+          return failE(`${command} failed — ${res.stderr.trim().split('\n')[0] ?? 'extract error'}`)
+        }
+        await rm(tmp, { recursive: true, force: true }).catch(() => undefined)
+      }
+    }
+
     await db.module3pInstall.create({
       data: { moduleId: entry.id, action: 'install', license: entry.license },
     })
     await audit(
       'install-ok',
-      `${entry.id} (${entry.name}, ${entry.license}, author ${entry.author}) installed${missingDeps.length ? ` — missing deps on this host: ${missingDeps.join(', ')}` : ''}`,
+      `${entry.id} (${entry.name}, ${entry.license}, author ${entry.author}) installed — ${command}${missingDeps.length ? ` — missing deps on this host: ${missingDeps.join(', ')}` : ''}`,
     )
     return ok(
       {
@@ -277,9 +421,10 @@ export const commands = {
         author: entry.author,
         source: entry.source,
         missingDeps,
+        command,
       },
-      SOURCE,
-      'simulated pull: the cockpit-modules registry is only reachable on a managed host',
+      'live',
+      note,
     )
   },
 
@@ -290,10 +435,22 @@ export const commands = {
     if (!entry) return failE(`unknown module id: ${id}`)
     const installed = await installedIds()
     if (!installed.has(id)) {
-      return ok({ id: entry.id, status: 'not-installed' }, SOURCE)
+      return ok({ id: entry.id, status: 'not-installed' }, 'live')
+    }
+    // real removal for filesystem installs
+    if (entry.kind !== 'pacman') {
+      const dest = String(entry.installSpec.dest ?? entry.id)
+      const target = `${COCKPIT_LOCAL}/${dest}`
+      const res = await privilegedRun('rm', ['-rf', target])
+      if (!res) {
+        return failE(`org.sysdeck.modules3p.modify — not authorized: run as root or grant sudo -n to execute:\n  rm -rf ${target}`, 'hybrid')
+      }
+      if (res.rc !== 0) {
+        return failE(`rm -rf ${target} failed — ${res.stderr.trim().split('\n')[0] ?? 'error'}`)
+      }
     }
     await db.module3pInstall.delete({ where: { moduleId: entry.id } })
     await audit('uninstall-ok', `${entry.id} (${entry.name}) removed`)
-    return ok({ id: entry.id, status: 'removed' }, SOURCE)
+    return ok({ id: entry.id, status: 'removed' }, 'live')
   },
 }

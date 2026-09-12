@@ -1,23 +1,28 @@
-// SysDeck bridge — fleet (node registry + live localhost host)
+// SysDeck bridge — fleet (node registry with real probes, all live)
 // Port of bridge/fleet.py: the cockpit edition aggregates the local host
 // (hostname/uptime/load) plus cockpit peer machines from
-// /etc/cockpit/machines.d/*.json. The web edition has no cockpit
-// machines.d — instead the fleet lives in the FleetNode table: the
-// localhost entry is REAL (live /proc metrics each call) and the
-// demo datacenter nodes (helios/theia/selene/ares) drift via a
-// module-level random walk so panels show plausible movement.
+// /etc/cockpit/machines.d/*.json. The web edition does exactly that:
+//   - the localhost entry is REAL (live /proc metrics each call)
+//   - cockpit peers are discovered from /etc/cockpit/machines.d/*.json
+//     when present (same source the cockpit edition reads)
+//   - operator-added nodes live in the FleetNode table (never seeded);
+//     each remote gets a REAL TCP reachability probe (port 22) with
+//     measured latency on every poll — no fabricated metrics, no random
+//     walk. Remote cpu/mem stay null (honest) unless a node runs an
+//     agent the bridge can query.
 // The python bridge's `peers` command maps to `nodes` here.
 import os from 'os'
 import { readFileSync } from 'fs'
 import { db } from '@/lib/db'
-import { ok, fail } from './shared'
+import { ok, fail, cached } from './shared'
+import { readdir, readFile } from 'fs/promises'
+import net from 'net'
 
-/** fail() + source → the dispatcher spreads this into a top-level
- *  {ok:false, error, source} envelope. (A bare fail() lacks data/source
- *  keys, so the dispatcher would wrap it as {ok:true, data:{ok:false}}.) */
-function failE(error: string, source: 'live' | 'demo' | 'hybrid' = 'hybrid') {
+function failE(error: string, source: 'live' | 'hybrid' = 'live') {
   return { ...fail(error), source }
 }
+
+// ── real localhost metrics (/proc) ───────────────────────────────────
 
 interface CpuSnapshot {
   idle: number
@@ -75,68 +80,56 @@ function uptimeS(): number {
   }
 }
 
-// ── demo node random walk (module state) ─────────────────────────────
+// ── cockpit machines.d peers (real when present) ─────────────────────
 
-interface NodeMetrics {
-  cpuPct: number
-  memPct: number
-  load1: number
+interface MachinePeer {
+  name: string
+  host: string
 }
 
-const demoState = new Map<string, NodeMetrics>()
-
-function initDemoState(name: string): NodeMetrics {
-  const seeds: Record<string, NodeMetrics> = {
-    'helios-01': { cpuPct: 34, memPct: 61, load1: 5.4 },
-    'helios-02': { cpuPct: 78, memPct: 83, load1: 12.7 },
-    theia: { cpuPct: 12, memPct: 44, load1: 0.9 },
-    ares: { cpuPct: 55, memPct: 72, load1: 17.2 },
+async function cockpitPeers(): Promise<MachinePeer[]> {
+  const out: MachinePeer[] = []
+  for (const dir of ['/etc/cockpit/machines.d', '/etc/cockpit/machines.d.d']) {
+    try {
+      const entries = await readdir(dir)
+      for (const e of entries) {
+        if (!e.endsWith('.json')) continue
+        try {
+          const parsed = JSON.parse(await readFile(`${dir}/${e}`, 'utf-8')) as Record<string, { visible?: boolean; address?: string }>
+          for (const [name, cfg] of Object.entries(parsed)) {
+            if (cfg?.visible === false) continue
+            out.push({ name, host: cfg?.address ?? name })
+          }
+        } catch {
+          continue
+        }
+      }
+    } catch {
+      continue
+    }
   }
-  return seeds[name] ?? { cpuPct: 20, memPct: 40, load1: 1 }
+  return out
 }
 
-function walk(name: string, online: boolean): NodeMetrics | null {
-  if (!online) return null
-  let cur = demoState.get(name)
-  if (!cur) {
-    cur = initDemoState(name)
-    demoState.set(name, cur)
-  }
-  const drift = (v: number, amp: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, Math.round((v + (Math.random() - 0.5) * amp) * 10) / 10))
-  cur.cpuPct = drift(cur.cpuPct, 6, 2, 97)
-  cur.memPct = drift(cur.memPct, 3, 15, 95)
-  cur.load1 = drift(cur.load1, 1.2, 0.1, 32)
-  return { ...cur }
-}
+// ── real TCP reachability probe ──────────────────────────────────────
 
-// ── seeding ──────────────────────────────────────────────────────────
-
-async function ensureSeeded(): Promise<void> {
-  const count = await db.fleetNode.count()
-  if (count > 0) return
-  const cpus = os.cpus()
-  await db.fleetNode.createMany({
-    data: [
-      {
-        name: os.hostname(),
-        host: '127.0.0.1',
-        role: 'control',
-        arch: os.arch() === 'x64' ? 'x86_64' : os.arch(),
-        state: 'online',
-        cpuModel: cpus[0]?.model?.trim() ?? null,
-        cores: cpus.length,
-        memGb: Math.round(os.totalmem() / 1024 ** 3),
-        local: true,
-      },
-      { name: 'helios-01', host: '192.168.10.11', role: 'compute', arch: 'x86_64', state: 'online', cores: 16, memGb: 64 },
-      { name: 'helios-02', host: '192.168.10.12', role: 'compute', arch: 'x86_64', state: 'degraded', cores: 16, memGb: 64 },
-      { name: 'theia', host: '192.168.10.20', role: 'storage', arch: 'x86_64', state: 'online', cores: 8, memGb: 32 },
-      { name: 'selene', host: '192.168.10.30', role: 'edge', arch: 'arm64', state: 'offline', cores: 4, memGb: 8 },
-      { name: 'ares', host: '192.168.10.40', role: 'compute', arch: 'x86_64', state: 'online', cores: 32, memGb: 128 },
-    ],
+function tcpProbe(host: string, port = 22, timeoutMs = 1200): Promise<{ reachable: boolean; latencyMs: number | null }> {
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    const sock = net.connect({ host, port })
+    const done = (reachable: boolean) => {
+      const latencyMs = reachable ? Date.now() - t0 : null
+      sock.removeAllListeners()
+      sock.destroy()
+      resolve({ reachable, latencyMs })
+    }
+    sock.setTimeout(timeoutMs, () => done(false))
+    sock.once('connect', () => done(true))
+    sock.once('error', () => done(false))
   })
 }
+
+// ── localhost row (real) ─────────────────────────────────────────────
 
 interface FleetRow {
   id: string
@@ -151,17 +144,98 @@ interface FleetRow {
   local: boolean
 }
 
-async function nodesWithMetrics(): Promise<(FleetRow & { metrics: NodeMetrics | null })[]> {
-  await ensureSeeded()
-  const rows = (await db.fleetNode.findMany({ orderBy: { name: 'asc' } })) as FleetRow[]
-  const cpu = cpuPct()
-  const mem = memPct()
-  const l = load()
-  return rows.map((r) =>
-    r.local
-      ? { ...r, metrics: { cpuPct: cpu, memPct: mem, load1: l[0] ?? 0 } }
-      : { ...r, metrics: walk(r.name, r.state !== 'offline') },
-  )
+async function ensureLocalNode(): Promise<void> {
+  const local = await db.fleetNode.findFirst({ where: { local: true } })
+  if (local) return
+  const cpus = os.cpus()
+  await db.fleetNode.create({
+    data: {
+      name: os.hostname(),
+      host: '127.0.0.1',
+      role: 'control',
+      arch: os.arch() === 'x64' ? 'x86_64' : os.arch(),
+      state: 'online',
+      cpuModel: cpus[0]?.model?.trim() ?? null,
+      cores: cpus.length,
+      memGb: Math.round(os.totalmem() / 1024 ** 3),
+      local: true,
+    },
+  })
+}
+
+/** One-shot registry migration: rows imported from the pre-0.4.2
+ *  catalogs (helios/theia/selene/ares) are not operator entries — the
+ *  registry admits only nodes added from this panel or discovered from
+ *  cockpit machines.d. Runs once per process. */
+let migrationDone = false
+async function purgeLegacyCatalogRows(): Promise<void> {
+  if (migrationDone) return
+  migrationDone = true
+  const legacyNames = ['helios-01', 'helios-02', 'theia', 'selene', 'ares']
+  try {
+    await db.fleetNode.deleteMany({ where: { name: { in: legacyNames }, local: false } })
+  } catch {
+    /* best effort */
+  }
+}
+
+/** Node inventory: registry rows + cockpit peers. Every remote gets
+ *  its own TCP probe and the probes run in parallel (wall time = one
+ *  probe timeout, not N × it); the whole inventory is TTL-cached so the
+ *  5 s poll does not re-open sockets per tick. Remote cpu/mem stay
+ *  null without an agent on the node — never fabricated. */
+async function nodesWithMetrics(): Promise<
+  (FleetRow & { metrics: { cpuPct: number; memPct: number; load1: number } | null; latencyMs: number | null; source: string })[]
+> {
+  return cached('fleet:nodes', 10_000, async () => {
+    await ensureLocalNode()
+    await purgeLegacyCatalogRows()
+    const rows = (await db.fleetNode.findMany({ orderBy: { name: 'asc' } })) as FleetRow[]
+    const cpu = cpuPct()
+    const mem = memPct()
+    const l = load()
+    const remotes = rows.filter((r) => !r.local)
+    const probes = await Promise.all(remotes.map((r) => tcpProbe(r.host)))
+    const out: (FleetRow & { metrics: { cpuPct: number; memPct: number; load1: number } | null; latencyMs: number | null; source: string })[] = []
+    for (const r of rows) {
+      if (r.local) {
+        out.push({ ...r, state: 'online', metrics: { cpuPct: cpu, memPct: mem, load1: l[0] ?? 0 }, latencyMs: 0, source: '/proc' })
+        continue
+      }
+      const probe = probes[remotes.indexOf(r)]!
+      out.push({
+        ...r,
+        state: probe.reachable ? 'online' : 'offline',
+        metrics: null,
+        latencyMs: probe.latencyMs,
+        source: 'tcp-probe :22',
+      })
+    }
+    // cockpit peers (real discovery) — surfaced alongside the registry
+    const peers = await cockpitPeers()
+    const knownHosts = new Set(out.map((n) => n.host))
+    const newPeers = peers.filter((p) => !knownHosts.has(p.host))
+    const peerProbes = await Promise.all(newPeers.map((p) => tcpProbe(p.host)))
+    newPeers.forEach((p, i) => {
+      const probe = peerProbes[i]!
+      out.push({
+        id: `cockpit:${p.name}`,
+        name: p.name,
+        host: p.host,
+        role: 'cockpit-peer',
+        arch: 'unknown',
+        state: probe.reachable ? 'online' : 'offline',
+        cpuModel: null,
+        cores: 0,
+        memGb: 0,
+        local: false,
+        metrics: null,
+        latencyMs: probe.latencyMs,
+        source: 'cockpit machines.d',
+      })
+    })
+    return out
+  })
 }
 
 // ── commands ─────────────────────────────────────────────────────────
@@ -186,32 +260,16 @@ export const commands = {
         counts: {
           total: fleetNodes.length,
           online: fleetNodes.filter((n) => n.state === 'online').length,
-          degraded: fleetNodes.filter((n) => n.state === 'degraded').length,
+          degraded: 0,
           offline: fleetNodes.filter((n) => n.state === 'offline').length,
         },
       },
-      'hybrid',
-      'localhost is live (/proc); helios/theia/selene/ares are seeded demo nodes with drifting metrics',
+      'live',
+      'localhost metrics from /proc; remote nodes probed with real TCP connects (port 22) — remote cpu/mem stay null without an agent (nothing fabricated)',
     )
   },
 
-  nodes: async () => ok({ nodes: await nodesWithMetrics() }, 'hybrid'),
-
-  drift: async () => {
-    // Advance the demo random walk explicitly (summary does this
-    // implicitly on every call) and return the resulting metrics.
-    await ensureSeeded()
-    const rows = (await db.fleetNode.findMany({ orderBy: { name: 'asc' } })) as FleetRow[]
-    return ok(
-      {
-        drifted: rows
-          .filter((r) => !r.local && r.state !== 'offline')
-          .map((r) => ({ name: r.name, metrics: walk(r.name, true) })),
-      },
-      'demo',
-      'random-walk state for demo fleet nodes',
-    )
-  },
+  nodes: async () => ok({ nodes: await nodesWithMetrics() }, 'live', 'real /proc for localhost + real TCP probes for remotes'),
 
   addNode: async (args: Record<string, unknown>) => {
     const name = String(args.name ?? '').trim()
@@ -221,6 +279,8 @@ export const commands = {
     const role = ['compute', 'storage', 'edge', 'control'].includes(String(args.role))
       ? String(args.role)
       : 'compute'
+    // real probe right away so the node lands with its true state
+    const probe = await tcpProbe(host)
     try {
       const row = await db.fleetNode.create({
         data: {
@@ -228,16 +288,20 @@ export const commands = {
           host,
           role,
           arch: String(args.arch ?? 'x86_64'),
-          state: 'offline',
+          state: probe.reachable ? 'online' : 'offline',
           cores: Math.max(1, Math.min(1024, Number(args.cores) || 4)),
           memGb: Math.max(1, Math.min(4096, Number(args.memGb) || 8)),
           local: false,
         },
       })
       await db.auditLog.create({
-        data: { module: 'fleet', action: 'addNode', detail: `${name} (${host}) role=${role}` },
+        data: { module: 'fleet', action: 'addNode', detail: `${name} (${host}) role=${role} — TCP probe ${probe.reachable ? `reachable ${probe.latencyMs}ms` : 'unreachable'}` },
       })
-      return ok({ node: row }, 'hybrid', 'node recorded; reachability requires the cockpit bridge on a managed host')
+      return ok(
+        { node: row, reachable: probe.reachable, latencyMs: probe.latencyMs },
+        'live',
+        `real TCP probe of ${host}:22 → ${probe.reachable ? `reachable (${probe.latencyMs}ms)` : 'unreachable'}`,
+      )
     } catch (err) {
       return failE(`could not create node: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -246,12 +310,13 @@ export const commands = {
   removeNode: async (args: Record<string, unknown>) => {
     const id = String(args.id ?? '')
     if (!id) return fail('id is required')
+    if (id.startsWith('cockpit:')) return failE('cockpit peers come from /etc/cockpit/machines.d — remove them there')
     try {
       const row = await db.fleetNode.delete({ where: { id } })
       await db.auditLog.create({
         data: { module: 'fleet', action: 'removeNode', detail: row.name },
       })
-      return ok({ removed: row.name }, 'hybrid')
+      return ok({ removed: row.name }, 'live')
     } catch {
       return failE('node not found')
     }

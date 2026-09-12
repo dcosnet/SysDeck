@@ -1,21 +1,21 @@
-// SysDeck bridge — sensors (hardware sensor readings)
+// SysDeck bridge — sensors (hardware sensor readings, all live)
 // Port of bridge/sensors.py: the cockpit edition shells out to
-// `sensors -j` (lm-sensors). This environment has no lm-sensors and a
-// sparse /sys/class/hwmon, so the web edition reads the sysfs sources
-// lm-sensors itself reads (/sys/class/hwmon/hwmon*/*_input, plus
-// /sys/class/thermal/thermal_zone*) and — when fewer than 3 real
-// readings exist (the honest case in this container) — supplements a
-// clearly-labeled demo chip set. Real rows always come first and are
-// unflagged; every supplemented row carries demo: true.
-import { readFileSync, readdirSync } from 'fs'
-import { ok } from './shared'
+// `sensors -j` (lm-sensors). The web edition does exactly the same:
+//   1. `sensors -j` when lm-sensors is installed (the canonical source,
+//      chip labels and all — identical to the cockpit panel)
+//   2. otherwise it reads the same sysfs sources lm-sensors itself
+//      reads (/sys/class/hwmon/hwmon*/*_input with *_label + *_crit,
+//      plus /sys/class/thermal/thermal_zone*)
+// No fabricated rows, ever: a host with no sensors gets an honest
+// empty inventory with a note, not a made-up chip set.
+import { readdir } from 'fs/promises'
+import { ok, run, which, cached, readText } from './shared'
 
 interface SensorReading {
   label: string
   value: number
   unit: string
   critical?: number
-  demo?: boolean
 }
 
 interface SensorAdapter {
@@ -24,183 +24,216 @@ interface SensorAdapter {
   readings: SensorReading[]
 }
 
-// ── real sysfs collectors ────────────────────────────────────────────
+// ── `sensors -j` (lm-sensors canonical JSON) ─────────────────────────
 
-function readNum(path: string): number | null {
-  try {
-    const v = Number(readFileSync(path, 'utf-8').trim())
-    return Number.isFinite(v) ? v : null
-  } catch {
-    return null
+interface SensorsJson {
+  [chip: string]: {
+    Adapter?: string
+    [key: string]: unknown
   }
 }
 
-function readStr(path: string): string | null {
+// lm-sensors JSON shape (real `sensors -j` output):
+// { "coretemp-isa-0000": { "Adapter": "ISA adapter",
+//     "Package id 0": { "temp1_input": 45, "temp1_max": 100, "temp1_crit": 100 },
+//     "Core 0":       { "temp2_input": 44 } },
+//   "nct6775-isa-0a40": { "fan1": { "fan1_input": 1240 }, "in0": { "in0_input": 1.344 } } }
+function sensorsJsonAdapters(stdout: string): SensorAdapter[] {
+  let parsed: SensorsJson
   try {
-    return readFileSync(path, 'utf-8').trim() || null
+    parsed = JSON.parse(stdout) as SensorsJson
   } catch {
-    return null
+    return []
   }
-}
-
-function realAdapters(): SensorAdapter[] {
   const out: SensorAdapter[] = []
-  try {
-    for (const h of readdirSync('/sys/class/hwmon')) {
-      const base = `/sys/class/hwmon/${h}`
-      const name = readStr(`${base}/name`) ?? h
-      let files: string[] = []
-      try {
-        files = readdirSync(base)
-      } catch {
-        continue
+  for (const [chip, fields] of Object.entries(parsed)) {
+    const temps: SensorReading[] = []
+    const fans: SensorReading[] = []
+    const volts: SensorReading[] = []
+    for (const [label, raw] of Object.entries(fields)) {
+      if (label === 'Adapter' || typeof raw !== 'object' || raw === null) continue
+      const entry = raw as Record<string, number>
+      // the feature prefix in the *_input key is the authoritative kind
+      const inputKey = Object.keys(entry).find((k) => /^(temp|fan|in)\d+_input$/.test(k))
+      if (!inputKey) continue
+      const value = entry[inputKey]
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue
+      const prefix = inputKey.replace(/_input$/, '')
+      if (inputKey.startsWith('temp')) {
+        const crit = entry[`${prefix}_crit`] ?? entry[`${prefix}_max`] ?? null
+        temps.push({
+          label,
+          value: Math.round(value * 10) / 10,
+          unit: '°C',
+          ...(typeof crit === 'number' && Number.isFinite(crit) ? { critical: Math.round(crit * 10) / 10 } : {}),
+        })
+      } else if (inputKey.startsWith('fan')) {
+        fans.push({ label, value: Math.round(value), unit: 'RPM' })
+      } else {
+        volts.push({ label, value: Math.round(value * 1000) / 1000, unit: 'V' })
       }
-      const temps: SensorReading[] = []
-      const fans: SensorReading[] = []
-      const volts: SensorReading[] = []
-      for (const f of files) {
-        const m = f.match(/^(temp|fan|in)(\d+)_input$/)
-        if (!m) continue
-        const raw = readNum(`${base}/${f}`)
-        if (raw === null) continue
-        const label = readStr(`${base}/${m[1]}${m[2]}_label`) ?? `${m[1]}${m[2]}`
-        if (m[1] === 'temp') {
-          const crit = readNum(`${base}/${m[1]}${m[2]}_crit`)
-          temps.push({
-            label,
-            value: Math.round((raw / 1000) * 10) / 10,
-            unit: '°C',
-            ...(crit !== null ? { critical: Math.round((crit / 1000) * 10) / 10 } : {}),
-          })
-        } else if (m[1] === 'fan') {
-          fans.push({ label, value: raw, unit: 'RPM' })
-        } else {
-          volts.push({ label, value: Math.round((raw / 1000) * 100) / 100, unit: 'V' })
-        }
-      }
-      if (temps.length) out.push({ name, kind: 'temp', readings: temps })
-      if (fans.length) out.push({ name, kind: 'fan', readings: fans })
-      if (volts.length) out.push({ name, kind: 'voltage', readings: volts })
     }
-  } catch {
-    /* /sys/class/hwmon absent — honest empty */
+    if (temps.length) out.push({ name: chip, kind: 'temp', readings: temps })
+    if (fans.length) out.push({ name: chip, kind: 'fan', readings: fans })
+    if (volts.length) out.push({ name: chip, kind: 'voltage', readings: volts })
   }
   return out
 }
 
-function realThermal(): SensorAdapter[] {
+// ── sysfs collectors (what lm-sensors reads under the hood) ──────────
+// All reads are async — the hwmon walk never blocks the event loop.
+
+async function readNum(path: string): Promise<number | null> {
+  const t = await readText(path)
+  if (!t) return null
+  const v = Number(t.trim())
+  return Number.isFinite(v) ? v : null
+}
+
+async function readStr(path: string): Promise<string | null> {
+  const t = await readText(path)
+  return t.trim() || null
+}
+
+async function sysfsAdapters(): Promise<SensorAdapter[]> {
   const out: SensorAdapter[] = []
+  let hwmons: string[] = []
   try {
-    for (const z of readdirSync('/sys/class/thermal')) {
-      if (!/^thermal_zone\d+$/.test(z)) continue
-      const temp = readNum(`/sys/class/thermal/${z}/temp`)
-      if (temp === null) continue
-      const type = readStr(`/sys/class/thermal/${z}/type`) ?? z
-      out.push({
-        name: `${type} (thermal_zone)`,
-        kind: 'temp',
-        readings: [{ label: type, value: Math.round((temp / 1000) * 10) / 10, unit: '°C' }],
-      })
-    }
+    hwmons = await readdir('/sys/class/hwmon')
   } catch {
-    /* /sys/class/thermal absent — honest empty */
+    return out // /sys/class/hwmon absent — honest empty
+  }
+  for (const h of hwmons) {
+    const base = `/sys/class/hwmon/${h}`
+    const name = (await readStr(`${base}/name`)) ?? h
+    let files: string[] = []
+    try {
+      files = await readdir(base)
+    } catch {
+      continue
+    }
+    const temps: SensorReading[] = []
+    const fans: SensorReading[] = []
+    const volts: SensorReading[] = []
+    for (const f of files) {
+      const m = f.match(/^(temp|fan|in)(\d+)_input$/)
+      if (!m) continue
+      const raw = await readNum(`${base}/${f}`)
+      if (raw === null) continue
+      const label = (await readStr(`${base}/${m[1]}${m[2]}_label`)) ?? `${m[1]}${m[2]}`
+      if (m[1] === 'temp') {
+        const crit = await readNum(`${base}/${m[1]}${m[2]}_crit`)
+        temps.push({
+          label,
+          value: Math.round((raw / 1000) * 10) / 10,
+          unit: '°C',
+          ...(crit !== null ? { critical: Math.round((crit / 1000) * 10) / 10 } : {}),
+        })
+      } else if (m[1] === 'fan') {
+        fans.push({ label, value: raw, unit: 'RPM' })
+      } else {
+        volts.push({ label, value: Math.round((raw / 1000) * 100) / 100, unit: 'V' })
+      }
+    }
+    if (temps.length) out.push({ name, kind: 'temp', readings: temps })
+    if (fans.length) out.push({ name, kind: 'fan', readings: fans })
+    if (volts.length) out.push({ name, kind: 'voltage', readings: volts })
   }
   return out
 }
 
-// ── demo supplement (labeled per row) ────────────────────────────────
-// Realistic values modeled on the chips every lm-sensors user knows:
-// a coretemp package + cores, an nct6798 fan bank, an it8620 voltage
-// rail set. Small sinusoidal drift so repeated polls look alive.
-
-function drift(seed: number, amp: number): number {
-  return Math.round(Math.sin(Date.now() / 15000 + seed) * amp * 10) / 10
-}
-
-function demoAdapters(): SensorAdapter[] {
-  const cores = [0, 1, 2, 3].map((i) => ({
-    label: `Core ${i}`,
-    value: 58 + i * 2 + drift(i, 0.8),
-    unit: '°C',
-    critical: 100,
-    demo: true,
-  }))
-  return [
-    {
-      name: 'coretemp',
+async function thermalZones(): Promise<SensorAdapter[]> {
+  const out: SensorAdapter[] = []
+  let zones: string[] = []
+  try {
+    zones = await readdir('/sys/class/thermal')
+  } catch {
+    return out // /sys/class/thermal absent — honest empty
+  }
+  for (const z of zones) {
+    if (!/^thermal_zone\d+$/.test(z)) continue
+    const temp = await readNum(`/sys/class/thermal/${z}/temp`)
+    if (temp === null) continue
+    const type = (await readStr(`/sys/class/thermal/${z}/type`)) ?? z
+    out.push({
+      name: `${type} (thermal_zone)`,
       kind: 'temp',
-      readings: [
-        { label: 'Package id 0', value: 62 + drift(0.5, 0.9), unit: '°C', critical: 100, demo: true },
-        ...cores,
-      ],
-    },
-    {
-      name: 'nct6798',
-      kind: 'fan',
-      readings: [
-        { label: 'fan1 (CPU)', value: 1240 + drift(1, 25), unit: 'RPM', demo: true },
-        { label: 'fan2 (SYS)', value: 980 + drift(2, 20), unit: 'RPM', demo: true },
-        { label: 'fan3 (AUX)', value: 760 + drift(3, 15), unit: 'RPM', demo: true },
-      ],
-    },
-    {
-      name: 'it8620',
-      kind: 'voltage',
-      readings: [
-        { label: 'in0 (vcore)', value: 1.34 + drift(4, 0.02), unit: 'V', demo: true },
-        { label: '+3.3V', value: 3.31 + drift(5, 0.01), unit: 'V', demo: true },
-        { label: '+5V', value: 5.02 + drift(6, 0.01), unit: 'V', demo: true },
-        { label: '+12V', value: 12.1 + drift(7, 0.03), unit: 'V', demo: true },
-        { label: 'vbat', value: 3.2, unit: 'V', demo: true },
-      ],
-    },
-  ]
+      readings: [{ label: type, value: Math.round((temp / 1000) * 10) / 10, unit: '°C' }],
+    })
+  }
+  return out
+}
+
+// ── collection ───────────────────────────────────────────────────────
+
+async function collectSysfs(): Promise<{ adapters: SensorAdapter[]; note?: string }> {
+  // sysfs fallback rung — always available, zero dependencies
+  const adapters = [...(await sysfsAdapters()), ...(await thermalZones())]
+  if (adapters.length === 0) {
+    return {
+      adapters,
+      note: 'no sensor readings on this host (probed /sys/class/hwmon + /sys/class/thermal; install lm-sensors and run sensors-detect for chip-level labels)',
+    }
+  }
+  return { adapters }
+}
+
+/** Sensor chain: `sensors -j` (lm-sensors, the cockpit panel's source)
+ *  → raw sysfs hwmon + thermal zones → honest empty. The whole sweep is
+ *  TTL-cached so the summary/temps/fans/voltages polls share one pass. */
+async function collect(): Promise<{ adapters: SensorAdapter[]; note?: string }> {
+  return cached('sensors:collect', 3000, async () => {
+    if (await which('sensors')) {
+      const r = await run('sensors', ['-j'], 10_000)
+      if (r.rc === 0 && r.stdout.trim().startsWith('{')) {
+        const adapters = sensorsJsonAdapters(r.stdout)
+        if (adapters.length > 0) {
+          return {
+            adapters,
+            note: 'real `sensors -j` (lm-sensors) — the same source the cockpit edition reads',
+          }
+        }
+        // lm-sensors present but no chips configured → step down to sysfs
+        // and say so honestly
+        const sys = await collectSysfs()
+        return { ...sys, note: `sensors -j returned no chips (run sensors-detect); showing raw sysfs readings — ${sys.note ?? 'direct /sys/class/hwmon + thermal_zone reads'}` }
+      }
+    }
+    return collectSysfs()
+  })
 }
 
 // ── commands ─────────────────────────────────────────────────────────
 
-const MIN_REAL_READINGS = 3
-
-function collect(): { adapters: SensorAdapter[]; source: 'live' | 'hybrid'; note?: string } {
-  const real = [...realAdapters(), ...realThermal()]
-  const realCount = real.reduce((n, a) => n + a.readings.length, 0)
-  if (realCount >= MIN_REAL_READINGS) return { adapters: real, source: 'live' }
-  return {
-    adapters: [...real, ...demoAdapters()],
-    source: 'hybrid',
-    note: 'supplemented — /sys/class/hwmon sparse in container',
-  }
-}
-
 export const commands = {
   summary: async () => {
-    const { adapters, source, note } = collect()
-    return ok({ adapters, source }, source, note)
+    const { adapters, note } = await collect()
+    return ok({ adapters, source: 'live' }, 'live', note)
   },
 
   temps: async () => {
-    const { adapters, source, note } = collect()
+    const { adapters, note } = await collect()
     return ok(
-      { adapters: adapters.filter((a) => a.kind === 'temp'), source },
-      source,
+      { adapters: adapters.filter((a) => a.kind === 'temp'), source: 'live' },
+      'live',
       note,
     )
   },
 
   fans: async () => {
-    const { adapters, source, note } = collect()
+    const { adapters, note } = await collect()
     return ok(
-      { adapters: adapters.filter((a) => a.kind === 'fan'), source },
-      source,
+      { adapters: adapters.filter((a) => a.kind === 'fan'), source: 'live' },
+      'live',
       note,
     )
   },
 
   voltages: async () => {
-    const { adapters, source, note } = collect()
+    const { adapters, note } = await collect()
     return ok(
-      { adapters: adapters.filter((a) => a.kind === 'voltage'), source },
-      source,
+      { adapters: adapters.filter((a) => a.kind === 'voltage'), source: 'live' },
+      'live',
       note,
     )
   },

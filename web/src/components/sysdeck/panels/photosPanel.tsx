@@ -1,10 +1,10 @@
 'use client'
 
 // Photos panel — photo library fleet (photoprism / piwigo / lychee /
-// nextcloud-memories). The daemons are absent in this sandbox, so the
-// bridge keeps a demo inventory: 4 libraries (~72k photos), one actively
-// indexing, one in error state (missing EXIF tool). index advances the
-// indexing pass ~7% per call; scan finds new files synchronously.
+// nextcloud-memories / librephotos). The bridge detects which backends
+// are actually installed and inventories each one's real library roots
+// (real file counts via find, real sizes via du) — never a seeded
+// library. Index/scan run the backend's real command when present.
 
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -124,7 +124,7 @@ export default function PhotosPanel() {
   if (summary.isLoading || list.isLoading) {
     return (
       <div>
-        <PanelHeader title="Photos" subtitle="library fleet — photoprism · piwigo · lychee · nextcloud-memories" source="demo" />
+        <PanelHeader title="Photos" subtitle="library fleet — photoprism · piwigo · lychee · nextcloud-memories" />
         <PanelSkeleton />
       </div>
     )
@@ -133,7 +133,7 @@ export default function PhotosPanel() {
   if (!summary.data?.ok || !summary.data.data) {
     return (
       <div>
-        <PanelHeader title="Photos" subtitle="library fleet — photoprism · piwigo · lychee · nextcloud-memories" source="demo" />
+        <PanelHeader title="Photos" subtitle="library fleet — photoprism · piwigo · lychee · nextcloud-memories" />
         <ErrorCard error={summary.data?.error ?? 'photos.summary failed'} />
       </div>
     )
@@ -147,7 +147,7 @@ export default function PhotosPanel() {
       <PanelHeader
         title="Photos"
         subtitle="library fleet — indexing passes · scans · 8s poll"
-        source="demo"
+        source={summary.data?.source ?? 'live'}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -222,9 +222,9 @@ export default function PhotosPanel() {
       </div>
 
       <p className="mt-4 pb-2 text-xs text-muted-foreground">
-        no photoprism/piwigo/lychee/nextcloud daemons in this sandbox — the libraries above are the bridge&apos;s demo
-        inventory (family is mid-indexing at {s.indexingProgress?.family ?? 0}%; scan is in error state until the EXIF
-        tool is installed). index advances one pass per click; the bridge refuses operations on the error-state library.
+        no photoprism/piwigo/lychee/nextcloud-memories backends are installed on this host — the inventory is empty,
+        nothing is fabricated. Install any of them and this panel picks up their real library roots (counts and sizes
+        measured per poll); index/scan then run the backend&apos;s own command.
       </p>
     </div>
   )

@@ -65,7 +65,9 @@ SCRIPT_VERSION="0.0.44"
 
 TABLE_NAME="firewall"
 NFT_CMD="${NFT_CMD:-nft}"
-RULES_FILE="${RULES_FILE:-/tmp/sysdeck-firewall-remote-admin.rules}"
+RULES_FILE="${RULES_FILE:-$(mktemp /tmp/sysdeck-firewall-remote-admin-XXXXXX.rules)}"
+# a fresh mktemp name per run — no predictable /tmp path for a root write
+trap 'rm -f "$RULES_FILE"' EXIT
 
 # ── Configurable ports (auto-detected, can be overridden) ───────────
 # These are read by the detect / start actions. The operator can also
