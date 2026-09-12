@@ -1914,8 +1914,8 @@ class TestFirewallV047ManifestsAndMetainfo(unittest.TestCase):
         )
 
     def test_version_sync_all_surfaces_report_020(self):
-        # Every release surface must report v0.4.3 (MoE QA production pass).
-        v = "0.4.3"
+        # Every release surface must report v0.4.4 (package parity + blog essay).
+        v = "0.4.4"
         files_to_check = [
             "Makefile",
             "bridge/__init__.py",
@@ -1932,6 +1932,177 @@ class TestFirewallV047ManifestsAndMetainfo(unittest.TestCase):
             text = p.read_text()
             self.assertIn(v, text,
                           f"{rel} does not reference version {v}")
+
+
+class TestPackagesBackends(unittest.TestCase):
+    """v0.4.4: the ten-backend packages bridge.
+
+    Fixture tests for the detection step-down, the shared parsers, and
+    the mutation command table — the same guarantees the web console's
+    packages.ts carries, locked in on the cockpit side."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bridge"))
+        import packages
+        self.packages = packages
+        self._orig_manager = packages.PKG_MANAGER
+        self._orig_run = packages.run
+
+    def tearDown(self):
+        self.packages.PKG_MANAGER = self._orig_manager
+        self.packages.run = self._orig_run
+
+    def test_detection_probe_order_and_xbps_probe(self):
+        ids = [m for m, _ in self.packages.DETECT_PROBES]
+        self.assertEqual(
+            ids,
+            ["pacman", "emerge", "lunar", "sorcery", "xbps",
+             "apk", "zypper", "dnf", "yum", "apt"],
+        )
+        # Void ships no bare `xbps` binary — xbps-query is the probe.
+        self.assertEqual(dict(self.packages.DETECT_PROBES)["xbps"], "xbps-query")
+
+    def test_detection_requires_emerge_corroboration(self):
+        import shutil
+        import unittest.mock as mock
+        fake_which = lambda b: "/usr/bin/emerge" if b == "emerge" else None
+        # emerge present but no /var/db/pkg → step down past it.
+        with mock.patch.object(shutil, "which", side_effect=fake_which), \
+             mock.patch.object(self.packages.os.path, "isdir", return_value=False):
+            self.assertNotEqual(self.packages._detect_pkg_manager(), "emerge")
+        with mock.patch.object(shutil, "which", side_effect=fake_which), \
+             mock.patch.object(self.packages.os.path, "isdir", return_value=True):
+            self.assertEqual(self.packages._detect_pkg_manager(), "emerge")
+
+    def test_detection_unknown_when_nothing_installed(self):
+        import shutil
+        import unittest.mock as mock
+        with mock.patch.object(shutil, "which", return_value=None):
+            self.assertEqual(self.packages._detect_pkg_manager(), "unknown")
+
+    def test_split_name_ver(self):
+        sv = self.packages._split_name_ver
+        self.assertEqual(sv("gcc-13.2.1-r0"), ("gcc", "13.2.1-r0"))
+        self.assertEqual(sv("linux-headers-6.1"), ("linux-headers", "6.1"))
+        self.assertEqual(sv("firefox-128.0_1"), ("firefox", "128.0_1"))
+        self.assertEqual(sv("bash"), ("bash", ""))
+
+    def test_parse_colon_blocks(self):
+        info = self.packages._parse_colon_blocks(
+            "Name        : curl\nVersion     : 8.6.0\nInstalled Size: 1.2 MiB"
+        )
+        self.assertEqual(info["name"], "curl")
+        self.assertEqual(info["version"], "8.6.0")
+        self.assertEqual(info["installed_size"], "1.2 MiB")
+
+    def test_zypper_table_locates_columns_from_header(self):
+        zt = self.packages._zypper_table
+        # Layout with status + repository prefix columns.
+        layout_a = (
+            "S | Repository       | Name       | Current | Available | Arch\n"
+            "--+------------------+------------+---------+-----------+-------\n"
+            "v | openSUSE-OSS     | glib2      | 2.78     | 2.80      | x86_64\n"
+            "  | openSUSE-OSS     | zypper     | 1.14.70  | 1.14.74   | x86_64"
+        )
+        h, rows = zt(layout_a, ("Name", "Current", "Available"))
+        self.assertEqual(h, {"Name": 2, "Current": 3, "Available": 4})
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0][2], "glib2")
+        # Layout with a numbered prefix column.
+        layout_b = (
+            "S# | Repository       | Name       | Current | Available | Arch\n"
+            "---+------------------+------------+---------+-----------+-------\n"
+            " 1 | openSUSE-OSS     | glib2      | 2.78     | 2.80      | x86_64"
+        )
+        h, rows = zt(layout_b, ("Name", "Current", "Available"))
+        self.assertEqual(rows[0][2], "glib2")
+        # Separator rows and repeated headers are filtered.
+        noisy = (
+            "Name | Current | Available\n"
+            "-----+---------+----------\n"
+            "glib2 | 2.78 | 2.80\n"
+            "Name | Current | Available\n"
+            "bash | 5.2 | 5.3"
+        )
+        h, rows = zt(noisy, ("Name", "Current", "Available"))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][0], "bash")
+
+    def test_emerge_update_regex_anchors_after_bracket(self):
+        import re
+        rx = r"\[ebuild\s+U[^\]]*\]\s*(\S+)(?:\s+\[([^\]]+)\])?"
+        # Portage pads the class field with spaces before the bracket.
+        m = re.search(rx, " [ebuild     U     ] dev-lang/python-3.12.4 [3.12.3]")
+        self.assertEqual(m.group(1), "dev-lang/python-3.12.4")
+        self.assertEqual(m.group(2), "3.12.3")
+        m = re.search(rx, " [ebuild     U  r  ] sys-libs/glibc-2.38-r9 [2.37-r7]")
+        self.assertEqual(m.group(1), "sys-libs/glibc-2.38-r9")
+        # N (new) and NS (new slot) rows are not updates.
+        self.assertIsNone(re.search(rx, " [ebuild  N     ] app-misc/newpkg-1.0"))
+        self.assertIsNone(re.search(rx, " [ebuild  NS    ] dev-lang/python-3.11.8 [3.11.6]"))
+
+    def test_xbps_search_regex_tolerates_missing_repo_prefix(self):
+        import re
+        rx = r"^\[\*\]\s+(?:\S+/)?(\S+)\s+-\s+(.*)$"
+        m = re.match(rx, "[*] firefox-128.0_1 - The Firefox web browser")
+        self.assertEqual(m.group(1), "firefox-128.0_1")
+        m = re.match(rx, "[*] void-repo/firefox-128.0_1 - The Firefox web browser")
+        self.assertEqual(m.group(1), "firefox-128.0_1")
+
+    def test_mutation_table_covers_all_ten_managers(self):
+        pkg = self.packages
+        for mgr in ("pacman", "emerge", "lunar", "sorcery", "xbps",
+                    "apk", "zypper", "dnf", "yum", "apt"):
+            pkg.PKG_MANAGER = mgr
+            self.assertTrue(pkg._mutation_cmd("install", "x"), mgr)
+            self.assertTrue(pkg._mutation_cmd("remove", "x"), mgr)
+            self.assertTrue(pkg._mutation_cmd("update-all", ""), mgr)
+            if mgr == "lunar":
+                # Lunar has no single-module update — the honest absence.
+                self.assertEqual(pkg._mutation_cmd("update", "x"), [])
+            else:
+                self.assertTrue(pkg._mutation_cmd("update", "x"), mgr)
+        pkg.PKG_MANAGER = "unknown"
+        self.assertEqual(pkg._mutation_cmd("install", "x"), [])
+
+    def test_mutation_commands_are_real_manager_invocations(self):
+        pkg = self.packages
+        pkg.PKG_MANAGER = "emerge"
+        self.assertEqual(pkg._mutation_cmd("remove", "foo"),
+                         ["emerge", "--unmerge", "foo"])
+        self.assertEqual(pkg._mutation_cmd("update-all", ""),
+                         ["emerge", "-u", "-D", "@world"])
+        pkg.PKG_MANAGER = "zypper"
+        self.assertEqual(pkg._mutation_cmd("install", "foo"),
+                         ["zypper", "--non-interactive", "install", "foo"])
+        pkg.PKG_MANAGER = "sorcery"
+        self.assertEqual(pkg._mutation_cmd("install", "foo"), ["cast", "foo"])
+        self.assertEqual(pkg._mutation_cmd("remove", "foo"), ["dispel", "foo"])
+
+    def test_lunar_reports_honest_empty_updates(self):
+        # run() returns '' on real failure — lunar has no preview
+        # subcommand, so the list is empty and the summary carries the
+        # note explaining why.
+        self.packages.run = lambda argv, timeout=60, ok_rcs=(): ""
+        self.assertEqual(self.packages._lunar_list_updates(), [])
+        self.packages.PKG_MANAGER = "lunar"
+        summary = self.packages.summary()
+        self.assertEqual(summary["updateCount"], 0)
+        self.assertIn("update-preview", summary["updatesNote"])
+
+    def test_read_backend_dispatch_has_all_ten(self):
+        pkg = self.packages
+        for mgr in ("pacman", "emerge", "lunar", "sorcery", "xbps",
+                    "apk", "zypper", "dnf", "yum", "apt"):
+            backend = pkg._backend(mgr)
+            for cmd in ("list-installed", "list-updates", "search", "info"):
+                self.assertIn(cmd, backend, f"{mgr} missing {cmd}")
+        self.assertEqual(pkg._backend("unknown"), {})
+
+    def test_no_sudo_shell_out_in_packages_bridge(self):
+        import inspect
+        source = inspect.getsource(self.packages)
+        self.assertNotIn('"/usr/bin/sudo"', source)
 
 
 class TestBuilderProfileCopy(unittest.TestCase):

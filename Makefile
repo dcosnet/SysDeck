@@ -30,7 +30,7 @@
 # Distro support: Arch Linux, Debian/Ubuntu, Fedora/RHEL/CentOS.
 
 PACKAGE := sysdeck
-VERSION := 0.4.3
+VERSION := 0.4.4
 LIB_DIR := $(DESTDIR)/usr/lib/$(PACKAGE)
 PYTHON_DIR := $(LIB_DIR)/bridge
 SHARE_DIR := $(DESTDIR)/usr/share/$(PACKAGE)
@@ -447,16 +447,16 @@ uninstall-branding:
 	@echo ">>> Starting SysDeck Web Edition on :3000 (Ctrl+C stops next; fester keeps running)"
 	cd web && bun run dev
 
-# master: rebuild the master tarball from this tree (cockpit + web + fester)
+# master: rebuild the master tarball from this tree (cockpit + web + fester + klanker-gate)
 master:
-	@echo ">>> Building $(PACKAGE)-$(VERSION)-master.tar.bz2 (cockpit + web + fester)"
+	@echo ">>> Building $(PACKAGE)-$(VERSION)-master.tar.bz2 (cockpit + web + fester + klanker-gate)"
 	tar cjf $(PACKAGE)-$(VERSION)-master.tar.bz2 \
 	    --exclude='__pycache__' --exclude='*.pyc' --exclude='*.tar.bz2' \
-	    --exclude='*node_modules*' --exclude='*.next' \
+	    --exclude='*node_modules*' --exclude='*.next' --exclude='*.tsbuildinfo' \
 	    --exclude='*public/download*' --exclude='*.db' --exclude='*.db-*' \
-	    --transform 's,^,$(PACKAGE)-$(VERSION)-,' \
+	    --transform 's,^,$(PACKAGE)-$(VERSION)-master/,' \
 	    bridge plugins shared tests packaging compat standalone-plugins \
-	    prometheus scripts firewall docs web \
-	    Makefile README.md QUICKSTART.md BLOG.md LICENSE QA.md THIRD_PARTY.md \
+	    prometheus scripts firewall docs web klanker-gate \
+	    Makefile README.md QUICKSTART.md BLOG.md LICENSE QA.md worklog.md THIRD_PARTY.md \
 	    sysdeck-diagnose.sh cockpit-smoke-test.sh sysdeck-uninstall.sh
 	@echo ">>> $(PACKAGE)-$(VERSION)-master.tar.bz2 ready"

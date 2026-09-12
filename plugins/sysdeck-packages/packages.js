@@ -1,32 +1,28 @@
 /*
- * SysDeck - Packages Panel (v0.0.31)
+ * SysDeck - Packages Panel
  * Author: Jeremy Anderson (https://dcos.net)
  *
  * Package management panel — list, search, install, update, and remove
- * packages via the system package manager (pacman / dnf / apt).
+ * packages via the system package manager. Ten managers, the same
+ * step-down as the bridge: pacman (Arch) · emerge (Gentoo) · lunar
+ * (Lunar) · sorcery (SourceMage) · xbps (Void) · apk (Alpine) ·
+ * zypper (openSUSE) · dnf / yum (RPM) · apt (Debian).
  * The package manager is invoked as a separate process via cockpit.spawn —
  * no package-manager code is bundled.
  *
- * v0.0.31 REWRITE — UPDATE NEEDS SUDO, FIXED THE COCKPIT WAY.
- * v0.0.30 packages.js Update All button called bridge.packages.updateAll()
- * which returned only the command string that *would* be run. The panel
- * showed `alert("Run this command with superuser privileges.")` and the
- * operator had to copy the command, open a terminal, sudo, paste, run.
- * That defeated the purpose of having a panel.
+ * Mutations (install/remove/update/update-all) execute via the cockpit
+ * superuser channel (polkit): the bridge helper runs the detected
+ * package manager via subprocess, and this panel subscribes to the
+ * cockpit spawn stream so the operator sees live stdout/stderr in a
+ * <pre> log panel — exactly like cockpit's own Packages and Software
+ * Updates panels. No `sudo` shell-out from JS.
  *
- * v0.0.31 makes install/remove/update/update-all actually execute via
- * the cockpit superuser channel (polkit). The bridge helper runs the
- * detected package manager via subprocess, and the JS panel subscribes
- * to the cockpit spawn stream so the operator sees live stdout/stderr
- * in a <pre> log panel — exactly like cockpit's own Packages and
- * Software Updates panels. No `sudo` shell-out from JS.
- *
- * v0.1.4 SECURITY: every dynamic string interpolated into innerHTML
+ * SECURITY: every dynamic string interpolated into innerHTML
  * (package names, versions, descriptions, search terms echoed back,
- * error messages) now goes through escapeHtml(). Package metadata is
- * live data from pacman/dnf/apt output — a typo-squat repo or a
- * locally-installed package whose name/description contains markup
- * used to execute in the cockpit admin session (0.3.0 audit).
+ * error messages) goes through escapeHtml(). Package metadata is
+ * live data from the package manager's output — a typo-squat repo or
+ * a locally-installed package whose name/description contains markup
+ * must not execute in the cockpit admin session (0.3.0 audit).
  * Raw tool output already flows through textContent (showOutput),
  * which is safe.
  */
@@ -59,11 +55,16 @@ export async function mount(panel, { bridge, EventBus }) {
     const instCount = summary.installedCount || installed.length;
     const updCount = summary.updateCount || 0;
     const updates = summary.updates || [];
+    // Managers without an update-preview subcommand (lunar) carry the
+    // explanation instead of a count that would read as "all current".
+    const updLine = summary.updatesNote
+        ? `${escapeHtml(mgr)} — ${instCount} installed · ${escapeHtml(summary.updatesNote)}`
+        : `${escapeHtml(mgr)} — ${instCount} installed · ${updCount} updates available`;
 
     panel.innerHTML = `
         <header>
             <h2 class="suite-panel-title">Package Manager</h2>
-            <p class="suite-panel-subtitle">${escapeHtml(mgr)} — ${instCount} installed · ${updCount} updates available</p>
+            <p class="suite-panel-subtitle">${updLine}</p>
         </header>
         <div class="suite-row">
             <div class="suite-card suite-col-2">
@@ -220,6 +221,6 @@ function renderSkeleton() {
 function renderError(err) {
     return `<div class="suite-card">
         <h3 class="suite-card-title">Package manager unavailable</h3>
-        <p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}. Ensure pacman, dnf, or apt is installed.</p>
+        <p class="suite-card-body suite-muted">${escapeHtml(err.message || err)}. Ensure a supported package manager is installed (pacman, emerge, lunar, sorcery, xbps, apk, zypper, dnf, yum, or apt).</p>
     </div>`;
 }

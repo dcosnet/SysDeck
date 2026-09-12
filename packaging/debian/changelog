@@ -1,3 +1,20 @@
+sysdeck (0.4.4-1) unstable; urgency=medium
+
+  * v0.4.4: ten package-manager backends on both editions + the blog
+    essay. The cockpit packages bridge (bridge/packages.py) carries
+    the same ten-manager step-down as the web console — pacman,
+    emerge (corroborated by /var/db/pkg), lunar, sorcery, xbps
+    (probed via xbps-query), apk, zypper, dnf, yum, apt — with a
+    unified MUTATION_CMDS table, header-located zypper table parsing,
+    an emerge update regex anchored after the class bracket (the old
+    capture grabbed the bracket and dropped every row), and honest
+    capability reporting for managers without an update preview
+    (lunar). The web console gains the same parser fixes and the
+    xbps-query detection probe. BLOG.md is now a single long-form
+    technical essay (the shellm blog pattern), not release notes.
+
+ -- Jeremy Anderson <info@dcos.net>  Sat, 12 Sep 2026 18:00:00 -0400
+
 sysdeck (0.4.3-1) unstable; urgency=medium
 
   * v0.4.3: the MoE QA pass — production hardening across every axis.

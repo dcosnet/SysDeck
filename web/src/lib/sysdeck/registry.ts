@@ -72,4 +72,4 @@ export function modulesByGroup(): { group: string; modules: ModuleMeta[] }[] {
     .filter((g) => g.modules.length > 0)
 }
 
-export const SYSDECK_VERSION = '0.4.3'
+export const SYSDECK_VERSION = '0.4.4'

@@ -1847,3 +1847,98 @@ Work Log:
 Stage Summary:
 - One-command quiet cleanup of every cockpit-installed SysDeck version: sudo ./sysdeck-uninstall.sh (or /usr/share/sysdeck/sysdeck-uninstall.sh on installed boxes).
 - 48/48 harness checks; make check ALL PASS; master tarball rebuilt and verified.
+
+---
+Task: v0.4.2 + v0.4.3 catch-up entries (recorded in QA.md; summarized here)
+Note: the tree worklog missed the 0.4.2/0.4.3 dev cycles (logging lived in
+the build-side worklog). Full QA detail for both releases is in QA.md:
+- v0.4.2 (zero-demo release): every web-console module reads real host
+  state; DataSource union loses the 'demo' tier (compiler-enforced);
+  sensors `sensors -j` → sysfs chain; netsec atomic nftables bans with
+  fail2ban merge + real unbans; firewall live-ruleset tab + seven
+  topologies; LUKS header hashes from real image bytes; honest empty
+  inventories with install hints; ten package-manager backends on the
+  web side.
+- v0.4.3 (MoE QA pass): privileged writes ride stdin with verification;
+  comment injection guards; mktemp staging; admin-gated mutations
+  (SYSDECK_MUTATIONS); honest dry-runs/unbans; XFF trust gating
+  (SYSDECK_TRUST_PROXY); TTL + single-flight caches; cockpit-side
+  bridge parity (sensors chain, dnf rc-100, spawn timeouts); churn
+  wording purged.
+
+---
+Task: v0.4.4 — ten package managers on both editions + the blog essay
+
+Work Log:
+- bridge/packages.py: ported the web console's ten-backend step-down
+  (pacman, emerge + /var/db/pkg corroboration, lunar, sorcery, xbps
+  via xbps-query probe, apk, zypper, dnf, yum, apt); detection is a
+  shutil.which sweep, no --version children; per-backend read
+  functions (vdb scan for emerge, lvu/gaze with state-file fallbacks,
+  rpm -qa for zypper, yum mirroring dnf with rc-100-as-data); one
+  MUTATION_CMDS table for install/remove/update/update-all/dry-run;
+  lunar single-module update refuses honestly, summary carries
+  updatesNote.
+- Parser fixes on BOTH editions (found by fixture tests): emerge
+  update regex anchored after the class bracket (the old capture
+  grabbed the bracket and dropped every row — silent "no updates" on
+  Gentoo); zypper tables parse by header-located columns with
+  separator/repeat-header filtering; xbps -Rs rows parse with or
+  without a repository prefix; web emerge info resolves
+  category-qualified atoms too.
+- web/src/lib/sysdeck/bridge/packages.ts: DETECT_PROBES map (xbps →
+  xbps-query), zypperTable helper, emerge/xbps regex fixes, emerge
+  info rewrite; tsc --noEmit clean, eslint clean.
+- plugins/sysdeck-packages/packages.js: ten-manager narration,
+  summary.updatesNote rendered, header comment rewritten decisively;
+  node --check clean.
+- packaging/polkit/org.sysdeck.policy: packages.modify exec-path
+  annotations extended to the ten managers; builder.modify host-query
+  annotations extended; a literal `--` inside an XML comment fixed
+  (strict parsers rejected the file); XML now validates.
+- bridge/__init__.py: DistroId/PkgManager extended (gentoo, lunar,
+  sourcemage, void, alpine, opensuse) with matching os-release ids
+  and which-based fallbacks.
+- tests/test_bridge_parsers.py: TestPackagesBackends (13 tests —
+  detection order/probes, emerge corroboration with mocked
+  shutil.which, parsers with fixtures, mutation table coverage, real
+  argv spot-checks, honest lunar summary, no-sudo guard); version
+  sync bumped to 0.4.4. scripts/test_packages_backends.py: standalone
+  fixture suite (10 checks) for quick iteration.
+- BLOG.md: rebuilt as a single long-form engineering essay following
+  the shellm blog pattern — title, italic deck, context narrative,
+  roadmap, decision-organized sections (PAM auth, one catalog two
+  frontends, the zero-demo contract, ten-manager step-down, firewall
+  privilege discipline, performance without fabrication), canonical
+  numbered workflow, attribution footer. Every path/flag/count
+  verified against source. Release-notes content retired from BLOG.md
+  (history: QA.md + worklog.md; README pointers updated).
+- Release surfaces: 0.4.4 across Makefile, bridge/__init__.py,
+  packaging (setup.py, PKGBUILD, spec + changelog, debian/changelog),
+  compat-manifest.json, web (package.json, registry.ts, release
+  route.ts, make-master-tarball.sh), README (version + v0.4.4
+  highlights + catalog row + tree comments + pointers), QUICKSTART
+  §10.8, QA.md v0.4.4 entry.
+- Incident + fix (same class as the v0.0.44 one): the Edit tool
+  converted Makefile recipe TABs to 8 spaces across 584 lines when the
+  master rule was edited; `make` failed with "missing separator".
+  Repaired by restoring the pristine Makefile from the shipped 0.4.3
+  tarball and re-applying the three intended changes (version bump,
+  master-rule prefix/klanker-gate/tsbuildinfo/worklog.md) through a
+  tab-preserving Python patch; make check ALL PASS after, including
+  the recipe-indentation guard.
+- Makefile master rule corrected while there: the bundle prefix is
+  `$(PACKAGE)-$(VERSION)-master/` (the rule's old transform dropped
+  the -master suffix), the vendored klanker-gate/ tree and worklog.md
+  are in the file list, and *.tsbuildinfo is excluded — `make master`
+  now reproduces the shipped bundle shape byte-for-byte in content
+  (960 entries, one intentional addition: the packages fixture suite).
+- Verification: py_compile all bridges; fixture suite 10/10;
+  TestPackagesBackends 13/13; node --check panel JS; polkit XML
+  validated; tsc --noEmit clean; eslint clean; make check full run;
+  master tarball rebuilt via make master.
+
+Stage Summary:
+- Package module parity complete: ten managers, identical step-down
+  and parsers, both editions, fixture-locked.
+- BLOG.md is the engineering essay the project always pointed at.

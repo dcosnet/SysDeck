@@ -91,7 +91,8 @@
   </action>
 
   <!-- ============================================================= -->
-  <!-- Package management: pacman, apt, dnf install/remove/upgrade. -->
+  <!-- Package management: pacman, emerge, lunar, sorcery, xbps,     -->
+  <!-- apk, zypper, dnf/yum, apt install/remove/upgrade.             -->
   <!-- Read-only operations (list, search, info) do not need this.   -->
   <!-- ============================================================= -->
   <action id="org.sysdeck.packages.modify">
@@ -105,6 +106,12 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pacman</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/emerge</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/lunar</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/sorcery</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/xbps-install</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/sbin/apk</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/zypper</annotate>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/apt</annotate>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/dnf</annotate>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/yum</annotate>
@@ -154,8 +161,8 @@
   <!-- /var/lib/sysdeck/builder/. The bridge runs the backend via    -->
   <!-- subprocess; the cockpit superuser channel handles root priv. -->
   <!-- v0.1.0: profile-import-packages also queries the host's        -->
-  <!-- package manager (pacman -Qqe / apt-mark showmanual /          -->
-  <!-- dnf repoquery --userinstalled) to capture the operator's       -->
+  <!-- package manager (pacman -Qqe / apt-mark showmanual / the dnf   -->
+  <!-- repoquery userinstalled filter) to capture the operator's      -->
   <!-- explicitly-installed package set.                             -->
   <!-- ============================================================= -->
   <action id="org.sysdeck.builder.modify">
@@ -176,6 +183,12 @@
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pacman</annotate>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/apt-mark</annotate>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/dnf</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/emerge</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/lvu</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/gaze</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/xbps-query</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/sbin/apk</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/zypper</annotate>
   </action>
 
   <!-- ============================================================= -->

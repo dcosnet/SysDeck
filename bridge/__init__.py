@@ -22,7 +22,7 @@ import os
 import subprocess
 from typing import Literal
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 __author__ = "Jeremy Anderson"
 __url__ = "https://dcos.net"
 
@@ -33,7 +33,9 @@ __url__ = "https://dcos.net"
 # then fall back to checking which package manager is available.
 # Returns a normalized distro identifier for use in dispatch tables.
 
-DistroId = Literal["arch", "debian", "fedora", "rhel", "unknown"]
+DistroId = Literal["arch", "gentoo", "lunar", "sourcemage", "void",
+                   "alpine", "opensuse", "debian", "fedora", "rhel",
+                   "unknown"]
 
 
 def detect_distro() -> DistroId:
@@ -42,9 +44,12 @@ def detect_distro() -> DistroId:
     Priority order:
       1. Parse /etc/os-release ID/ID_LIKE fields.
       2. Fall back to package-manager presence (pacman → arch,
+         emerge → gentoo, lunar → lunar, sorcery → sourcemage,
+         xbps-query → void, apk → alpine, zypper → opensuse,
          apt → debian, dnf → fedora).
 
-    Returns one of: 'arch', 'debian', 'fedora', 'rhel', 'unknown'.
+    Returns one of: 'arch', 'gentoo', 'lunar', 'sourcemage', 'void',
+    'alpine', 'opensuse', 'debian', 'fedora', 'rhel', 'unknown'.
     """
     # Try /etc/os-release first (present on all modern distros).
     try:
@@ -59,6 +64,12 @@ def detect_distro() -> DistroId:
 
         # Direct match on ID.
         id_map = {"arch": "arch", "archlinux": "arch",
+                  "gentoo": "gentoo", "funtoo": "gentoo",
+                  "lunar": "lunar", "sourcemage": "sourcemage",
+                  "void": "void",
+                  "alpine": "alpine", "postmarketos": "alpine",
+                  "opensuse": "opensuse", "opensuse-leap": "opensuse",
+                  "opensuse-tumbleweed": "opensuse", "sles": "opensuse",
                   "debian": "debian", "ubuntu": "debian", "linuxmint": "debian", "pop": "debian",
                   "fedora": "fedora", "rhel": "rhel", "centos": "rhel", "rocky": "rhel", "alma": "rhel"}
         if dist_id in id_map:
@@ -72,7 +83,11 @@ def detect_distro() -> DistroId:
         pass
 
     # Fall back to package manager presence.
-    for cmd, distro in [("pacman", "arch"), ("apt", "debian"), ("dnf", "fedora")]:
+    for cmd, distro in [("pacman", "arch"), ("emerge", "gentoo"),
+                        ("lunar", "lunar"), ("sorcery", "sourcemage"),
+                        ("xbps-query", "void"), ("apk", "alpine"),
+                        ("zypper", "opensuse"),
+                        ("apt", "debian"), ("dnf", "fedora")]:
         try:
             subprocess.run([cmd, "--version"], capture_output=True, check=True)
             return distro
@@ -88,16 +103,25 @@ DISTRO: DistroId = detect_distro()
 
 # ── Package manager detection ───────────────────────────────────────
 #
-# Returns the command name for the system's package manager.
-# Arch → pacman, Debian → apt, Fedora/RHEL → dnf.
+# Returns the manager id for the system's distro, matching the ten
+# backends bridge/packages.py steps down through: Arch → pacman,
+# Gentoo → emerge, Lunar → lunar, SourceMage → sorcery, Void → xbps,
+# Alpine → apk, openSUSE → zypper, Fedora/RHEL → dnf, Debian → apt.
 
-PkgManager = Literal["pacman", "apt", "dnf", "unknown"]
+PkgManager = Literal["pacman", "emerge", "lunar", "sorcery", "xbps",
+                     "apk", "zypper", "dnf", "apt", "unknown"]
 
 
 def detect_pkg_manager() -> PkgManager:
     """Detect the system package manager based on distro."""
     pkg_map: dict[DistroId, PkgManager] = {
         "arch": "pacman",
+        "gentoo": "emerge",
+        "lunar": "lunar",
+        "sourcemage": "sorcery",
+        "void": "xbps",
+        "alpine": "apk",
+        "opensuse": "zypper",
         "debian": "apt",
         "fedora": "dnf",
         "rhel": "dnf",

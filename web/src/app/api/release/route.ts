@@ -1,7 +1,7 @@
 // Master tarball release metadata — reports the sha256/size of the
-// sysdeck-0.4.3-master bundle in public/download (built by
+// sysdeck-0.4.4-master bundle in public/download (built by
 // scripts/make-master-tarball.sh). The tarball itself is served
-// statically at /download/sysdeck-0.4.3-master.tar.bz2.
+// statically at /download/sysdeck-0.4.4-master.tar.bz2.
 //
 // As of 0.3.1 every web surface is gated; 0.4.0 gates it with the unix-account session
 // — the tarball file itself stays a plain static
@@ -22,7 +22,7 @@ import { requireSession } from '@/lib/sysdeck/session'
 
 export const dynamic = 'force-dynamic'
 
-const FILE = 'sysdeck-0.4.3-master.tar.bz2'
+const FILE = 'sysdeck-0.4.4-master.tar.bz2'
 const DOWNLOAD_DIR = path.join(process.cwd(), 'public', 'download')
 
 // hash cache — recompute when the file size OR mtime changes (rebuild)
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     }
     return NextResponse.json({
       ok: true,
-      version: '0.4.3',
+      version: '0.4.4',
       edition: 'master',
       file: FILE,
       url: `/download/${FILE}`,

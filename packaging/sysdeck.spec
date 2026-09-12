@@ -7,7 +7,7 @@
 #       Debian/Ubuntu users: see packaging/debian/
 
 Name:           sysdeck
-Version:        0.4.3
+Version:        0.4.4
 Release:        1%{?dist}
 Summary:        Unified operations surface for Linux infrastructure
 
@@ -84,6 +84,16 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.4-1
+- v0.4.4: package parity + blog essay. Ten package-manager backends on
+  both editions (bridge/packages.py gains emerge/lunar/sorcery/xbps/
+  apk/zypper/yum with a unified MUTATION_CMDS table and shutil.which
+  detection step-down); zypper tables parse by header-located columns;
+  the emerge update regex anchors after the class bracket; xbps
+  detection probes xbps-query; lunar reports its missing update-preview
+  honestly. Web packages.ts gains the same fixes. BLOG.md becomes the
+  long-form engineering essay.
+
 * Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.3-1
 - v0.4.3: the MoE QA pass — production hardening across every axis.
   Privileged writes ride stdin (polkit rules verified post-write,

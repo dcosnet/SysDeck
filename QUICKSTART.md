@@ -434,6 +434,38 @@ A multi-expert audit hardened every axis of the console:
 
 
 
+### 10.8 Ten package managers on both editions (v0.4.4)
+
+The package module runs the same on every distro it touches — module
+parity between the two frontends, not drift:
+
+- **Cockpit edition** (`bridge/packages.py`): pacman (Arch) · emerge
+  (Gentoo/Portage) · lunar (Lunar Linux) · sorcery (SourceMage) ·
+  xbps (Void) · apk (Alpine) · zypper (openSUSE) · dnf / yum (RPM) ·
+  apt (Debian). Detection is a `shutil.which` step-down in a fixed
+  order, most specific first; `emerge` requires the `/var/db/pkg`
+  corroboration; Void is probed via `xbps-query` (no bare `xbps`
+  binary exists). Installs/removals/updates resolve from one
+  `MUTATION_CMDS` table — `pacman -S --noconfirm`, `emerge
+  --unmerge`, `cast`/`dispel`, `lin`/`lrm`, `xbps-install -y`,
+  `zypper --non-interactive` — and still ride the cockpit superuser
+  channel (polkit `org.sysdeck.packages.modify`).
+- **Web edition** (`web/src/lib/sysdeck/bridge/packages.ts`): the
+  identical step-down and now the identical parser fixes — zypper
+  tables parse by header-located columns, the emerge update preview
+  anchors its capture after the class bracket (the old capture
+  grabbed the bracket and silently dropped every row), and
+  `xbps-query -Rs` rows parse with or without a repository prefix.
+- **Honest capability reporting**: lunar has no update-preview
+  subcommand, so its summary says so instead of reporting 0 updates;
+  lunar single-package update refuses with the real instruction.
+  Fixture tests for all of the above run in `make check`
+  (`tests/test_bridge_parsers.py::TestPackagesBackends`).
+- **BLOG.md** is now the long-form engineering essay (title, deck,
+  decision-organized sections, canonical workflow, attribution
+  footer). Release history lives in `QA.md` and `worklog.md`.
+
+
 ## 11. Run without Cockpit (the complete standalone runbook, v0.3.0)
 
 The web edition needs **nothing from sections 1–8** — no cockpit, no Python

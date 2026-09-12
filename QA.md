@@ -1207,6 +1207,81 @@ and this, the console/host pair is 100% aligned.
 
 ---
 
+---
+
+# MoE Quality Assurance Pass — v0.4.4 (package parity + the blog essay)
+
+## v0.4.4 QA — ten managers on both editions, parsers locked by fixtures
+
+**Reviewer panel (MoE):** backend coder · JS/TS expert · algorithms
+specialist (parser robustness) · technical writer (blog pattern)
+**Date:** 2026-09-12
+
+### What was audited and fixed
+
+- **Parity gap closed:** `bridge/packages.py` (cockpit edition) carried
+  only pacman/dnf/apt while the web console carried ten backends.
+  The cockpit bridge now runs the identical step-down — pacman →
+  emerge (corroborated by `/var/db/pkg`) → lunar → sorcery → xbps
+  (probed via `xbps-query`; Void ships no bare `xbps` binary) → apk →
+  zypper → dnf → yum → apt — with `shutil.which` presence probes (no
+  `--version` child processes) and the same corroboration rules.
+- **Silent-fabrication bugs found by fixture tests and fixed on BOTH
+  editions:** (1) the emerge update regex captured the class bracket
+  `]` as the "atom" — portage pads the class field with spaces, so
+  every update row was dropped and Gentoo hosts silently showed "no
+  updates"; the capture now anchors after the bracket. (2) zypper
+  tables were parsed positionally, but zypper prefixes its tables
+  with status/repository columns that vary by subcommand and release;
+  parsing now locates `Name`/`Current`/`Available` from the header row
+  (separator and repeated-header rows filtered). (3) the xbps search
+  regex required a repository prefix that `xbps-query -Rs` rows do
+  not consistently carry — searches silently returned zero rows; the
+  prefix is now optional. (4) the web emerge info lookup resolved
+  only bare names — category-qualified atoms returned null; both
+  lookup shapes now resolve.
+- **Honest capability reporting:** lunar has no `lvu` update-preview
+  subcommand — its summary carries the note instead of a zero count
+  that reads as "all current", and single-module update refuses with
+  the real instruction. Mutation argv for all ten managers lives in
+  one `MUTATION_CMDS` table (`emerge --unmerge`, `cast`/`dispel`,
+  `lin`/`lrm`, `xbps-install -y`, `zypper --non-interactive`, ...)
+  shared by install/remove/update/update-all/dry-run — the dry-run
+  preview and the executed command cannot diverge.
+- **Surface hygiene:** polkit `org.sysdeck.packages.modify` exec-path
+  annotations extended to the ten managers (and a latent `--` inside
+  an XML comment in the policy file fixed — strict parsers rejected
+  it); the cockpit packages panel's unavailable-message and header
+  narrate the ten-manager reality and render `summary.updatesNote`;
+  `bridge/__init__.py`'s DistroId/PkgManager maps cover the new
+  distros; churn-narration docstrings in the touched files rewritten
+  as decisive rules.
+- **BLOG.md rebuilt as a long-form engineering essay** (the shellm
+  blog pattern): title, italic deck, context narrative, roadmap
+  paragraph, decision-organized sections (auth via PAM, one catalog
+  two frontends, the compiler-enforced zero-demo contract, the
+  ten-manager step-down, the firewall privilege discipline,
+  performance without fabrication), a canonical numbered workflow, and
+  an attribution footer. Every file path, flag, token format, and
+  count in the essay verified against the source. Release notes
+  content no longer lives in BLOG.md; history stays in QA.md and
+  worklog.md, and README's pointers say so.
+
+### Verification
+
+`python3 -m py_compile` across bridge/*.py · fixture suite
+`scripts/test_packages_backends.py` 10/10 checks · new unittest class
+`TestPackagesBackends` 13/13 in `make check` (detection order + xbps
+probe, emerge corroboration via mocked `shutil.which`, zypper
+header-locate across three layouts, emerge bracket-anchored regex,
+xbps prefix-optional regex, MUTATION_CMDS coverage incl. lunar's
+honest absence, real argv spot-checks, honest lunar summary, no-sudo
+source guard) · `node --check` on the packages panel · polkit policy
+XML validated with a strict parser · `tsc --noEmit` clean and eslint
+clean on the web tree (full dep install) · version sync at 0.4.4
+across all release surfaces · master tarball rebuilt via
+`make master`.
+
 # MoE Quality Assurance Pass — v0.4.3 (the hardened release)
 
 ## v0.4.3 QA — multi-expert audit, findings landed

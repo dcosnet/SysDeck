@@ -3,7 +3,7 @@
 **A drop-in plugin for an existing Cockpit install — twenty-six domain modules behind one dashboard.**
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
-Version: **0.4.3** · License: **MIT**
+Version: **0.4.4** · License: **MIT**
 
 ---
 
@@ -12,6 +12,44 @@ Version: **0.4.3** · License: **MIT**
 SysDeck is a cockpit-native plugin that consolidates the day-to-day work of a Linux operations team — containers, firewall, integrity auditing, network security, service mesh, encryption vaults, fleet compute, Kata Containers, firmware, image building, mining, theme engine, hardware authentication, DAG-driven build orchestration, system monitoring, hardware sensors, system benchmarking, package management, policy & permissions, database control, Jellyfin media server, photo manager (PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/LibrePhotos), remote filesystem manager (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS), a 3rd-party Cockpit module installer (45Drives Navigator/File-Sharing/ZFS-Manager, cockpit-pacman, cockpit-identities, cockpit-sensors, cockpit-benchmark — each pulled on demand with the license, developer, source URL, and homepage shown inline next to a 1-click Install button), and a service/port editor (a first-class sidebar entry that enumerates every listening TCP socket, cross-references against a SERVICES_REGISTRY of 9 known services — ssh, cockpit, caddy, varnish, mariadb, ollama, openwebui, hermes, odysseus — and lets the operator edit the port in each service's config file with an atomic write + systemctl restart) — into a single dashboard accessible from the cockpit web UI.
 
 The plugin ships as static HTML+JS+CSS plus a Python bridge helper package. It installs under `/usr/share/cockpit/sysdeck-*/` and is discovered automatically by the cockpit-bridge. No separate web server, no Node.js runtime, no database — the plugin runs inside the cockpit web service.
+
+### v0.4.4 highlights (ten package managers on both editions + the blog essay)
+
+The cockpit packages bridge now carries the **same ten-manager
+step-down as the web console** — module parity, not drift:
+
+- **`bridge/packages.py` supports pacman (Arch), emerge (Gentoo/
+  Portage), lunar (Lunar Linux), sorcery (SourceMage), xbps (Void),
+  apk (Alpine), zypper (openSUSE), dnf and yum (RPM), apt (Debian)** —
+  the identical detection order and corroboration rules as the web
+  console's `packages.ts`: `emerge` claims the host only when
+  `/var/db/pkg` also exists, and Void is probed through
+  `xbps-query` because Void ships no bare `xbps` binary.
+- **Parser correctness, locked in by fixture tests** (`make check`):
+  zypper tables parse by locating `Name`/`Current`/`Available`
+  columns from the header row (zypper's leading status/repository
+  columns vary by subcommand and release); the emerge update preview
+  anchors its capture after the class bracket — portage pads the
+  class field with spaces, and the previous capture grabbed the
+  bracket itself and silently dropped every update row; `xbps-query
+  -Rs` rows parse with or without a repository prefix. Both editions
+  carry all three fixes.
+- **Honest capability reporting**: `lvu` has no update-preview
+  subcommand, so the lunar backend returns an honest empty and the
+  summary carries a note ("lunar has no update-preview subcommand —
+  run lunar update to fetch + rebuild") instead of a zero count that
+  reads as "all current"; lunar single-module update refuses with the
+  real instruction. Every other manager maps to its exact argv
+  (`emerge --unmerge`, `cast`/`dispel`, `zypper --non-interactive
+  install`, …) from one `MUTATION_CMDS` table shared by install,
+  remove, update, update-all, and the dry-run preview.
+- **`BLOG.md` is now a long-form engineering essay** (the same shape
+  as the shellm blog: title, deck, decision-organized sections,
+  canonical workflow, attribution footer) — a technical walkthrough
+  of the auth model, the two-frontend architecture, the zero-demo
+  contract, the ten-manager step-down, and the firewall privilege
+  discipline, grounded in the source. Per-release history lives in
+  `QA.md` and `worklog.md`.
 
 ### v0.4.3 highlights (the MoE QA pass — hardened on every axis)
 
@@ -395,9 +433,9 @@ v0.0.36 adds a firewall backend dropdown to the Firewall panel and hardens the e
 
 ### v0.0.35 highlights
 
-v0.0.35 restores SysDeck Kata as a standalone sidebar entry and adds three new modules per user directive — Jellyfin media server, photo manager, and remote filesystem manager:
+v0.0.35 promotes SysDeck Kata to a standalone sidebar entry and adds three new modules per user directive — Jellyfin media server, photo manager, and remote filesystem manager:
 
-- **Kata split.** Per user directive: *"kata containers should be called SysDeck Kata and moved out of the tools area. and dont call it hidden thats akward."* The v0.0.34 layout had Kata Containers demoted to a hidden "tools" entry inside the merged Containers & VMs panel — labeled "Kata Containers (hidden helper)" with priority -1, in `plugins/sysdeck-containers-kata/`. v0.0.35 splits Kata back out: renamed to **SysDeck Kata**, moved to `plugins/sysdeck-kata/`, converted from a `tools` manifest entry to a `menu` entry (label "SysDeck Kata", order 27), removed the "hidden helper" wording, dropped the priority -1, and restored a dedicated keywords list. The Containers panel now manages Podman only — the Kata tab and its iframe were removed. The pre-built cockpit-kata React bundle (`index.js` + `index.css`) is shipped unchanged.
+- **Kata split.** Per user directive: *"kata containers should be called SysDeck Kata and moved out of the tools area. and dont call it hidden thats akward."* The v0.0.34 layout had Kata Containers demoted to a hidden "tools" entry inside the merged Containers & VMs panel — labeled "Kata Containers (hidden helper)" with priority -1, in `plugins/sysdeck-containers-kata/`. v0.0.35 splits Kata out: renamed to **SysDeck Kata**, moved to `plugins/sysdeck-kata/`, converted from a `tools` manifest entry to a `menu` entry (label "SysDeck Kata", order 27), removed the "hidden helper" wording, dropped the priority -1, and carries a dedicated keywords list. The Containers panel now manages Podman only — the Kata tab and its iframe were removed. The pre-built cockpit-kata React bundle (`index.js` + `index.css`) is shipped unchanged.
 - **Jellyfin media server module.** Per user directive: *"next we will integrate a jellyfin management module where it starts, stops, and loads the admin panel in the module."* New plugin `plugins/sysdeck-jellyfin/` + new bridge helper `bridge/jellyfin.py`. The bridge runs `systemctl start/stop/restart jellyfin.service` via the cockpit superuser channel (polkit `org.sysdeck.jellyfin.modify`); the panel iframes the running Jellyfin admin UI at `http://127.0.0.1:8096` — same pattern as the v0.0.34 Glances integration. Library list is best-effort via `GET /Library/VirtualFolders` on the local Jellyfin instance.
 - **Photo manager module.** Per user directive: *"as well as a photo manager of equal quality. with its own module."* New plugin `plugins/sysdeck-photos/` + new bridge helper `bridge/photos.py`. Multi-backend design (same shape as the DB Control module): PhotoPrism (port 2342, MIT), Piwigo (port 80, GPL-2.0), Lychee (port 80, MIT), Nextcloud-Memories (port 80, AGPL-3.0), LibrePhotos (port 3000, MIT). Each backend is auto-detected; the bridge runs `systemctl start/stop/restart <service>` and the panel iframes its admin UI when running. Polkit action: `org.sysdeck.photos.modify`.
 - **Remote FS manager module.** Per user directive: *"then a remote fs manager such as ceph, and others but not nfs or amanada fs."* New plugin `plugins/sysdeck-remotefs/` + new bridge helper `bridge/remotefs.py`. Multi-backend: Ceph (LGPL-2.1), GlusterFS (GPL-2.0), MooseFS (GPL-2.0), BeeGFS (BeeGFS EULA — free), OrangeFS (BSD-3). Each backend is auto-detected; the bridge runs `systemctl start/stop/restart <service>` and the cluster-info subcommand queries backend-specific cluster status (`ceph status --format=json`, `gluster pool list`, `moosefs-cli info`, `beegfs-ctl --listnodes`, `pvfs2-server -m`). Polkit action `org.sysdeck.remotefs.modify` authorizes the systemctl binary plus ceph / gluster / moosefs-cli / beegfs-ctl / pvfs2-server CLIs. **NFS and Amanda are explicitly EXCLUDED per directive** — documented in the panel footer and in `bridge/remotefs.py:EXCLUDED`.
@@ -465,7 +503,7 @@ The cockpit plugin is the primary deliverable.
 | 15 | System Monitor (Glances web UI) | `cockpit-glances` | P1 | `glances -w` (iframe) + snapshot cards |
 | 16 | Hardware Sensors | `cockpit-sensors` | P1 | `sensors` (lm_sensors) |
 | 17 | System Benchmark | `cockpit-benchmark` | P2 | `sysbench` |
-| 18 | Package Manager | `cockpit-packages` | P1 | `pacman` / `dnf` / `apt` |
+| 18 | Package Manager | `cockpit-packages` | P1 | ten managers: `pacman` / `emerge` / `lunar` / `sorcery` / `xbps` / `apk` / `zypper` / `dnf` / `yum` / `apt` |
 | 19 | Policy & Permissions | `cockpit-policy` | P1 | ACLs · cgroups v2 · VLANs · eBPF · namespaces · filecaps · LSM stack (AppArmor/Smack/TOMOYO/Yama/LoadPin/Lockdown/BPF-LSM/Landlock) |
 | 20 | DB Control | `cockpit-db` | P1 | DB engine CLIs (SQL/NoSQL/vector/AI) |
 | 21 | Jellyfin Media Server | `cockpit-jellyfin` | P1 | `systemctl start/stop/restart jellyfin.service` + admin UI iframe (port 8096) |
@@ -490,7 +528,7 @@ sysdeck-0.0.35/
 │   ├── sysdeck-mesh/
 │   ├── sysdeck-vault/
 │   ├── sysdeck-fleet/
-│   ├── sysdeck-kata/          # v0.0.35: restored to standalone sidebar entry — pre-built cockpit-kata React app
+│   ├── sysdeck-kata/          # v0.0.35: standalone sidebar entry — pre-built cockpit-kata React app
 │   ├── sysdeck-fester/
 │   ├── sysdeck-firmware/
 │   ├── sysdeck-builder/
@@ -519,7 +557,7 @@ sysdeck-0.0.35/
 │   ├── glances.py              # v0.0.34: snapshot + start-web/stop-web
 │   ├── sensors.py              # lm_sensors normalization + alert thresholds
 │   ├── benchmark.py            # sysbench result parsing + baselines
-│   ├── packages.py             # pacman/dnf/apt unified package ops
+│   ├── packages.py             # ten-manager unified package ops (pacman→apt step-down)
 │   ├── mining.py               # v0.0.34: XMRig REST API power tool
 │   ├── themes.py               # v0.0.34: cockpit.conf + CSS variable surface
 │   ├── policy.py               # Policy & Permissions module (LSM stack)
@@ -543,7 +581,7 @@ sysdeck-0.0.35/
 ├── docs/                       # INSTALL.md
 ├── README.md
 ├── QUICKSTART.md
-├── BLOG.md                     # release narrative
+├── BLOG.md                     # engineering essay (long-form)
 ├── QA.md                       # QA notes per release
 ├── THIRD_PARTY.md              # third-party attributions
 ├── LICENSE                     # MIT
@@ -616,7 +654,7 @@ MIT — see [LICENSE](./LICENSE). Third-party attributions: see [THIRD_PARTY.md]
 
 ## Release notes
 
-See [BLOG.md](./BLOG.md) for the v0.0.33 release narrative and prior-version history.
+See [BLOG.md](./BLOG.md) for the engineering essay — a long-form technical walkthrough of the architecture and design decisions, written against the current release. Per-version history lives in [worklog.md](./worklog.md) and [QA.md](./QA.md).
 
 ## Project history
 

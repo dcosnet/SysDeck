@@ -12,7 +12,7 @@
 #
 # Preconditions:
 #   - master-build/cockpit/ holds the staged + upgraded cockpit tree
-#     (fester.py / klanker.py / bridge.js upgraded, Makefile at 0.4.3)
+#     (fester.py / klanker.py / bridge.js upgraded, Makefile at 0.4.4)
 #   - master-build/klanker-gate/ holds the vendored gateway tree + arch/
 #
 # Output:
@@ -20,7 +20,7 @@
 #   download/ (sandbox mirror)
 set -euo pipefail
 
-VERSION="0.4.3"
+VERSION="0.4.4"
 NAME="sysdeck-${VERSION}-master"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE_PARENT="$ROOT/master-build"
@@ -33,8 +33,8 @@ echo ">>> Building $NAME"
 # ── guards: the cockpit tree must be upgraded before packing ──────────
 grep -q 'start-build' "$STAGE_PARENT/cockpit/bridge/fester.py" || {
     echo "FAIL: master-build/cockpit/bridge/fester.py is not upgraded (no start-build subcommand)"; exit 1; }
-grep -q 'VERSION := 0.4.3' "$STAGE_PARENT/cockpit/Makefile" || {
-    echo "FAIL: master-build/cockpit/Makefile is not bumped to 0.4.3"; exit 1; }
+grep -q 'VERSION := 0.4.4' "$STAGE_PARENT/cockpit/Makefile" || {
+    echo "FAIL: master-build/cockpit/Makefile is not bumped to 0.4.4"; exit 1; }
 test -f "$STAGE_PARENT/cockpit/bridge/klanker.py" || {
     echo "FAIL: master-build/cockpit/bridge/klanker.py missing"; exit 1; }
 grep -q '"journal"' "$STAGE_PARENT/cockpit/bridge/klanker.py" || {
@@ -277,13 +277,13 @@ right under Overview) with copy buttons on every command.
 From the extracted master tarball root, one command does everything
 (install + migrate + fester + web):
 
-    tar xjf sysdeck-0.4.3-master.tar.bz2
-    cd sysdeck-0.4.3-master
+    tar xjf sysdeck-0.4.4-master.tar.bz2
+    cd sysdeck-0.4.4-master
     make web-dev        # bun install + db:push + fester + next dev :3000
 
 Granular equivalent (what `make web-dev` does):
 
-    cd sysdeck-0.4.3-master/web
+    cd sysdeck-0.4.4-master/web
     bun install                     # dependencies
     bun run db:push                 # create + migrate db/custom.db (SQLite)
     bun run dev                     # Next.js on :3000

@@ -3,10 +3,20 @@
 SysDeck - Packages Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-Wraps the system package manager (pacman on Arch Linux, dnf/yum on
-RPM distros, apt on DEB distros) into a unified JSON interface so the
+Wraps the system package manager into a unified JSON interface so the
 Packages panel can list, search, install, update, and remove packages
-without knowing which distro it runs on.
+without knowing which distro it runs on. Ten backends, same step-down
+on both editions (web console: web/src/lib/sysdeck/bridge/packages.ts):
+
+    pacman (Arch) · emerge (Gentoo/Portage) · lunar (Lunar Linux) ·
+    sorcery (SourceMage) · xbps (Void) · apk (Alpine) · zypper
+    (openSUSE) · dnf / yum (RPM) · apt (Debian)
+
+Every list/updates/search/info read hits the REAL package database of
+the detected manager (dpkg-query, pacman -Q, rpm -qa, /var/db/pkg scan,
+lvu/gaze state) — no fabricated rows, ever. Backends without an
+update-preview subcommand (lunar) report that honestly instead of
+inventing a count.
 
 The package manager is invoked as a separate process via subprocess —
 the suite (MIT) and the package manager remain independent programs.
@@ -24,20 +34,20 @@ Usage:
     python3 /usr/lib/sysdeck/bridge/packages.py dry-run <action> [name]
     python3 /usr/lib/sysdeck/bridge/packages.py summary
 
-v0.0.31: install / remove / update / update-all now ACTUALLY RUN the
-package manager via subprocess. The cockpit JS panel passes
-{ superuser: 'try' } to cockpit.spawn so the operator authenticates
-via polkit (org.sysdeck.packages.modify action, shipped since v0.0.17,
-authorizes /usr/bin/pacman, /usr/bin/apt, /usr/bin/dnf). No `sudo`
+install / remove / update / update-all ACTUALLY RUN the package manager
+via subprocess. The cockpit JS panel passes { superuser: 'try' } to
+cockpit.spawn so the operator authenticates via polkit
+(org.sysdeck.packages.modify, shipped since v0.0.17). No `sudo`
 shell-out from JS — this is the cockpit way.
 
-The new `dry-run` subcommand preserves the v0.0.30 command-string-only
-return shape for the panel's preview-before-confirm flow.
+The `dry-run` subcommand returns the command string without running
+it, for the panel's preview-before-confirm flow.
 """
 
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -52,21 +62,45 @@ PACMAN_AUTHOR = "Pacman Development Team"
 PACMAN_URL = "https://archlinux.org/pacman/"
 
 # Detect the system package manager once at import time.
-# Step-down: prefer pacman (Arch), then dnf (Fedora), then apt (Debian/Ubuntu).
-# The detected manager determines which backend functions are used.
+# Step-down, most specific first — identical order and corroboration
+# rules to the web console's detectBackend(): pacman (Arch) → emerge
+# (Gentoo, corroborated by the /var/db/pkg vdb) → lunar (Lunar) →
+# sorcery (SourceMage) → xbps (Void, probed via xbps-query — Void
+# ships no bare `xbps` binary) → apk (Alpine) → zypper (openSUSE) →
+# dnf (Fedora) → yum (RHEL 7) → apt (Debian/Ubuntu). Binary presence
+# is a shutil.which probe: no child process, no --version flag quirks.
+
+EMERGE_PKG_DB = "/var/db/pkg"
+LUNAR_STATE = "/var/state/lunar/packages"
+SORCERY_STATE = "/var/state/sorcery/packages"
+
+DETECT_PROBES: tuple[tuple[str, str], ...] = (
+    ("pacman", "pacman"),
+    ("emerge", "emerge"),
+    ("lunar", "lunar"),
+    ("sorcery", "sorcery"),
+    ("xbps", "xbps-query"),
+    ("apk", "apk"),
+    ("zypper", "zypper"),
+    ("dnf", "dnf"),
+    ("yum", "yum"),
+    ("apt", "apt"),
+)
+
 
 def _detect_pkg_manager() -> str:
-    """Return 'pacman', 'dnf', or 'apt' based on what is available."""
-    for cmd in ("pacman", "dnf", "apt"):
-        try:
-            subprocess.run(
-                [cmd, "--version"], capture_output=True, check=True,
-                timeout=5, env=SCRUBBED_ENV,
-            )
-            return cmd
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    """Return the detected manager id ('pacman', 'emerge', 'lunar',
+    'sorcery', 'xbps', 'apk', 'zypper', 'dnf', 'yum', 'apt') or
+    'unknown' when no known package manager is installed."""
+    for mgr, probe in DETECT_PROBES:
+        if shutil.which(probe) is None:
             continue
+        if mgr == "emerge" and not os.path.isdir(EMERGE_PKG_DB):
+            # Corroboration: a Gentoo box always carries the vdb.
+            continue
+        return mgr
     return "unknown"
+
 
 PKG_MANAGER = _detect_pkg_manager()
 
@@ -218,6 +252,559 @@ def _apt_info(name: str) -> dict[str, Any]:
     return _parse_apt_info(raw, name)
 
 
+# ── Shared helpers for the distro backends ──────────────────────────
+
+_VER_TAIL_RE = re.compile(r"^[0-9][0-9a-zA-Z._+-]*[0-9a-zA-Z._+]$")
+
+
+def _split_name_ver(atom: str) -> tuple[str, str]:
+    """Tolerant name/version split for flat atoms.
+
+    "gcc-13.2.1-r0" → ("gcc", "13.2.1-r0"); "linux-headers-6.1" →
+    ("linux-headers", "6.1"). Rule: the earliest hyphen followed by a
+    digit whose tail is version-shaped wins."""
+    for i in range(len(atom)):
+        if atom[i] != "-":
+            continue
+        tail = atom[i + 1:]
+        if tail and tail[0].isdigit() and _VER_TAIL_RE.match(tail):
+            return atom[:i], tail
+    return atom, ""
+
+
+def _parse_colon_blocks(raw: str) -> dict[str, str]:
+    """Parse "Key: value" lines into a lowercase snake-key dict."""
+    out: dict[str, str] = {}
+    for line in raw.splitlines():
+        if ":" in line:
+            key, _, val = line.partition(":")
+            k = key.strip().lower().replace(" ", "_").replace("-", "_")
+            out[k] = val.strip()
+    return out
+
+
+def _rpm_db_list_installed() -> list[dict[str, str]]:
+    """Installed rows straight from the rpm database — the zero-tooling
+    source of truth shared by the zypper backend: name TAB version."""
+    raw = run(["rpm", "-qa", "--qf", "%{NAME}\t%{VERSION}-%{RELEASE}\n"], timeout=60)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        name, _, version = line.partition("\t")
+        if name:
+            rows.append({"name": name, "version": version, "installed": True})
+    return rows
+
+
+def _read_text(path: str) -> str:
+    """Small text-file read; '' when absent/unreadable."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+# ── Zypper backend (openSUSE) ────────────────────────────────────────
+
+def _zypper_list_installed() -> list[dict[str, str]]:
+    """List installed packages from the rpm database."""
+    return _rpm_db_list_installed()
+
+
+def _zypper_table(raw: str, wanted: tuple[str, ...]) -> tuple[dict[str, int], list[list[str]]]:
+    """Parse a zypper pipe-table by locating columns from its header row.
+
+    zypper prefixes data tables with status/repository columns whose
+    count varies by subcommand and zypper release; positional parsing
+    breaks across those. The header row is the source of truth: find
+    each wanted column's index there, then read the data rows."""
+    header: dict[str, int] = {}
+    data: list[list[str]] = []
+    for line in raw.splitlines():
+        if "|" not in line:
+            continue
+        cols = [c.strip() for c in line.split("|")]
+        if not header:
+            if all(w in cols for w in wanted):
+                header = {w: cols.index(w) for w in wanted}
+            continue
+        # Separator rows ('-----+-----') and repeated header rows.
+        if cols and all(c and set(c) <= {"-", "+"} for c in cols):
+            continue
+        if any(len(cols) > header[w] and cols[header[w]] == w for w in header):
+            continue
+        data.append(cols)
+    return header, data
+
+
+def _zypper_list_updates() -> list[dict[str, str]]:
+    """List available updates via zypper -q list-updates.
+
+    Output is pipe-separated with a header row (Repository/Name/Current/
+    Available/Arch, plus a leading status column on some releases)."""
+    raw = run(["zypper", "-q", "list-updates"], timeout=60)
+    header, rows = _zypper_table(raw, ("Name", "Current", "Available"))
+    out: list[dict[str, str]] = []
+    for cols in rows:
+        if len(cols) <= max(header.values()):
+            continue
+        name = cols[header["Name"]]
+        if not name:
+            continue
+        out.append({"name": name,
+                    "current": cols[header["Current"]],
+                    "candidate": cols[header["Available"]]})
+    return out
+
+
+def _zypper_search(term: str) -> list[dict[str, Any]]:
+    """Search packages via zypper -q se (columns: status, Name, Summary)."""
+    raw = run(["zypper", "-q", "se", term], timeout=30)
+    header, rows = _zypper_table(raw, ("Name", "Summary"))
+    out: list[dict[str, Any]] = []
+    i_name = header.get("Name", 1)
+    for cols in rows:
+        if len(cols) <= i_name:
+            continue
+        name = cols[i_name]
+        if not name:
+            continue
+        out.append({"name": name, "version": "",
+                    "description": cols[header["Summary"]],
+                    "installed": cols[0] == "i"})
+    return out
+
+
+def _zypper_info(name: str) -> dict[str, Any]:
+    """Package info via zypper -q info."""
+    raw = run(["zypper", "-q", "info", name], timeout=20)
+    if not raw.strip():
+        return {}
+    info = _parse_colon_blocks(raw)
+    return {
+        "name": name,
+        "version": f"{info.get('version', '')}-{info.get('release', '')}",
+        "status": "installed" if "installed" in info.get("status", "") else "not installed",
+        "depends": info.get("depends_on", ""),
+        "description": info.get("description", info.get("summary", "")),
+        "maintainer": info.get("packager", ""),
+    }
+
+
+# ── apk backend (Alpine / postmarketOS) ──────────────────────────────
+
+def _apk_list_installed() -> list[dict[str, str]]:
+    """List installed packages via apk info -v (name-version lines)."""
+    raw = run(["apk", "info", "-v"], timeout=30)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        name, version = _split_name_ver(line)
+        if name:
+            rows.append({"name": name, "version": version, "installed": True})
+    rows.sort(key=lambda r: r["name"])
+    return rows
+
+
+def _apk_list_updates() -> list[dict[str, str]]:
+    """List available updates via apk list --upgradable (fallback:
+    apk version -l '<' on older apk)."""
+    raw = run(["apk", "list", "--upgradable"], timeout=30)
+    if not raw.strip():
+        raw = run(["apk", "version", "-l", "<"], timeout=30)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("Installed") or line.startswith("Available"):
+            continue
+        toks = line.split()
+        name, version = _split_name_ver(toks[0] if toks else "")
+        if not name:
+            continue
+        cand = ""
+        for t in toks[1:]:
+            if t != "<" and not t.startswith("("):
+                cand = t
+                break
+        rows.append({"name": name, "current": version, "candidate": cand})
+    return rows
+
+
+def _apk_search(term: str) -> list[dict[str, Any]]:
+    """Search packages via apk search -v ('name-version - description')."""
+    raw = run(["apk", "search", "-v", term], timeout=30)
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        head, _, desc = line.partition(" - ")
+        name, version = _split_name_ver(head.strip())
+        rows.append({"name": name, "version": version,
+                     "description": desc.strip(), "installed": False})
+    return rows
+
+
+def _apk_info(name: str) -> dict[str, Any]:
+    """Package info via apk info — installed packages only, hence the
+    fixed status."""
+    raw = run(["apk", "info", name], timeout=15)
+    if not raw.strip():
+        return {}
+    info = _parse_colon_blocks(raw)
+    return {
+        "name": name,
+        "version": info.get("version", ""),
+        "status": "installed",
+        "depends": info.get("depends", ""),
+        "description": info.get("description",
+                                raw.splitlines()[0] if raw.splitlines() else ""),
+        "maintainer": info.get("maintainer", ""),
+    }
+
+
+# ── xbps backend (Void Linux) ────────────────────────────────────────
+
+def _xbps_list_installed() -> list[dict[str, str]]:
+    """List installed packages via xbps-query -l ('ii pkg-ver desc')."""
+    raw = run(["xbps-query", "-l"], timeout=30)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        m = re.match(r"^ii\s+(\S+)\s+(.*)$", line)
+        if not m:
+            continue
+        name, version = _split_name_ver(m.group(1))
+        if name:
+            rows.append({"name": name, "version": version, "installed": True})
+    rows.sort(key=lambda r: r["name"])
+    return rows
+
+
+def _xbps_list_updates() -> list[dict[str, str]]:
+    """List available updates via xbps-install -Sun."""
+    raw = run(["xbps-install", "-Sun"], timeout=60)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = line.split()
+        name, version = _split_name_ver(toks[0] if toks else "")
+        if not name:
+            continue
+        cand = toks[1] if len(toks) > 1 else ""
+        if cand in ("xbps:", "delta:") and len(toks) > 2:
+            cand = toks[2]
+        rows.append({"name": name, "current": version, "candidate": cand})
+    return rows
+
+
+def _xbps_search(term: str) -> list[dict[str, Any]]:
+    """Search packages via xbps-query -Rs ('[*] [repo/]name-ver - desc').
+
+    The repository prefix is optional — plain 'name-ver' rows are the
+    common form, so the parser accepts both."""
+    raw = run(["xbps-query", "-Rs", term], timeout=30)
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        m = re.match(r"^\[\*\]\s+(?:\S+/)?(\S+)\s+-\s+(.*)$", line)
+        if not m:
+            continue
+        name, version = _split_name_ver(m.group(1))
+        rows.append({"name": name, "version": version,
+                     "description": m.group(2), "installed": False})
+    return rows
+
+
+def _xbps_info(name: str) -> dict[str, Any]:
+    """Package info via xbps-query -R (repository) falling back to the
+    local db query."""
+    raw = run(["xbps-query", "-R", name], timeout=15)
+    if not raw.strip():
+        raw = run(["xbps-query", name], timeout=15)
+    if not raw.strip():
+        return {}
+    info = _parse_colon_blocks(raw)
+    return {
+        "name": name,
+        "version": info.get("pkgver", info.get("version", "")),
+        "status": "installed" if "install-date" in raw else "repository (not installed)",
+        "depends": info.get("depends", info.get("run_depends", "")),
+        "description": info.get("short_desc", ""),
+        "maintainer": info.get("maintainer", ""),
+    }
+
+
+# ── emerge backend (Gentoo / Portage) ────────────────────────────────
+
+def _emerge_list_installed() -> list[dict[str, str]]:
+    """Installed set from the vdb itself: /var/db/pkg/<cat>/<name>-<ver>.
+
+    Zero-dependency source of truth — no emerge invocation needed."""
+    rows: list[dict[str, str]] = []
+    try:
+        cats = os.listdir(EMERGE_PKG_DB)
+    except OSError:
+        return rows
+    for cat in cats:
+        cdir = os.path.join(EMERGE_PKG_DB, cat)
+        try:
+            entries = os.listdir(cdir)
+        except OSError:
+            continue
+        for pf in entries:
+            leaf, version = _split_name_ver(pf)
+            rows.append({"name": f"{cat}/{leaf}", "version": version, "installed": True})
+    rows.sort(key=lambda r: r["name"])
+    return rows
+
+
+def _emerge_list_updates() -> list[dict[str, str]]:
+    """Deep world update preview via emerge -p -u -D @world.
+
+    Parses ' [ebuild     U     ] cat/pkg-1.2.3 [1.2.2]' lines. The
+    atom is anchored AFTER the class bracket — portage pads the class
+    field with spaces, so a regex that starts the atom before the
+    bracket captures the bracket itself and drops every row."""
+    raw = run(["emerge", "-p", "-u", "-D", "@world"], timeout=90)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        m = re.search(r"\[ebuild\s+U[^\]]*\]\s*(\S+)(?:\s+\[([^\]]+)\])?", line)
+        if not m:
+            continue
+        atom = m.group(1)
+        slash = atom.rfind("/")
+        if slash < 0:
+            continue
+        leaf, version = _split_name_ver(atom[slash + 1:])
+        rows.append({"name": f"{atom[:slash]}/{leaf}",
+                     "current": m.group(2) or "", "candidate": version})
+    return rows
+
+
+def _emerge_search(term: str) -> list[dict[str, Any]]:
+    """Search via emerge --search ('* cat/pkg' + 'Description:' lines)."""
+    raw = run(["emerge", "--search", term], timeout=60)
+    rows: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
+    for line in raw.splitlines():
+        m = re.match(r"^\*\s+(\S+)$", line)
+        if m:
+            if cur:
+                rows.append(cur)
+            cur = {"name": m.group(1), "version": "", "description": "", "installed": False}
+            continue
+        if cur and "Description:" in line:
+            cur["description"] = line.split("Description:", 1)[1].strip()
+        if cur and re.search(r"\[installed\]", line, re.IGNORECASE):
+            cur["installed"] = True
+    if cur:
+        rows.append(cur)
+    return rows
+
+
+def _emerge_info(name: str) -> dict[str, Any]:
+    """Real metadata from the installed package's /var/db/pkg entry.
+
+    Accepts both 'cat/pkg' atoms and bare names (the latter scans every
+    category for a matching leaf)."""
+    slash = name.rfind("/")
+    if slash > 0:
+        candidates = [name[:slash]]
+        leaf = name[slash + 1:]
+    else:
+        leaf = name
+        candidates = []
+        try:
+            candidates = sorted(os.listdir(EMERGE_PKG_DB))
+        except OSError:
+            return {}
+    for cat in candidates:
+        cdir = os.path.join(EMERGE_PKG_DB, cat)
+        try:
+            entries = os.listdir(cdir)
+        except OSError:
+            continue
+        for pf in entries:
+            pf_leaf, version = _split_name_ver(pf)
+            if pf_leaf != leaf:
+                continue
+            pdir = os.path.join(cdir, pf)
+            desc = _read_text(os.path.join(pdir, "DESCRIPTION")).strip()
+            if not (desc or version):
+                continue
+            return {
+                "name": f"{cat}/{leaf}",
+                "version": version,
+                "status": "installed (from /var/db/pkg)",
+                "depends": (_read_text(os.path.join(pdir, "RDEPEND"))
+                            or _read_text(os.path.join(pdir, "PDEPEND"))).strip(),
+                "description": desc,
+                "maintainer": _read_text(os.path.join(pdir, "HOMEPAGE")).strip(),
+            }
+    return {}
+
+
+# ── lunar backend (Lunar Linux) ──────────────────────────────────────
+
+def _lunar_list_installed() -> list[dict[str, str]]:
+    """Installed modules via lvu installed; the /var/state/lunar/packages
+    file is the dependency-free fallback."""
+    raw = run(["lvu", "installed"], timeout=30)
+    if raw.strip():
+        return [{"name": t[0], "version": t[1] if len(t) > 1 else "", "installed": True}
+                for t in (line.strip().split() for line in raw.splitlines()) if t]
+    rows: list[dict[str, str]] = []
+    for line in _read_text(LUNAR_STATE).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = line.split()
+        rows.append({"name": toks[0], "version": toks[1] if len(toks) > 1 else "",
+                     "installed": True})
+    rows.sort(key=lambda r: r["name"])
+    return rows
+
+
+def _lunar_list_updates() -> list[dict[str, str]]:
+    """lvu has no update-preview subcommand; `lunar update` performs the
+    fetch + rebuild. Honest empty list — the summary carries the note
+    explaining why, instead of fabricating a count."""
+    return []
+
+
+def _lunar_search(term: str) -> list[dict[str, Any]]:
+    """Search modules via lvu search."""
+    raw = run(["lvu", "search", term], timeout=30)
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = line.split()
+        rows.append({"name": toks[0], "version": "", "description": line, "installed": False})
+    return rows
+
+
+def _lunar_info(name: str) -> dict[str, Any]:
+    """Module info via lvu details."""
+    raw = run(["lvu", "details", name], timeout=15)
+    if not raw.strip():
+        return {}
+    info = _parse_colon_blocks(raw)
+    first = next((l.strip() for l in raw.splitlines() if l.strip()), "")
+    return {
+        "name": name,
+        "version": info.get("version", ""),
+        "status": "installed (lunar)",
+        "depends": info.get("depends", ""),
+        "description": info.get("description", first),
+        "maintainer": info.get("maintainer", ""),
+    }
+
+
+# ── sorcery backend (SourceMage GNU/Linux) ──────────────────────────
+
+def _sorcery_list_installed() -> list[dict[str, str]]:
+    """Installed spells via gaze installed; the /var/state/sorcery/packages
+    file is the dependency-free fallback."""
+    raw = run(["gaze", "installed"], timeout=30)
+    if raw.strip():
+        return [{"name": t[0], "version": t[1] if len(t) > 1 else "", "installed": True}
+                for t in (re.split(r"[\s:]+", line.strip()) for line in raw.splitlines()) if t]
+    rows: list[dict[str, str]] = []
+    for line in _read_text(SORCERY_STATE).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = line.split()
+        rows.append({"name": toks[0], "version": toks[1] if len(toks) > 1 else "",
+                     "installed": True})
+    rows.sort(key=lambda r: r["name"])
+    return rows
+
+
+def _sorcery_list_updates() -> list[dict[str, str]]:
+    """Pending spell updates via sorcery queue."""
+    raw = run(["sorcery", "queue"], timeout=60)
+    rows: list[dict[str, str]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = line.split()
+        rows.append({"name": toks[0], "current": "",
+                     "candidate": toks[1] if len(toks) > 1 else ""})
+    return rows
+
+
+def _sorcery_search(term: str) -> list[dict[str, Any]]:
+    """Search spells via gaze search."""
+    raw = run(["gaze", "search", term], timeout=30)
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        toks = re.split(r"[\s:]+", line)
+        rows.append({"name": toks[0] if toks else "", "version": "",
+                     "description": line, "installed": False})
+    return rows
+
+
+def _sorcery_info(name: str) -> dict[str, Any]:
+    """Spell info via gaze what, falling back to gaze details."""
+    for sub in ("what", "details"):
+        raw = run(["gaze", sub, name], timeout=15)
+        if not raw.strip():
+            continue
+        info = _parse_colon_blocks(raw)
+        first = next((l.strip() for l in raw.splitlines() if l.strip()), "")
+        return {
+            "name": name,
+            "version": info.get("version", info.get("spell_version", "")),
+            "status": "installed (sorcery)",
+            "depends": info.get("depends", ""),
+            "description": info.get("description",
+                                    info.get("short_description", first)),
+            "maintainer": info.get("maintainer", ""),
+        }
+    return {}
+
+
+# ── yum backend (RHEL 7 era RPM) ─────────────────────────────────────
+
+def _yum_list_installed() -> list[dict[str, str]]:
+    """List installed packages via yum list installed --quiet."""
+    raw = run(["yum", "list", "installed", "--quiet"], timeout=120)
+    return _parse_rpm_list(raw)
+
+
+def _yum_list_updates() -> list[dict[str, str]]:
+    """List available updates via yum check-update --quiet.
+
+    yum check-update mirrors dnf: exit 100 when updates exist, 0 when
+    none do — 100 is data here, not failure."""
+    raw = run(["yum", "check-update", "--quiet"], timeout=120, ok_rcs=(100,))
+    return _parse_rpm_update_list(raw)
+
+
+def _yum_search(term: str) -> list[dict[str, Any]]:
+    """Search packages via yum search."""
+    raw = run(["yum", "search", term])
+    return [{"name": parts[0], "description": " ".join(parts[1:])}
+            for line in raw.splitlines()
+            if (parts := line.split(" : ", 1)) and len(parts) == 2 and parts[0]]
+
+
+def _yum_info(name: str) -> dict[str, Any]:
+    """Package info via yum info."""
+    raw = run(["yum", "info", name])
+    return _parse_rpm_info(raw, name)
+
+
 # ── Shared parsers ──────────────────────────────────────────────────
 
 def _parse_rpm_list(raw: str) -> list[dict[str, str]]:
@@ -264,58 +851,99 @@ def _parse_apt_info(raw: str, name: str) -> dict[str, Any]:
 
 # ── Dispatch table per package manager ──────────────────────────────
 
-BACKENDS = {
-    "pacman": {
-        "list-installed": lambda _args: _pacman_list_installed(),
-        "list-updates": lambda _args: _pacman_list_updates(),
-        "search": lambda args: _pacman_search(args[0]) if args else [],
-        "info": lambda args: _pacman_info(args[0]) if args else {},
-    },
-    "dnf": {
-        "list-installed": lambda _args: _dnf_list_installed(),
-        "list-updates": lambda _args: _dnf_list_updates(),
-        "search": lambda args: _dnf_search(args[0]) if args else [],
-        "info": lambda args: _dnf_info(args[0]) if args else {},
-    },
-    "apt": {
-        "list-installed": lambda _args: _apt_list_installed(),
-        "list-updates": lambda _args: _apt_list_updates(),
-        "search": lambda args: _apt_search(args[0]) if args else [],
-        "info": lambda args: _apt_info(args[0]) if args else {},
-    },
-}
+def _backend(mgr: str) -> dict[str, Any]:
+    """Read-backend dispatch for one manager id."""
+    table: dict[str, dict[str, Any]] = {
+        "pacman": {
+            "list-installed": lambda _args: _pacman_list_installed(),
+            "list-updates": lambda _args: _pacman_list_updates(),
+            "search": lambda args: _pacman_search(args[0]) if args else [],
+            "info": lambda args: _pacman_info(args[0]) if args else {},
+        },
+        "emerge": {
+            "list-installed": lambda _args: _emerge_list_installed(),
+            "list-updates": lambda _args: _emerge_list_updates(),
+            "search": lambda args: _emerge_search(args[0]) if args else [],
+            "info": lambda args: _emerge_info(args[0]) if args else {},
+        },
+        "lunar": {
+            "list-installed": lambda _args: _lunar_list_installed(),
+            "list-updates": lambda _args: _lunar_list_updates(),
+            "search": lambda args: _lunar_search(args[0]) if args else [],
+            "info": lambda args: _lunar_info(args[0]) if args else {},
+        },
+        "sorcery": {
+            "list-installed": lambda _args: _sorcery_list_installed(),
+            "list-updates": lambda _args: _sorcery_list_updates(),
+            "search": lambda args: _sorcery_search(args[0]) if args else [],
+            "info": lambda args: _sorcery_info(args[0]) if args else {},
+        },
+        "xbps": {
+            "list-installed": lambda _args: _xbps_list_installed(),
+            "list-updates": lambda _args: _xbps_list_updates(),
+            "search": lambda args: _xbps_search(args[0]) if args else [],
+            "info": lambda args: _xbps_info(args[0]) if args else {},
+        },
+        "apk": {
+            "list-installed": lambda _args: _apk_list_installed(),
+            "list-updates": lambda _args: _apk_list_updates(),
+            "search": lambda args: _apk_search(args[0]) if args else [],
+            "info": lambda args: _apk_info(args[0]) if args else {},
+        },
+        "zypper": {
+            "list-installed": lambda _args: _zypper_list_installed(),
+            "list-updates": lambda _args: _zypper_list_updates(),
+            "search": lambda args: _zypper_search(args[0]) if args else [],
+            "info": lambda args: _zypper_info(args[0]) if args else {},
+        },
+        "dnf": {
+            "list-installed": lambda _args: _dnf_list_installed(),
+            "list-updates": lambda _args: _dnf_list_updates(),
+            "search": lambda args: _dnf_search(args[0]) if args else [],
+            "info": lambda args: _dnf_info(args[0]) if args else {},
+        },
+        "yum": {
+            "list-installed": lambda _args: _yum_list_installed(),
+            "list-updates": lambda _args: _yum_list_updates(),
+            "search": lambda args: _yum_search(args[0]) if args else [],
+            "info": lambda args: _yum_info(args[0]) if args else {},
+        },
+        "apt": {
+            "list-installed": lambda _args: _apt_list_installed(),
+            "list-updates": lambda _args: _apt_list_updates(),
+            "search": lambda args: _apt_search(args[0]) if args else [],
+            "info": lambda args: _apt_info(args[0]) if args else {},
+        },
+    }
+    return table.get(mgr, {})
 
 
 def list_installed() -> list[dict[str, str]]:
     """List installed packages using the detected package manager."""
-    backend = BACKENDS.get(PKG_MANAGER, {})
-    fn = backend.get("list-installed")
+    fn = _backend(PKG_MANAGER).get("list-installed")
     return fn([]) if fn else []
 
 
 def list_updates() -> list[dict[str, str]]:
     """List available updates using the detected package manager."""
-    backend = BACKENDS.get(PKG_MANAGER, {})
-    fn = backend.get("list-updates")
+    fn = _backend(PKG_MANAGER).get("list-updates")
     return fn([]) if fn else []
 
 
 def search(args: list[str]) -> list[dict[str, Any]]:
     """Search packages using the detected package manager."""
-    backend = BACKENDS.get(PKG_MANAGER, {})
-    fn = backend.get("search")
+    fn = _backend(PKG_MANAGER).get("search")
     return fn(args) if fn else []
 
 
 def info(args: list[str]) -> dict[str, Any]:
     """Get package info using the detected package manager."""
-    backend = BACKENDS.get(PKG_MANAGER, {})
-    fn = backend.get("info")
+    fn = _backend(PKG_MANAGER).get("info")
     return fn(args) if fn else {}
 
 
 def _pkg_name_ok(pkg: str) -> bool:
-    """v0.1.4 SECURITY: package names are passed to the system package
+    """SECURITY: package names are passed to the system package
     manager as one argv element. A leading dash turns them into manager
     OPTIONS (pacman --config=…, dnf --setopt=…) and a URL makes dnf
     fetch a remote RPM — argument injection, not shell injection. One
@@ -340,23 +968,85 @@ def _first_pkg_arg(args: list[str]) -> str | None:
     return None
 
 
+# ── Mutation commands, one table for all ten managers ───────────────
+# Each entry is the exact argv the real package manager receives;
+# {pkg} is substituted with the validated package name. Actions a
+# manager genuinely lacks (lunar single-module update) are absent from
+# its row — the caller reports the honest refusal instead of running
+# a command that does not exist.
+
+MUTATION_CMDS: dict[str, dict[str, list[str]]] = {
+    "install": {
+        "pacman":  ["pacman", "-S", "--noconfirm", "{pkg}"],
+        "emerge":  ["emerge", "{pkg}"],
+        "lunar":   ["lin", "{pkg}"],
+        "sorcery": ["cast", "{pkg}"],
+        "xbps":    ["xbps-install", "-y", "{pkg}"],
+        "apk":     ["apk", "add", "{pkg}"],
+        "zypper":  ["zypper", "--non-interactive", "install", "{pkg}"],
+        "dnf":     ["dnf", "install", "-y", "{pkg}"],
+        "yum":     ["yum", "install", "-y", "{pkg}"],
+        "apt":     ["apt", "install", "-y", "{pkg}"],
+    },
+    "remove": {
+        "pacman":  ["pacman", "-R", "--noconfirm", "{pkg}"],
+        "emerge":  ["emerge", "--unmerge", "{pkg}"],
+        "lunar":   ["lrm", "{pkg}"],
+        "sorcery": ["dispel", "{pkg}"],
+        "xbps":    ["xbps-remove", "-y", "{pkg}"],
+        "apk":     ["apk", "del", "{pkg}"],
+        "zypper":  ["zypper", "--non-interactive", "remove", "{pkg}"],
+        "dnf":     ["dnf", "remove", "-y", "{pkg}"],
+        "yum":     ["yum", "remove", "-y", "{pkg}"],
+        "apt":     ["apt", "remove", "-y", "{pkg}"],
+    },
+    "update": {
+        "pacman":  ["pacman", "-S", "--noconfirm", "{pkg}"],
+        "emerge":  ["emerge", "-u", "{pkg}"],
+        "sorcery": ["cast", "{pkg}"],
+        "xbps":    ["xbps-install", "-y", "{pkg}"],
+        "apk":     ["apk", "upgrade", "{pkg}"],
+        "zypper":  ["zypper", "--non-interactive", "update", "{pkg}"],
+        "dnf":     ["dnf", "upgrade", "-y", "{pkg}"],
+        "yum":     ["yum", "upgrade", "-y", "{pkg}"],
+        "apt":     ["apt", "upgrade", "-y", "{pkg}"],
+    },
+    "update-all": {
+        "pacman":  ["pacman", "-Syu", "--noconfirm"],
+        "emerge":  ["emerge", "-u", "-D", "@world"],
+        "lunar":   ["lunar", "update"],
+        "sorcery": ["sorcery", "update"],
+        "xbps":    ["xbps-install", "-Su", "-y"],
+        "apk":     ["apk", "upgrade"],
+        "zypper":  ["zypper", "--non-interactive", "update"],
+        "dnf":     ["dnf", "upgrade", "-y"],
+        "yum":     ["yum", "upgrade", "-y"],
+        "apt":     ["apt", "upgrade", "-y"],
+    },
+}
+
+
+def _mutation_cmd(action: str, pkg: str) -> list[str]:
+    """Resolve the argv for one mutation under the detected manager.
+
+    Returns [] when the action/manager pair is absent — the caller
+    reports the honest refusal."""
+    tmpl = MUTATION_CMDS.get(action, {}).get(PKG_MANAGER, [])
+    return [tok.replace("{pkg}", pkg) for tok in tmpl]
+
+
 def install(args: list[str]) -> dict[str, str]:
     """Install a package — actually runs the package manager via subprocess.
 
-    v0.0.31 REWRITE: previously this returned only the command string
-    that *would* be run, forcing the JS panel to alert("Run this
-    command with superuser privileges.") and the operator to copy /
-    sudo / paste / run. The cockpit way is to run the operation via
-    the cockpit superuser channel: the JS panel calls cockpit.spawn()
-    with { superuser: 'try' }, which prompts the operator via polkit
-    for the org.sysdeck.packages.modify action (shipped since v0.0.17)
-    that authorizes /usr/bin/pacman, /usr/bin/apt, /usr/bin/dnf.
-    The bridge runs the package manager via subprocess with check=True
-    and streams stdout/stderr line-by-line so the JS panel can render
-    live output.
+    The cockpit way is to run the operation via the cockpit superuser
+    channel: the JS panel calls cockpit.spawn() with
+    { superuser: 'try' }, which prompts the operator via polkit for
+    the org.sysdeck.packages.modify action. The bridge runs the package
+    manager via subprocess and returns stdout/stderr so the panel can
+    render the live output.
 
-    The command-string preview shape is preserved as the `dry-run`
-    subcommand for operators who want to see what would be run.
+    The `dry-run` subcommand carries the command-string preview for
+    operators who want to see what would be run.
     """
     if not args:
         return {"error": "No package name provided"}
@@ -368,10 +1058,7 @@ def install(args: list[str]) -> dict[str, str]:
     # _pkg_name_ok already rejects leading-dash/URL names (argument
     # injection), so no '--' end-of-options separator is needed here —
     # pacman in particular does not accept one.
-    cmd_map = {"pacman": ["pacman", "-S", "--noconfirm", pkg],
-               "dnf": ["dnf", "install", "-y", pkg],
-               "apt": ["apt", "install", "-y", pkg]}
-    cmd = cmd_map.get(PKG_MANAGER, [])
+    cmd = _mutation_cmd("install", pkg)
     if not cmd:
         return {"action": "install", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no install command for {PKG_MANAGER}"}
@@ -396,10 +1083,7 @@ def remove(args: list[str]) -> dict[str, str]:
         return {"error": "No package name provided"}
     if not _pkg_name_ok(pkg):
         return {"error": f"invalid package name: {pkg!r}"}
-    cmd_map = {"pacman": ["pacman", "-R", "--noconfirm", pkg],
-               "dnf": ["dnf", "remove", "-y", pkg],
-               "apt": ["apt", "remove", "-y", pkg]}
-    cmd = cmd_map.get(PKG_MANAGER, [])
+    cmd = _mutation_cmd("remove", pkg)
     if not cmd:
         return {"action": "remove", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no remove command for {PKG_MANAGER}"}
@@ -421,10 +1105,14 @@ def update(args: list[str]) -> dict[str, str]:
         return {"error": "No package name provided"}
     if not _pkg_name_ok(pkg):
         return {"error": f"invalid package name: {pkg!r}"}
-    cmd_map = {"pacman": ["pacman", "-S", "--noconfirm", pkg],
-               "dnf": ["dnf", "upgrade", "-y", pkg],
-               "apt": ["apt", "upgrade", "-y", pkg]}
-    cmd = cmd_map.get(PKG_MANAGER, [])
+    if PKG_MANAGER == "lunar":
+        # Lunar rebuilds from source against the current moonbase; there
+        # is no single-module update path distinct from install. Point
+        # the operator at the real operation instead of approximating.
+        return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
+                "success": False,
+                "stderr": "lunar has no single-module update — run update-all (lunar update)"}
+    cmd = _mutation_cmd("update", pkg)
     if not cmd:
         return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update command for {PKG_MANAGER}"}
@@ -438,20 +1126,14 @@ def update(args: list[str]) -> dict[str, str]:
 
 
 def update_all() -> dict[str, str]:
-    """Update all packages — actually runs the package manager. See install().
+    """Update all packages — actually runs the package manager.
 
-    v0.0.31: this is the method called by the Packages panel `Update All`
-    button. Previously it returned only the command string and the panel
-    showed alert("Run this command with superuser privileges.") — which
-    defeated the purpose of having a panel. The cockpit way: the JS panel
-    calls bridge.packages.updateAll() with superuser: 'try', the bridge
-    runs pacman/apt/dnf via subprocess, and the result includes the
-    actual stdout/stderr for the panel to render live.
+    This is the method behind the Packages panel `Update All` button:
+    the JS panel calls it with superuser: 'try', the bridge runs the
+    real manager via subprocess, and the result carries the actual
+    stdout/stderr for the panel to render live.
     """
-    cmd_map = {"pacman": ["pacman", "-Syu", "--noconfirm"],
-               "dnf": ["dnf", "upgrade", "-y"],
-               "apt": ["apt", "upgrade", "-y"]}
-    cmd = cmd_map.get(PKG_MANAGER, [])
+    cmd = _mutation_cmd("update-all", "")
     if not cmd:
         return {"action": "update-all", "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update-all command for {PKG_MANAGER}"}
@@ -467,29 +1149,14 @@ def update_all() -> dict[str, str]:
 def dry_run(args: list[str]) -> dict[str, str]:
     """Return the command that *would* be run — for the operator preview.
 
-    v0.0.31: the install/remove/update/update-all subcommands now
-    actually execute the package manager. This subcommand preserves
-    the v0.0.30 behavior (return the command string without running)
-    so the JS panel can show a preview before the operator confirms.
+    install/remove/update/update-all actually execute the package
+    manager; this subcommand returns the command string without
+    running it, so the JS panel can show a preview before the operator
+    confirms.
     """
     action = args[0] if args else "update-all"
     pkg = args[1] if len(args) > 1 else ""
-    cmd_map = {
-        "install":    {"pacman": ["pacman", "-S", "--noconfirm", pkg],
-                       "dnf": ["dnf", "install", "-y", pkg],
-                       "apt": ["apt", "install", "-y", pkg]},
-        "remove":     {"pacman": ["pacman", "-R", "--noconfirm", pkg],
-                       "dnf": ["dnf", "remove", "-y", pkg],
-                       "apt": ["apt", "remove", "-y", pkg]},
-        "update":     {"pacman": ["pacman", "-S", "--noconfirm", pkg],
-                       "dnf": ["dnf", "upgrade", "-y", pkg],
-                       "apt": ["apt", "upgrade", "-y", pkg]},
-        "update-all": {"pacman": ["pacman", "-Syu", "--noconfirm"],
-                       "dnf": ["dnf", "upgrade", "-y"],
-                       "apt": ["apt", "upgrade", "-y"]},
-    }
-    sub_map = cmd_map.get(action, {})
-    cmd = sub_map.get(PKG_MANAGER, [])
+    cmd = _mutation_cmd(action, pkg)
     return {"action": action, "package": pkg, "manager": PKG_MANAGER,
             "command": " ".join(cmd) if cmd else ""}
 
@@ -498,12 +1165,16 @@ def summary() -> dict[str, Any]:
     """Aggregate summary: installed count, update count, manager."""
     installed = list_installed()
     updates = list_updates()
-    return {
+    out: dict[str, Any] = {
         "manager": PKG_MANAGER,
         "installedCount": len(installed),
         "updateCount": len(updates),
         "updates": updates[:20],  # Cap at 20 for the summary view
     }
+    if PKG_MANAGER == "lunar":
+        out["updatesNote"] = ("lunar has no update-preview subcommand — "
+                               "run lunar update to fetch + rebuild")
+    return out
 
 
 COMMANDS = {
@@ -515,8 +1186,6 @@ COMMANDS = {
     "remove": lambda args: remove(args),
     "update": lambda args: update(args),
     "update-all": lambda _args: update_all(),
-    # v0.0.31: dry-run preserves the v0.0.30 command-string-only shape
-    # for the panel's preview-before-confirm flow.
     "dry-run": lambda args: dry_run(args),
     "summary": lambda _args: summary(),
 }

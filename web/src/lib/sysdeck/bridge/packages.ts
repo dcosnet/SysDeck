@@ -17,6 +17,38 @@ import { db } from '@/lib/db'
 import { ok, fail, run, readText, which, cached } from './shared'
 import { readdir, stat } from 'fs/promises'
 
+async function safeListdir(dir: string): Promise<string[]> {
+  try {
+    return await readdir(dir)
+  } catch {
+    return []
+  }
+}
+
+/** Parse a zypper pipe-table by locating columns from its header row.
+ * zypper prefixes data tables with status/repository columns whose
+ * count varies by subcommand and release; positional parsing breaks
+ * across those. The header row is the source of truth. */
+function zypperTable(raw: string, wanted: string[]): { header: Record<string, number>; rows: string[][] } {
+  const header: Record<string, number> = {}
+  const rows: string[][] = []
+  for (const line of raw.split('\n')) {
+    if (!line.includes('|')) continue
+    const cols = line.split('|').map((c) => c.trim())
+    if (Object.keys(header).length === 0) {
+      if (wanted.every((w) => cols.includes(w))) {
+        for (const w of wanted) header[w] = cols.indexOf(w)
+      }
+      continue
+    }
+    // Separator rows ('-----+-----') and repeated headers.
+    if (cols.length > 0 && cols.every((c) => c.length > 0 && /^[+\-]+$/.test(c))) continue
+    if (wanted.some((w) => cols[header[w]] === w)) continue
+    rows.push(cols)
+  }
+  return { header, rows }
+}
+
 function failE(error: string, source: 'live' | 'hybrid' = 'live') {
   return { ...fail(error), source }
 }
@@ -431,23 +463,27 @@ const zypperBackend: Backend = {
   async listUpdates() {
     const r = await run('zypper', ['-q', 'list-updates'], 60_000)
     if (r.rc !== 0 && !r.stdout) return null
+    const { header, rows } = zypperTable(r.stdout, ['Name', 'Current', 'Available'])
+    if (header.Name === undefined) return []
     const out: UpdateRow[] = []
-    for (const line of r.stdout.split('\n')) {
-      if (!line.includes('|')) continue
-      const cols = line.split('|').map((c) => c.trim())
-      if (cols.length < 5 || cols[1] === 'Name' || cols[1] === '') continue
-      out.push({ name: cols[1], current: cols[2], candidate: cols[3] })
+    for (const cols of rows) {
+      const name = cols[header.Name]
+      if (!name || header.Current >= cols.length || header.Available >= cols.length) continue
+      out.push({ name, current: cols[header.Current], candidate: cols[header.Available] })
     }
     return out
   },
   async search(term) {
     const r = await run('zypper', ['-q', 'se', term], 30_000)
+    const { header, rows } = zypperTable(r.stdout, ['Name', 'Summary'])
+    const iName = header.Name ?? 1
+    const iSum = header.Summary ?? 2
     const out: SearchRow[] = []
-    for (const line of r.stdout.split('\n')) {
-      if (!line.includes('|')) continue
-      const cols = line.split('|').map((c) => c.trim())
-      if (cols.length < 3 || cols[1] === 'Name' || !cols[1]) continue
-      out.push({ name: cols[1], version: '', description: cols[2] ?? '', installed: cols[0] === 'i' })
+    for (const cols of rows) {
+      if (cols.length <= Math.max(iName, iSum)) continue
+      const name = cols[iName]
+      if (!name) continue
+      out.push({ name, version: '', description: cols[iSum], installed: cols[0] === 'i' })
     }
     return out
   },
@@ -571,8 +607,8 @@ const xbpsBackend: Backend = {
     const r = await run('xbps-query', ['-Rs', term], 30_000)
     const out: SearchRow[] = []
     for (const line of r.stdout.split('\n')) {
-      // "[*] repo/name-ver - description"
-      const m = line.match(/^\[\*\]\s+\S+\/(\S+)\s+-\s+(.*)$/)
+      // "[*] [repo/]name-ver - description" — the repo prefix is optional.
+      const m = line.match(/^\[\*\]\s+(?:\S+\/)?(\S+)\s+-\s+(.*)$/)
       if (!m) continue
       const { name, version } = splitNameVer(m[1])
       out.push({ name, version, description: m[2], installed: false })
@@ -635,8 +671,11 @@ const emergeBackend: Backend = {
     if (r.rc !== 0 && !r.stdout) return null
     const out: UpdateRow[] = []
     for (const line of r.stdout.split('\n')) {
-      // " [ebuild     U ] dev-lang/python-3.12.4 [3.12.3]"
-      const m = line.match(/\[ebuild\s+U~?\]?\s*([^\s\[]+)\s*(?:\[([^\]]+)\])?/)
+      // " [ebuild     U     ] cat/pkg-1.2.3 [1.2.2]" — the atom sits AFTER
+      // the class bracket; portage pads the class field with spaces, so
+      // starting the capture before the bracket grabs the bracket itself
+      // and drops every row.
+      const m = line.match(/\[ebuild\s+U[^\]]*\]\s*(\S+)(?:\s+\[([^\]]+)\])?/)
       if (!m) continue
       const atom = m[1]
       const slash = atom.lastIndexOf('/')
@@ -664,48 +703,27 @@ const emergeBackend: Backend = {
     return out
   },
   async info(name) {
-    // Real metadata from the installed package's /var/db/pkg entry
+    // Real metadata from the installed package's /var/db/pkg entry.
+    // Accepts 'cat/pkg' atoms and bare names — the latter scans every
+    // category for a matching leaf.
     const slash = name.lastIndexOf('/')
-    const tryPaths = slash > 0 ? [name] : [name]
-    for (const atom of tryPaths) {
-      let cat = atom.slice(0, slash > 0 ? slash : 0)
-      const leaf = slash > 0 ? atom.slice(slash + 1) : atom
-      if (!cat) {
-        // category-less lookup: scan all categories for a matching name
-        try {
-          const cats = await readdir(EMERGE_PKG_DB)
-          const matches: string[] = []
-          for (const c of cats) {
-            try {
-              const entries = await readdir(`${EMERGE_PKG_DB}/${c}`)
-              matches.push(...entries.filter((pf) => splitNameVer(pf).name === leaf).map((pf) => `${c}/${pf}`))
-            } catch {
-              continue
-            }
-          }
-          if (!matches.length) continue
-          cat = matches[0].split('/')[0]
-          const desc = await readText(`${EMERGE_PKG_DB}/${matches[0]}/DESCRIPTION`)
-          const homepage = await readText(`${EMERGE_PKG_DB}/${matches[0]}/HOMEPAGE`)
-          const license = await readText(`${EMERGE_PKG_DB}/${matches[0]}/LICENSE`)
-          const slot = await readText(`${EMERGE_PKG_DB}/${matches[0]}/SLOT`)
-          const use = await readText(`${EMERGE_PKG_DB}/${matches[0]}/USE`)
-          const { version } = splitNameVer(matches[0].split('/')[1])
-          if (desc || version) {
-            return {
-              name: `${cat}/${leaf}`,
-              version,
-              status: 'installed (from /var/db/pkg)',
-              depends: (await readText(`${EMERGE_PKG_DB}/${matches[0]}/RDEPEND`)) || (await readText(`${EMERGE_PKG_DB}/${matches[0]}/PDEPEND`)),
-              description: desc.trim(),
-              maintainer: homepage.trim(),
-            }
-          }
-          void license
-          void slot
-          void use
-        } catch {
-          continue
+    const leaf = slash > 0 ? name.slice(slash + 1) : name
+    const cats = slash > 0 ? [name.slice(0, slash)] : await safeListdir(EMERGE_PKG_DB)
+    for (const cat of cats) {
+      const entries = await safeListdir(`${EMERGE_PKG_DB}/${cat}`)
+      for (const pf of entries) {
+        if (splitNameVer(pf).name !== leaf) continue
+        const pdir = `${EMERGE_PKG_DB}/${cat}/${pf}`
+        const desc = (await readText(`${pdir}/DESCRIPTION`)).trim()
+        const { version } = splitNameVer(pf)
+        if (!desc && !version) continue
+        return {
+          name: `${cat}/${leaf}`,
+          version,
+          status: 'installed (from /var/db/pkg)',
+          depends: (await readText(`${pdir}/RDEPEND`)) || (await readText(`${pdir}/PDEPEND`)),
+          description: desc,
+          maintainer: (await readText(`${pdir}/HOMEPAGE`)).trim(),
         }
       }
     }
@@ -875,12 +893,16 @@ const BACKENDS: Record<string, Backend> = {
 
 const DETECT_ORDER = ['pacman', 'emerge', 'lunar', 'sorcery', 'xbps', 'apk', 'zypper', 'dnf', 'yum', 'apt'] as const
 
+// Probe binary per manager where the manager id is not itself a binary:
+// Void ships no bare `xbps` command — xbps-query is the presence probe.
+const DETECT_PROBES: Record<string, string> = { xbps: 'xbps-query' }
+
 let detected: { backend: Backend | null; probeAt: number } | null = null
 
 async function detectBackend(): Promise<Backend | null> {
   if (detected && Date.now() - detected.probeAt < 300_000) return detected.backend
   for (const id of DETECT_ORDER) {
-    if (!(await which(id))) continue
+    if (!(await which(DETECT_PROBES[id] ?? id))) continue
     if (id === 'emerge') {
       // corroboration: a Gentoo box always has /var/db/pkg
       try {
