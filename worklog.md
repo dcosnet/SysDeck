@@ -1942,3 +1942,45 @@ Stage Summary:
 - Package module parity complete: ten managers, identical step-down
   and parsers, both editions, fixture-locked.
 - BLOG.md is the engineering essay the project always pointed at.
+
+
+---
+Task ID: v0.4.4-docs
+Agent: Main Orchestrator (standalone-first docs pass — cockpit optional)
+Task: Per user directive: "lets update the documentation to match the source code as source of truth, we have moved to independence from cockpit. cockpit is now optional. lets get the docs on par with some of the other projects ive hosted at github.com/dcosnet/" — reposition every doc standalone-first, fix the drifted counts/versions/paths, bring the README to the dcosnet house style.
+
+Work Log:
+- Audited the tree against the docs: 27 plugins, 31 web panels (27 shared domain + overview/runbook/hwalert/cockpit hub), 31 registered web bridge modules, 28 Python helpers, 267 tests. Found the README tagline regressed to the 0.2.x cockpit-first line, QUICKSTART pinned at 0.4.3 with a 23-entry table and 0.0.35 tarball examples, INSTALL.md still describing the v0.0.19 single-plugin layout + a phantom nextjs-dashboard/ section, metainfo missing the 0.4.4 release block and the sysdeck-klanker launchable, and packaging descriptions stuck at twenty-three/twenty-six/eighteen.
+- Studied the dcosnet house style (ferret, probefetch, ai-lsc, AutoIngest): badge row, bold one-line tagline, author block, TOC, "What this is" narrative, ASCII architecture diagram, per-domain feature tables, decisive prose.
+- README.md rebuilt (~290 lines, was 666): standalone-first tagline, shields row (MIT · 0.4.4 · Next.js 16 · Bun · Python 3.9+ · Cockpit optional), one-catalog-two-frontends table, current repo tree, bridge-layer comparison table, module catalog by the six registry groups, auth model, zero-demo contract, quick start (web-dev first, make install second), env-var table, security model, development, coding standards (kept), documentation map.
+- QUICKSTART.md restructured: §1 standalone console, §2 Unix login (from old §10.4), §3 production build, §4–§6 the cockpit path, §7–§9 build/uninstall/next, §10 AI Gateway (10.1/10.2/10.3 + detection/zero-demo/MoE/ten-managers subsections), §11 runbook, §12 web-edition skin. Guard strings (10.1, 10.2, SYSDECK_AUTH_MODE) preserved for make-master-tarball.sh.
+- docs/INSTALL.md rewritten: Option 0 standalone leads; cockpit ≥ 239 scoped to the plugin paths; multi-plugin make/RPM/pip/overlay descriptions; troubleshooting rewritten to the real absolute-path bridge pattern; phantom nextjs-dashboard section removed.
+- web/README.md: 31 bridge modules, 0.4.4-master tarball refs, §10.4 → §2 login pointer; heredoc in make-master-tarball.sh synced identically and re-verified byte-identical.
+- BLOG.md deck + intro + workflow step 3 repositioned standalone-first; counts to twenty-seven.
+- THIRD_PARTY.md subprocess framing covers both editions.
+- Packaging: PKGBUILD/pkgdesc, RPM %description, debian Description rewritten ("the Cockpit plugin edition; the standalone web console ships in the master tarball"); metainfo summary/description updated + sysdeck-klanker launchable added (26 → 27) + 0.4.4 release block added; setup.py description fixed and data_files rebuilt against the real tree (old list hard-failed pip — staged install now lays out 28 cockpit dirs, 29 bridge files, 7 templates, docs).
+- make check ALL PASS (267/267 + 7 guards); heredoc sync verified; guard-marker grep verified; stale-string sweep clean.
+
+Stage Summary:
+- The docs now sell what the code is: SysDeck standalone-first, cockpit optional, one catalog of 27 domain modules behind two front ends, 31 panels in the console.
+- setup.py pip path functional again (was referencing the removed v0.0.19 layout).
+- No version bump — the pass is part of 0.4.4, same as the v0.4.1 docs-pass precedent.
+- Next: operator pushes the tree to github.com/dcosnet/SysDeck; the README badge row renders on GitHub as it does for ferret.
+
+
+---
+Task ID: v0.4.4-screens
+Agent: Main Orchestrator (README screenshots — real UI session)
+Task: Per user directive: "do a screenshot of the ui in the readme like most of the other repos" — capture the web console for real and embed in README.md the way ferret/ai-lsc do.
+
+Work Log:
+- Booted the console from the tree: bun install (849 pkgs), prisma db push (SQLite), next dev on 127.0.0.1:3000 with SYSDECK_AUTH_MODE=local; session account 'jeremy' inserted with the scrypt format users.ts verifies.
+- Headless-browser session at 1600x1000: login screen, sign-in, Overview, Packages, Service / Ports, Firewall. Overview retaken once to drop a transient toast.
+- Vision-model QA on all five: login clean; Overview real vitals (CPU 5.3%, 2.27/4.1 GB, 29 procs); Packages 932 real apt rows; Services live sockets + 9-service registry; Firewall the honest empty (no nft binary) — kept deliberately, it demonstrates the zero-demo contract.
+- README.md: hero image under the author block (ferret pattern); login.png in The auth model; packages+services two-up gallery and firewall single under the zero-demo contract section.
+- make check ALL PASS after the edits. web/ source tree verified byte-identical to the shipped tarball (bun.lock, .env, package.json, schema.prisma, next.config.ts) — only node_modules + dev.log are session byproducts.
+- Side finding recorded: manage-users.mjs is TS-in-.mjs, breaks under Bun >= 1.3 (strict ESM parsing of .mjs). Worked around for the session; code fix deferred to the next patch release.
+
+Stage Summary:
+- docs/screenshots/{overview,login,packages,services,firewall}.png — real console, real host state, no mocks.
+- README now carries the visual identity the sibling dcosnet repos have.

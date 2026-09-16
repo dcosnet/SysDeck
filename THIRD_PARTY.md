@@ -1,8 +1,10 @@
 # Third-Party Attributions
 
 SysDeck integrates with external tools and plugins. Each
-integration invokes the external tool as a **separate process** via
-`cockpit.spawn` — no external code is bundled within the suite. The
+integration invokes the external tool as a **separate process** —
+`cockpit.spawn` in the Cockpit plugin edition, fixed-argv spawns from
+the web console's bridge modules — and no external code is bundled
+within the suite. The
 suite (MIT) and the external tools remain independent programs.
 
 This file satisfies the attribution requirements of the licenses listed

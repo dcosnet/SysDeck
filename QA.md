@@ -2702,3 +2702,137 @@ every cockpit-installed SysDeck version; Makefile wiring (install to
   (Makefile restored from the staged 0.4.1 tree, re-patched).
 - Master tarball rebuilt; extraction shows `sysdeck-uninstall.sh`
   at the bundle root, executable.
+
+
+---
+
+# Docs Pass — v0.4.4 (standalone-first, cockpit optional)
+
+## v0.4.4 QA — documentation on par with the source
+
+**Scope**: docs + packaging prose only. No code paths touched, no version
+bump — the pass rides inside 0.4.4, the same discipline as the v0.4.1
+docs pass.
+
+### 1. Positioning accuracy (source as truth)
+
+- README.md rebuilt in the dcosnet house style (ferret/probefetch
+  pattern: shields.io badge row, bold one-line tagline, TOC, ASCII
+  architecture diagram, per-group module tables, ~290 lines). Tagline
+  now standalone-first: "A standalone Linux operations console —
+  Unix-account login, real host state, no fabricated data. Cockpit is
+  optional: the same module catalog loads there too." The
+  "cockpit plugin is the primary deliverable" line and the ~450 lines
+  of in-README release-notes highlights are retired (history already
+  lives in QA.md + worklog.md; pointers kept).
+- Counts corrected everywhere against the source: 27 cockpit plugins
+  (was 23/25/26 depending on the file), 31 web-console panels (27
+  shared domain modules + Overview + Runbook + Hardware Alerts +
+  Cockpit Modules hub), 31 registered web bridge modules, 28 Python
+  bridge helpers, 267 parser tests.
+- QUICKSTART.md restructured standalone-first: §1 the standalone
+  console, §2 the Unix-account login (moved from old §10.4), §3 the
+  production build; the cockpit plugin install follows at §4–§6.
+  Version header fixed (was 0.4.3), tarball examples fixed to
+  sysdeck-0.4.4-master, §5 verify table completed to the real 27
+  sidebar entries. Guard strings preserved: QUICKSTART still carries
+  §10.1, §10.2, and SYSDECK_AUTH_MODE (the make-master-tarball.sh
+  probes still pass).
+- docs/INSTALL.md: "All install paths require Cockpit ≥ 239" retired —
+  Cockpit is a prerequisite only of the plugin paths; new Option 0
+  (standalone console) leads. The stale v0.0.9–v0.0.19 single-plugin
+  `make install` description (manifest.json/suite.js/src/modules),
+  the forbidden `python3 -m sysdeck.bridge` troubleshooting pattern,
+  and the phantom `nextjs-dashboard/ ... uses mock data` closing
+  section are all gone.
+- web/README.md: "30 bridge modules" → 31; tarball refs 0.4.3 → 0.4.4;
+  the QUICKSTART §10.4 login pointer re-aimed at §2. The embedded
+  heredoc copy in web/scripts/make-master-tarball.sh updated
+  identically and re-verified byte-identical to the live file.
+- BLOG.md deck + intro repositioned standalone-first; module count
+  fixed to twenty-seven with the console-only four called out.
+- THIRD_PARTY.md: "via cockpit.spawn" → "cockpit.spawn in the Cockpit
+  plugin edition, fixed-argv spawns from the web console's bridge
+  modules".
+
+### 2. Packaging prose + metadata
+
+- PKGBUILD / RPM spec / debian control descriptions rewritten: the
+  package installs the Cockpit plugin edition (27 modules); the
+  standalone console ships in the master tarball. "drop-in plugin for
+  an existing Cockpit install" framing retired.
+- metainfo: summary fixed (23 → 27 plugins + standalone console), a
+  standalone-console paragraph added, the missing sysdeck-klanker
+  launchable added (26 → 27; v0.3.0's AI Gateway panel never got
+  one), the launchable-count comment corrected, and the missing 0.4.4
+  <release> block added.
+- setup.py: description fixed (was "eighteen domain modules ... live
+  bridge channel integration"); data_files rebuilt against the real
+  tree (the old list referenced the removed single-plugin layout —
+  manifest.json, suite.js, src/modules — and hard-failed pip). Staged
+  install verified: 28 cockpit dirs (27 plugins + sysdeck-common),
+  29 bridge .py files, 7 firewall templates, docs — `pip3 install
+  packaging/` works again (INSTALL.md Option C was documenting a
+  broken path).
+
+### 3. Verification
+
+- `make check` ALL PASS after every file: metainfo consistency (27
+  launchables), manifest consistency, recipe indentation, no broken
+  cockpit import, no broken python module, bridge-subcommands
+  cross-check, version sync at 0.4.4, and 267/267 parser unit tests.
+- web/README.md heredoc byte-sync re-verified after the edit.
+- Guard-marker grep: QUICKSTART carries `10.1`, `10.2`,
+  `SYSDECK_AUTH_MODE` (make-master-tarball.sh probes).
+- Stale-string sweep across the rewritten surfaces: no "twenty-six",
+  "twenty-three", "eighteen domain", "0.0.35.tar", "23 entries",
+  "23 Cockpit", or "drop-in plugin for an existing" left in
+  README/QUICKSTART/BLOG/THIRD_PARTY/INSTALL/web-README/packaging.
+
+
+---
+
+# Docs Pass — v0.4.4 (screenshots)
+
+## v0.4.4 QA — README screenshots (real UI, real host state)
+
+**Scope**: docs only. Five screenshots of the live web console, captured
+from a real session — no mocks, per the zero-demo contract.
+
+### 1. Capture session
+
+- Console run from the tree: `bun install` + `bun run db:push` (SQLite),
+  dev server on 127.0.0.1:3000 with `SYSDECK_AUTH_MODE=local`; a local
+  console account created for the session; login exercised for real
+  (per-IP/per-username limiter untouched — one clean attempt).
+- Host: Debian 13 (trixie), apt/systemctl/ss present; nft/iptables/
+  sensors absent — which the panels report honestly.
+- Captured at 1600x1000: login (Cockpit-style Unix-account screen),
+  Overview (hero — real CPU/memory/network/process vitals), Packages
+  (932 real apt rows), Service / Ports (live listening sockets +
+  services registry), Firewall (the honest empty: no nftables binary on
+  the host, install guidance instead of fabricated rules).
+- Visual QA pass (vision model) on all five: no blank areas, no broken
+  layout, no loading placeholders; Overview retaken once to drop a
+  transient toast; final set clean.
+
+### 2. README embedding (dcosnet house style)
+
+- Hero shot directly under the author block (the ferret pattern):
+  `docs/screenshots/overview.png`.
+- `login.png` under "The auth model"; `packages.png` + `services.png`
+  as a two-up gallery + `firewall.png` (the honest empty) under "Real
+  host state — the zero-demo contract" — the screenshots demonstrate
+  the contract they sit next to.
+- `make dist` / `make master` include the `docs/` tree, so the
+  screenshots ride in both tarballs; no Makefile change needed.
+
+### 3. Side finding (not fixed in this docs pass)
+
+- `web/scripts/manage-users.mjs` is TypeScript in an `.mjs` file
+  (type annotations in function signatures). Bun < 1.3 transpiled it;
+  Bun 1.3.14 parses `.mjs` as strict ESM and the CLI now dies with
+  `Expected ")" but found ":"`. Workaround used for this session:
+  direct SdUser row insert with the same scrypt format. Fix options:
+  rename to `manage-users.ts` or strip the annotations — left as a
+  code change for the next patch release.

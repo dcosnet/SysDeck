@@ -1,13 +1,69 @@
 # SysDeck — Quick Start
 
-Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
-Version: **0.4.3** (Master Edition)
+Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net> · [github.com/dcosnet/SysDeck](https://github.com/dcosnet/SysDeck)
+Version: **0.4.4**
 
-Two five-minute paths: run the console standalone (no Cockpit required — section 9), or install the full plugin suite into an existing Cockpit (sections 1–8). Either way every module also loads in the other front end.
+Two five-minute paths, standalone first: run the web console with no Cockpit on the box at all (sections 1–3), or install the plugin suite into an existing Cockpit (sections 4–6). Either way every domain module also loads in the other front end — one catalog, two front ends.
 
 ---
 
-## 1. Prerequisites
+## 1. The standalone web console (no Cockpit required)
+
+The master tarball ships the **SysDeck web console** at `web/` — a standalone server-management console that signs you in with your Unix account (PAM, the same mechanism Cockpit uses), reads real host state through 31 bridge modules (`/proc`, `/sys`, lsblk, systemctl, the real package manager...), detects and loads every installed Cockpit module into its own navigation, and carries **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1). Every module in this console can equally be loaded inside Cockpit itself.
+
+```bash
+tar xjf sysdeck-0.4.4-master.tar.bz2
+cd sysdeck-0.4.4-master
+make web-dev        # bun install + db:push + fester (:3010) + web console (:3000)
+```
+
+Manual equivalent:
+
+```bash
+make fester-start                              # terminal 1: fester on :3010
+cd web && bun install && bun run db:push       # terminal 2: console setup
+bun run dev                                    #            web console on :3000
+```
+
+Prerequisites: **Bun ≥ 1.1** (`pacman -S bun`, or the installer from bun.sh; Node-only hosts work too — see §3), ~200 MB disk, ~512 MB RAM. **Not required:** Cockpit, systemd, Docker, root — the console runs as an unprivileged user on any Linux host. Open `http://localhost:3000` and sign in with a Unix account (see §2). Without the fester service running, the Fester panel says so — everything else works.
+
+## 2. The console login (Unix accounts, cockpit-style)
+
+SysDeck is a **LAN-side console** — loopback binding stays the outer boundary. The login itself signs you in with a **Unix account — the username and password are verified by the host's PAM stack**, exactly the mechanism Cockpit uses at its own login screen. The host decides; the console keeps no password data of its own.
+
+- **PAM path:** `web/scripts/pam-auth.py` (stdlib-only ctypes client of `libpam`) runs the `pam_start` → `pam_authenticate` → `pam_acct_mgmt` sequence under the **`sysdeck`** service when `/etc/pam.d/sysdeck` exists, else the stock **`login`** stack. Credentials travel over stdin (never argv — `/proc` would leak them). Ship your own `/etc/pam.d/sysdeck` (e.g. `auth required pam_unix.so`, plus `pam_google_authenticator` for MFA if you want it) to tailor the stack — `SYSDECK_PAM_SERVICE` renames it.
+- **Root, or pam+local:** pam_unix needs root to read `/etc/shadow` for *arbitrary* users (non-root processes only get the invoking uid via `unix_chkpwd` — a pam_unix guarantee). So the modes are `SYSDECK_AUTH_MODE=pam` (default; run the service as root, like cockpit-ws), `pam+local` (PAM first, then the `SdUser` scrypt table for installs that can't run privileged), or `local` (console accounts only). Manage the local table with `bun scripts/manage-users.mjs list|add|passwd|disable|enable|remove` from `web/`.
+- **Session:** an HttpOnly, SameSite=Lax cookie (`sd_session`) holding an HMAC-SHA256-signed token **bound to the username** (`v2.<exp>.<userB64>.<hmac>`), **12h** expiry. The HMAC key is random per install and persists in the SQLite DB, so sessions survive restarts — including the 0.3.1 → 0.4.0 upgrade (old v1 tokens still verify as a legacy "operator" session until they age out).
+- **Gate scope:** the page itself is server-rendered as the login screen until the cookie verifies, every `/api/*` route answers 401 until signed in, and the **fester service verifies the identical v2 token** on its REST + WebSocket surface — no unauthenticated path into the console's data.
+- **Lockout:** wrong attempts are rate limited per-IP **and** per-username (5 per 60s each — the same shape the sshd stack applies). Wrong-user and wrong-password return the same generic answer; nothing enumerates accounts.
+- **Identity in the shell:** the header carries an account menu — avatar, `user@host`, unix-account provenance (PAM vs local), the wheel/sudo "Administrative access" badge, and a live session-expiry countdown with a draining life bar; the status bar shows `user@host` next to the vitals. Login/logout are audited with the unix username as the actor.
+- **TLS:** LAN deployments typically run plain http; front the console with TLS and set `SYSDECK_SESSION_SECURE=1` to add the `Secure` cookie flag. Sign out lives in the account menu (clears the cookie).
+
+## 3. Standalone production build
+
+The build emits a self-contained standalone server (`.next/standalone/` with static assets and `public/` folded in):
+
+```bash
+cd web
+bun install
+bun run build                   # next build + fold static/ & public/
+PORT=3000 HOSTNAME=0.0.0.0 bun run start
+
+# node-only hosts:
+bun run build                    # or: npx next build
+PORT=3000 HOSTNAME=0.0.0.0 node .next/standalone/server.js
+```
+
+Run `bun run db:push` once before the first production start — the SQLite file lives at `db/custom.db` (path from `DATABASE_URL` in `.env`). The complete runbook — the two systemd units (`sysdeck-web.service`, `sysdeck-fester.service`), the `.env` reference table, the Caddy/nginx reverse proxy with the `?XTransformPort=` websocket gateway, and a troubleshooting matrix — lives in two places, kept in sync:
+
+- **`web/README.md`** in this tarball (plain markdown)
+- the **"Run without Cockpit" panel** in the web console (system group, right under Overview) — every command block has a copy button
+
+## 4. Install the Cockpit plugin suite (optional)
+
+For hosts that already run Cockpit, the same 27 domain modules install as plugins.
+
+Prerequisites:
 
 | Component | Why | Install |
 |-----------|-----|---------|
@@ -16,51 +72,39 @@ Two five-minute paths: run the console standalone (no Cockpit required — secti
 | `polkit` | Privilege escalation (the cockpit way) | `pacman -S polkit` / `apt install policykit-1` / `dnf install polkit` |
 | `appstream` (optional) | Cockpit Applications menu | `pacman -S appstream` / `apt install appstream` |
 
-Cockpit itself ships its own `cockpit-bridge` package — that is the only hard dependency. SysDeck degrades gracefully when optional backends (podman, nftables, mkosi, bpftool, apparmor, …) are absent — each panel renders an install hint instead of crashing.
-
-## 2. Install
-
 ```bash
-# Get the tarball
-ls sysdeck-0.0.35.tar.bz2  # download from your release source
-
-# Extract and install
-tar xjf sysdeck-0.0.35.tar.bz2
-cd sysdeck-0.0.35
 sudo make install
-
-# Restart cockpit so it re-scans the plugin directory
 sudo systemctl restart cockpit.socket
 ```
 
 `make install` does:
 
-- Copies each `plugins/sysdeck-*/{manifest.json,index.html,*.js}` to `/usr/share/cockpit/sysdeck-*/`
-- Copies `shared/{manifest.json,bridge.js,sysdeck.css}` to `/usr/share/cockpit/sysdeck-common/`
-- Copies each `bridge/*.py` (executable, 0755) to `/usr/lib/sysdeck/bridge/`
-- Copies `firewall/templates/*.sh` (executable, 0755) to `/usr/share/sysdeck/firewall/templates/`
+- Copies each `plugins/sysdeck-*/{manifest.json,index.html,*.js}` to `/usr/share/cockpit/sysdeck-*/` (27 plugins)
+- Copies `shared/{manifest.json,bridge.js,sysdeck.css,sysdeck-web.css}` to `/usr/share/cockpit/sysdeck-common/`
+- Copies each `bridge/*.py` (executable, 0755) to `/usr/lib/sysdeck/bridge/` (28 helpers)
+- Copies `firewall/templates/*.sh` (executable, 0755) to `/usr/share/sysdeck/firewall/templates/` (7 topologies) + the cilium policy
+- Copies the prometheus/grafana provisioning configs to `/usr/share/sysdeck/prometheus/`
 - Installs the AppStream metainfo at `/usr/share/metainfo/sysdeck.metainfo.xml`
-- Installs the polkit policy at `/usr/share/polkit-1/actions/org.sysdeck.policy`
+- Installs the polkit policies at `/usr/share/polkit-1/actions/org.sysdeck.policy` + `org.sysdeck.modules3p.policy`
 - Reloads polkit and refreshes the AppStream cache
 
-## 3. Verify the install
+Cockpit itself is the only hard dependency of this path. SysDeck degrades gracefully when optional backends (podman, nftables, mkosi, bpftool, apparmor, …) are absent — each panel renders an install hint instead of crashing.
 
-Open `https://<host>:9090` in your browser and authenticate as a wheel/sudo user. The Cockpit sidebar should now list **23** entries under the `SysDeck <Name>` prefix:
+## 5. Verify the cockpit install
 
-| # | Module | # | Module |
-|---|--------|---|--------|
-| 1 | SysDeck Containers      | 13 | SysDeck Themes |
-| 2 | SysDeck Firewall        | 14 | SysDeck Hardware Auth |
-| 3 | SysDeck Integrity       | 15 | SysDeck Glances |
-| 4 | SysDeck Network Security | 16 | SysDeck Sensors |
-| 5 | SysDeck Service Mesh    | 17 | SysDeck Benchmark |
-| 6 | SysDeck Vault           | 18 | SysDeck Packages |
-| 7 | SysDeck Fleet           | 19 | SysDeck Policy |
-| 8 | SysDeck Kata            | 20 | SysDeck Databases |
-| 9 | SysDeck Fester          | 21 | SysDeck Jellyfin |
-| 10 | SysDeck Firmware        | 22 | SysDeck Photos |
-| 11 | SysDeck Image Builder   | 23 | SysDeck Remote FS |
-| 12 | SysDeck Mining          |    | |
+Open `https://<host>:9090` in your browser and authenticate as a wheel/sudo user. The Cockpit sidebar should now list **27** entries under the `SysDeck <Name>` prefix:
+
+| # | Module | # | Module | # | Module |
+|---|--------|---|--------|---|--------|
+| 1 | Containers & VMs | 10 | Firmware | 19 | Databases |
+| 2 | Firewall | 11 | Image Builder | 20 | Jellyfin |
+| 3 | Integrity | 12 | Mining | 21 | Photos |
+| 4 | Network Security | 13 | Themes | 22 | Remote FS |
+| 5 | Service Mesh | 14 | Hardware Auth | 23 | Monitoring |
+| 6 | Vault | 15 | Glances | 24 | 3rd-Party Modules |
+| 7 | Fleet | 16 | Sensors | 25 | Service / Ports |
+| 8 | Kata | 17 | Benchmark | 26 | AI Gateway |
+| 9 | Fester | 18 | Packages | 27 | Policy |
 
 If any are missing, run the diagnostic:
 
@@ -70,9 +114,9 @@ sudo /usr/share/sysdeck/sysdeck-diagnose.sh
 
 It prints exactly what cockpit sees on your system — installed manifests, bridge helpers present, polkit actions loaded, and the cockpit-bridge version.
 
-## 4. First-use walkthrough
+## 6. First-use walkthrough (cockpit panels)
 
-### 4a. Firewall (the cockpit way)
+### 6a. Firewall (the cockpit way)
 
 Open **SysDeck Firewall**. The panel renders:
 
@@ -85,11 +129,11 @@ Open **SysDeck Firewall**. The panel renders:
 
 To drop in your own template, copy a `*.sh` file into `/usr/share/sysdeck/firewall/templates/` — the panel's `templates` subcommand discovers it automatically. The script must implement `start / stop / restart / detect / status` subcommands (see the shipped templates for reference).
 
-### 4b. Packages (the cockpit way)
+### 6b. Packages (the cockpit way)
 
-Open **SysDeck Packages**. Click **⬆ Update All**. Cockpit prompts for the superuser password via polkit. The bridge runs `pacman -Syu` / `apt upgrade -y` / `dnf upgrade -y` directly via subprocess — no `sudo` shell-out from JS. Live stdout/stderr stream into the in-panel `<pre>` log. The **👁 Preview Command** button shows the exact command that will be run before you confirm.
+Open **SysDeck Packages**. Click **Update All**. Cockpit prompts for the superuser password via polkit. The bridge runs `pacman -Syu` / `apt upgrade -y` / `dnf upgrade -y` directly via subprocess — no `sudo` shell-out from JS. Live stdout/stderr stream into the in-panel log. The **Preview Command** button shows the exact command that will be run before you confirm.
 
-### 4c. Policy & Permissions
+### 6c. Policy & Permissions
 
 Open **SysDeck Policy**. The panel renders:
 
@@ -104,22 +148,23 @@ Open **SysDeck Policy**. The panel renders:
 9. **AppArmor** (optional) — if the kernel compiled AppArmor in, shows the enforcement mode and lets you switch profiles between `enforce` and `complain` modes. If absent, renders an install hint.
 10. **Smack / TOMOYO / Yama / LoadPin / Lockdown / BPF-LSM / Landlock** — each has its own card with the live state and any management controls the LSM supports. Each card follows the same shape: if the LSM is not active, the card shows the kernel cmdline that enables it; if active, it shows the live state.
 
-### 4d. Databases
+### 6d. Databases
 
-Open **SysDeck Databases**. The panel auto-detects 32+ engines across SQL (PostgreSQL/MySQL/MariaDB/SQLite/CockroachDB/TiDB), NoSQL (MongoDB/CouchDB/RethinkDB/DynamoDB-local), Vector (Milvus/Qdrant/Weaviate/Chroma/pgvector), TimeSeries (InfluxDB/TimescaleDB/QuestDB/ClickHouse), Graph (Neo4j/ArangoDB/OrientDB), Embedded (Redis/KeyDB/ValKey/RocksDB/LMDB/BadgerDB), Cloud (Firestore-emulator/Supabase-local), and AI (LanceDB/DuckDB/Tile38). Each row has **▶ Start / ■ Stop / ↻ Restart / 🔍 Status** buttons. The **Run SQL Query** card lets you execute arbitrary SQL against SQL-family engines via the engine's CLI client (`psql -tAc`, `mysql -e`, etc.).
+Open **SysDeck Databases**. The panel auto-detects 32+ engines across SQL (PostgreSQL/MySQL/MariaDB/SQLite/CockroachDB/TiDB), NoSQL (MongoDB/CouchDB/RethinkDB/DynamoDB-local), Vector (Milvus/Qdrant/Weaviate/Chroma/pgvector), TimeSeries (InfluxDB/TimescaleDB/QuestDB/ClickHouse), Graph (Neo4j/ArangoDB/OrientDB), Embedded (Redis/KeyDB/ValKey/RocksDB/LMDB/BadgerDB), Cloud (Firestore-emulator/Supabase-local), and AI (LanceDB/DuckDB/Tile38). Each row has **Start / Stop / Restart / Status** buttons. The **Run SQL Query** card lets you execute read-only SQL against SQL-family engines via the engine's CLI client (`psql -tAc`, `mysql -e`, etc.).
 
-## 5. Build from source
+## 7. Build from source
 
 ```bash
-cd sysdeck-0.0.35
-make check         # 7 build-time guards: manifests, metainfo, tabs, no-broken-import, no-broken-module, bridge-subcommands cross-check, version sync
-make dist          # builds sysdeck-0.0.35.tar.bz2
+cd sysdeck-0.4.4-master
+make check         # 7 build-time guards + 267 parser unit tests
+make dist          # builds the cockpit tarball
 make distcheck     # extracts + runs make check inside the tarball tree
+make master        # rebuilds the master tarball (cockpit + web + fester + klanker-gate)
 ```
 
 `make check` is a hard pre-flight: it cross-checks every `bridgeCmd("<module>", ["<sub>", ...])` call in `shared/bridge.js` against the `COMMANDS` dict declared in each `bridge/<module>.py`. If the JS calls a subcommand the Python helper doesn't implement, `make check` fails with a clear message naming the file, line, and missing subcommand.
 
-## 6. Uninstall
+## 8. Uninstall
 
 ```bash
 sudo make uninstall
@@ -145,39 +190,20 @@ sudo ./sysdeck-uninstall.sh --no-restart    # skip the cockpit.socket restart
 
 It prints nothing on success — including when nothing was installed — and leaves operator data alone (`/etc/sysdeck/`, `/var/lib/sysdeck/` unless `--purge-state`, `/etc/pam.d/sysdeck`, and any third-party cockpit modules). `make install` also drops the script at `/usr/share/sysdeck/sysdeck-uninstall.sh`, so it stays available on boxes that installed via package manager and no longer have the tarball.
 
-## 7. Where to go next
+## 9. Where to go next
 
 - [README.md](./README.md) — full module catalog, architecture, coding standards.
-- [BLOG.md](./BLOG.md) — release narrative for v0.0.33 and prior versions.
-- [docs/INSTALL.md](./docs/INSTALL.md) — RPM, DEB, pip, and manual install paths.
+- [BLOG.md](./BLOG.md) — the engineering essay: auth model, one catalog two front ends, the zero-demo contract.
+- [docs/INSTALL.md](./docs/INSTALL.md) — the install matrix: standalone, Make, RPM, pip, staged overlay.
+- [web/README.md](./web/README.md) — the complete standalone runbook.
 - [QA.md](./QA.md) — QA notes per release.
 - [worklog.md](./worklog.md) — per-task development log.
 
-## 8. Reporting issues
-
-Open the in-panel error view: every SysDeck plugin's `index.html` installs `window.addEventListener('error')` and `'unhandledrejection'` handlers that replace the "Loading…" placeholder with the actual error message on the page — no devtools required. The same page tells you whether `cockpit.js` itself loaded, whether `bridge.js` imported cleanly, and whether the panel's `mount()` threw.
-
-## 9. The standalone web console (master tarball, no Cockpit required)
-
-The master tarball ships the **SysDeck web console** at `web/` — a standalone server-management console that signs you in with your Unix account (PAM, the same mechanism Cockpit uses), reads real host state through 30 bridge modules (`/proc`, `/sys`, lsblk, systemctl, the real package manager...), detects and loads every installed Cockpit module into its own navigation, and carries **Fester pre-integrated** (vendored at `web/mini-services/fester`, independent version 0.2.1). Every module in this console can equally be loaded inside Cockpit itself — one module catalog, two front ends:
-
-```bash
-make web-dev        # fester service in the background (:3010) + web console (:3000)
-```
-
-Manual equivalent:
-
-```bash
-make fester-start                              # terminal 1: fester on :3010
-cd web && bun install && bun run db:push       # terminal 2: console setup
-bun run dev                                    #            web console on :3000
-```
-
-Open `http://localhost:3000`. The master tarball can be rebuilt any time with `make master`.
+Every SysDeck plugin's `index.html` installs `window.addEventListener('error')` and `'unhandledrejection'` handlers that replace the "Loading…" placeholder with the actual error message on the page — no devtools required. The same page tells you whether `cockpit.js` itself loaded, whether `bridge.js` imported cleanly, and whether the panel's `mount()` threw.
 
 ## 10. The AI Gateway (master tarball, v0.3.0)
 
-The master tarball also vendors **klanker-gate** — the Frosty Deno LLM gateway (independent version 0.9.0, Apache-2.0, **by TykoDev: https://github.com/TykoDev/klanker-gate — not SysDeck code**, see `klanker-gate/ATTRIBUTION.md`) — at `klanker-gate/`, with the new **AI Gateway** module in both editions. On Arch Linux the whole gateway is one package away:
+The master tarball also vendors **klanker-gate** — the Frosty Deno LLM gateway (independent version 0.9.0, Apache-2.0, **by TykoDev: https://github.com/TykoDev/klanker-gate — not SysDeck code**, see `klanker-gate/ATTRIBUTION.md`) — at `klanker-gate/`, with the **AI Gateway** module in both editions. On Arch Linux the whole gateway is one package away:
 
 ```bash
 cd klanker-gate/arch
@@ -188,14 +214,14 @@ sudo systemctl enable --now klanker-gate
 curl http://localhost:8080/healthz
 ```
 
-Then point SysDeck at it (cockpit bridge env, or `web/.env` for the web edition, then restart):
+Then point SysDeck at it (cockpit bridge env, or `web/.env` for the console, then restart):
 
 ```bash
 KLANKER_URL=http://127.0.0.1:8080
 KLANKER_ADMIN_TOKEN=<the FROSTY_ADMIN_TOKEN you set>
 ```
 
-Both the cockpit AI Gateway panel and the web edition's AI Gateway panel flip from their offline/demo state to live data automatically. The full runbook — postgres provisioning, multi-worker serving (`FROSTY_WORKERS`, an Arch bonus via `SO_REUSEPORT`), the optional control-UI build — is `klanker-gate/arch/INSTALL-ARCH.md`.
+Both the cockpit AI Gateway panel and the console's AI Gateway panel flip from their offline state to live data automatically. The full runbook — postgres provisioning, multi-worker serving (`FROSTY_WORKERS`, an Arch bonus via `SO_REUSEPORT`), the optional control-UI build — is `klanker-gate/arch/INSTALL-ARCH.md`.
 
 ### 10.1 Running an all-local stack (ollama · llama.cpp · koboldcpp)
 
@@ -246,11 +272,11 @@ Not using the gateway (or switched to a different assistant stack)?
 Both editions let you remove it from the console without uninstalling
 anything:
 
-- **web edition** — every sidebar module carries a power toggle (hover
-  a row → ⏻). Clicking it hides the module from the sidebar AND the
-  ⌘K palette; a **Disabled (N)** section appears at the sidebar bottom
-  with one-click re-enable (plus a restore-all ↻). State is persisted
-  in SQLite (`shell.disabled` via the `shell` bridge module) and
+- **web console** — every sidebar module carries a power toggle (hover
+  a row → the power icon). Clicking it hides the module from the sidebar
+  AND the command palette; a **Disabled (N)** section appears at the
+  sidebar bottom with one-click re-enable (plus a restore-all). State is
+  persisted in SQLite (`shell.disabled` via the `shell` bridge module) and
   survives restarts; Overview is protected. If you disable the module
   you are viewing, the console jumps back to Overview.
 - **cockpit edition** — plugins are discovered by directory: `sudo rm
@@ -258,10 +284,10 @@ anything:
   (bridge helper stays at `/usr/lib/sysdeck/bridge/klanker.py` for
   scripts); restore with `sudo make install`.
 
-### 10.3 The 0.3.0 security audit (both editions + the vendored gateway)
+### 10.3 The security audits (both editions + the vendored gateway)
 
 A full-codebase security review shipped with 0.3.0 — the cockpit bridge
-helpers, the 27 plugin panels, the web edition, and the vendored
+helpers, the 27 plugin panels, the web console, and the vendored
 klanker-gate tree. What changed:
 
 - **bridge helpers fail closed now.** `cgroup-set` validates both the
@@ -284,7 +310,7 @@ klanker-gate tree. What changed:
   errors — before it lands in `innerHTML`. All 27 manifests dropped
   `unsafe-eval` from their CSP. Every external link carries
   `rel="noopener noreferrer"`.
-- **the web edition binds loopback.** `bun run dev` → `127.0.0.1:3000`,
+- **the web console binds loopback.** `bun run dev` → `127.0.0.1:3000`,
   the fester service → `127.0.0.1:3010`, the production start script
   pins `HOSTNAME=127.0.0.1`; the bridge endpoint gained a body-size
   cap, a per-IP rate limit and generic error responses (details go to
@@ -297,71 +323,8 @@ klanker-gate tree. What changed:
   mitigates: the systemd unit refuses to start without
   `FROSTY_ADMIN_TOKEN`, `INSTALL-ARCH.md` §9 carries the firewall +
   first-vkey runbook.
-- **fixed along the way (functional):** the Packages panel's
-  firewall-backend install path (`packages.py install --` choke), the
-  auth panel's quick-action buttons (called a bridge.spawn that never
-  existed), and the mesh panel's table (read a data shape the bridge
-  never returned).
 
-### 10.4 The web edition login (Unix accounts, cockpit-style)
-
-SysDeck is a **LAN-side console** — loopback binding stays the outer
-boundary. What 0.4.0 changes is the login itself: instead of the 0.3.1
-shared password, you now sign in with a **Unix account — the username
-and password are verified by the host's PAM stack**, exactly the
-mechanism Cockpit uses at its own login screen. The host decides; the
-console keeps no password data of its own.
-
-- **PAM path:** `web/scripts/pam-auth.py` (stdlib-only ctypes client of
-  `libpam`) runs the `pam_start` → `pam_authenticate` → `pam_acct_mgmt`
-  sequence under the **`sysdeck`** service when `/etc/pam.d/sysdeck`
-  exists, else the stock **`login`** stack. Credentials travel over
-  stdin (never argv — `/proc` would leak them). Ship your own
-  `/etc/pam.d/sysdeck` (e.g. `auth required pam_unix.so`, plus
-  `pam_google_authenticator` for MFA if you want it) to tailor the
-  stack — `SYSDECK_PAM_SERVICE` renames it.
-- **Root, or pam+local:** pam_unix needs root to read `/etc/shadow`
-  for *arbitrary* users (non-root processes only get the invoking uid
-  via `unix_chkpwd` — a pam_unix guarantee). So the modes are
-  `SYSDECK_AUTH_MODE=pam` (default; run the service as root, like
-  cockpit-ws), `pam+local` (PAM first, then the `SdUser` scrypt table
-  for installs that can't run privileged), or `local` (console
-  accounts only). Manage the local table with
-  `bun scripts/manage-users.mjs list|add|passwd|disable|enable|remove`
-  from `web/`.
-- **Session:** an HttpOnly, SameSite=Lax cookie (`sd_session`) holding
-  an HMAC-SHA256-signed token **bound to the username**
-  (`v2.<exp>.<userB64>.<hmac>`), **12h** expiry. The HMAC key is random
-  per install and persists in the SQLite DB, so sessions survive
-  restarts — including the 0.3.1 → 0.4.0 upgrade (old v1 tokens still
-  verify as a legacy "operator" session until they age out).
-- **Gate scope:** the page itself is server-rendered as the login
-  screen until the cookie verifies, every `/api/*` route answers 401
-  until signed in, and the **fester service verifies the identical
-  v2 token** on its REST + WebSocket surface — no unauthenticated path
-  into the console's data.
-- **Lockout:** wrong attempts are rate limited per-IP **and**
-  per-username (5 per 60s each — the same shape the sshd stack
-  applies). Wrong-user and wrong-password return the same generic
-  answer; nothing enumerates accounts.
-- **Identity in the shell:** the header carries an account menu —
-  avatar, `user@host`, unix-account provenance (PAM vs local), the
-  wheel/sudo "Administrative access" badge, and a live session-expiry
-  countdown with a draining life bar; the status bar shows
-  `user@host` next to the vitals. Login/logout are audited with the
-  unix username as the actor.
-- **TLS:** LAN deployments typically run plain http; front the console
-  with TLS and set `SYSDECK_SESSION_SECURE=1` to add the `Secure`
-  cookie flag. Sign out lives in the account menu (clears the cookie).
-
-The login/logout actions are audited (`module: web`, actions
-`login` / `login-failed` / `logout`, actor = the unix username, with
-source IP). This is deliberately *not* MFA-by-default or rate-proof
-crypto — it is the host's own account system doing what it already
-does at every other login surface on the box, recorded here so nobody
-mistakes it for more or less than that.
-
-### 10.5 Cockpit module detection in the web console (v0.4.1)
+### 10.4 Cockpit module detection in the web console (v0.4.1)
 
 The console scans the host the same way the cockpit shell discovers
 pages — every `/usr/share/cockpit/<pkg>/manifest.json` with a `menu`
@@ -389,9 +352,9 @@ This is the piece that makes the console/host pair 100% compatible:
 install a cockpit module on the box, and it shows up here — no cockpit
 login required to browse it.
 
-### 10.6 The zero-demo release (v0.4.2)
+### 10.5 The zero-demo release (v0.4.2)
 
-Every web-console module now ships production implementations only — no
+Every web-console module ships production implementations only — no
 demo, mock, stub, or seeded data anywhere in the codebase:
 
 - **Sensors** parse the real `sensors -j` (lm-sensors) JSON — the exact
@@ -409,8 +372,7 @@ demo, mock, stub, or seeded data anywhere in the codebase:
   compiler itself rejects any reintroduction. Absent backends always
   render honest empty inventories with install guidance.
 
-
-### 10.7 The MoE QA pass (v0.4.3)
+### 10.6 The MoE QA pass (v0.4.3)
 
 A multi-expert audit hardened every axis of the console:
 
@@ -432,9 +394,7 @@ A multi-expert audit hardened every axis of the console:
   → sysfs; dnf `check-update` rc 100 = updates exist; timeouts on
   every spawn).
 
-
-
-### 10.8 Ten package managers on both editions (v0.4.4)
+### 10.7 Ten package managers on both editions (v0.4.4)
 
 The package module runs the same on every distro it touches — module
 parity between the two frontends, not drift:
@@ -450,7 +410,7 @@ parity between the two frontends, not drift:
   --unmerge`, `cast`/`dispel`, `lin`/`lrm`, `xbps-install -y`,
   `zypper --non-interactive` — and still ride the cockpit superuser
   channel (polkit `org.sysdeck.packages.modify`).
-- **Web edition** (`web/src/lib/sysdeck/bridge/packages.ts`): the
+- **Web console** (`web/src/lib/sysdeck/bridge/packages.ts`): the
   identical step-down and now the identical parser fixes — zypper
   tables parse by header-located columns, the emerge update preview
   anchors its capture after the class bracket (the old capture
@@ -461,19 +421,15 @@ parity between the two frontends, not drift:
   lunar single-package update refuses with the real instruction.
   Fixture tests for all of the above run in `make check`
   (`tests/test_bridge_parsers.py::TestPackagesBackends`).
-- **BLOG.md** is now the long-form engineering essay (title, deck,
-  decision-organized sections, canonical workflow, attribution
-  footer). Release history lives in `QA.md` and `worklog.md`.
 
+## 11. Run without Cockpit (the complete standalone runbook)
 
-## 11. Run without Cockpit (the complete standalone runbook, v0.3.0)
-
-The web edition needs **nothing from sections 1–8** — no cockpit, no Python
+The web console needs **nothing from sections 4–6** — no cockpit, no Python
 bridge, no systemd, no root. One Bun runtime serves the whole console:
 
 ```bash
-tar xjf sysdeck-0.4.3-master.tar.bz2
-cd sysdeck-0.4.3-master
+tar xjf sysdeck-0.4.4-master.tar.bz2
+cd sysdeck-0.4.4-master
 make web-dev          # bun install + db:push + fester + next dev :3000
 ```
 
@@ -518,4 +474,6 @@ sudo make uninstall-branding    # restore the backup
 for the shell. It targets both PatternFly v5 (`pf-v5-*`, Cockpit ≥ 300)
 and v4 (`pf-c-*`) selector generations, so unmatched rules simply no-op.
 
-Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net>
+---
+
+Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net> · [github.com/dcosnet/SysDeck](https://github.com/dcosnet/SysDeck)

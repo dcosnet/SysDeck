@@ -5,7 +5,7 @@
 pkgname=sysdeck
 pkgver=0.4.4
 pkgrel=1
-pkgdesc="Unified operations surface for Linux infrastructure — twenty-six domain modules behind one Cockpit dashboard"
+pkgdesc="Unified operations surface for Linux infrastructure — the Cockpit plugin edition: 27 domain modules plus the Python bridge (the standalone web console ships in the master tarball)"
 arch=('any')
 url="https://dcos.net"
 license=('MIT')

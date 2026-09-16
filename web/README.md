@@ -1,6 +1,6 @@
 # SysDeck — the standalone web console
 
-SysDeck's browser-native front end: 30 bridge modules behind one
+SysDeck's browser-native front end: 31 bridge modules behind one
 console, every one of them reading **real host state** — /proc and /sys
 collectors, systemctl, lsblk, the host's real package manager, live
 service APIs — with honest empty inventories (and install guidance)
@@ -35,13 +35,13 @@ right under Overview) with copy buttons on every command.
 From the extracted master tarball root, one command does everything
 (install + migrate + fester + web):
 
-    tar xjf sysdeck-0.4.3-master.tar.bz2
-    cd sysdeck-0.4.3-master
+    tar xjf sysdeck-0.4.4-master.tar.bz2
+    cd sysdeck-0.4.4-master
     make web-dev        # bun install + db:push + fester + next dev :3000
 
 Granular equivalent (what `make web-dev` does):
 
-    cd sysdeck-0.4.3-master/web
+    cd sysdeck-0.4.4-master/web
     bun install                     # dependencies
     bun run db:push                 # create + migrate db/custom.db (SQLite)
     bun run dev                     # Next.js on :3000
@@ -285,7 +285,7 @@ the AI Gateway panel assume the person at the machine is the operator. The
   user and wrong password look identical, and a wedged PAM helper
   fails CLOSED. 0.3.1 v1 tokens still verify as legacy sessions so
   upgrades don't log anyone out. Still LAN-side posture: loopback binds
-  stay the outer boundary (see ../QUICKSTART.md §10.4).
+  stay the outer boundary (see ../QUICKSTART.md §2).
 - **Guards stay layered under the login.** The bridge endpoint
   allowlists every module+command, caps request bodies at 256 KB,
   applies a per-IP rate limit, and returns generic errors (full detail

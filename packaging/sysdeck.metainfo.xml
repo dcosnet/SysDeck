@@ -35,19 +35,21 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>SysDeck</name>
-  <summary>Unified operations surface for Linux infrastructure — 23 Cockpit plugins</summary>
+  <summary>Unified operations surface for Linux infrastructure — 27 Cockpit plugins plus a standalone web console</summary>
   <description>
     <p>
-      SysDeck is a suite of 23 standalone Cockpit plugins — containers,
+      SysDeck is a suite of 27 standalone Cockpit plugins — containers,
       firewall, integrity auditing, network security, service mesh,
       encryption vaults, fleet compute, Kata Containers, firmware, image
       building, mining, theme engine, hardware authentication, DAG-driven
       build orchestration, system monitoring, hardware sensors, system
       benchmarking, package management, policy &amp; permissions, database
       control, Jellyfin media server, photo manager (PhotoPrism/Piwigo/
-      Lychee/Nextcloud-Memories/LibrePhotos), and remote filesystem manager
-      (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS). Each plugin appears as its
-      own sidebar entry in the Cockpit web UI.
+      Lychee/Nextcloud-Memories/LibrePhotos), remote filesystem manager
+      (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS), the service/port
+      editor, the 3rd-party module installer, and the AI gateway
+      client. Each plugin appears as its own sidebar entry in the
+      Cockpit web UI.
     </p>
     <p>
       The plugins ship as static HTML+JS+CSS plus a Python bridge helper
@@ -55,6 +57,14 @@
       are discovered automatically by cockpit-bridge. No separate web
       server, no Node.js runtime, no database — the plugins run inside
       the cockpit web service.
+    </p>
+    <p>
+      SysDeck also ships as a standalone web console — one Next.js process
+      serving the same module catalog with Unix-account (PAM) login, no
+      Cockpit required. The console additionally detects every installed
+      cockpit module on the host and loads it into its own navigation,
+      and every domain module loads in both front ends. The standalone
+      console ships in the master tarball (web/).
     </p>
     <p>
       Each backend tool (podman, nftables, fwupd, etc.) is invoked as a
@@ -66,7 +76,7 @@
   <url type="bugtracker">https://dcos.net/sysdeck/issues</url>
   <url type="help">https://dcos.net/sysdeck/quickstart</url>
 
-  <!-- The 26 <launchable> entries below match the `name` field of each
+  <!-- The 27 <launchable> entries below match the `name` field of each
        plugin's manifest.json. The cockpit apps page (pkg/apps/utils.tsx:152)
        reads launchable.type == "cockpit-manifest" and uses the text to
        link the AppStream component to the corresponding Cockpit plugin.
@@ -74,7 +84,8 @@
        sysdeck-jellyfin, sysdeck-photos, sysdeck-remotefs.
        v0.0.46: added sysdeck-modules (in-suite 3rd-party module installer).
        v0.0.47: added sysdeck-services (service/port editor promoted to
-       its own sidebar entry). -->
+       its own sidebar entry).
+       v0.3.0: added sysdeck-klanker (AI gateway client panel). -->
   <launchable type="cockpit-manifest">sysdeck-containers</launchable>
   <launchable type="cockpit-manifest">sysdeck-firewall</launchable>
   <launchable type="cockpit-manifest">sysdeck-integrity</launchable>
@@ -101,6 +112,7 @@
   <launchable type="cockpit-manifest">sysdeck-monitoring</launchable>
   <launchable type="cockpit-manifest">sysdeck-modules</launchable>
   <launchable type="cockpit-manifest">sysdeck-services</launchable>
+  <launchable type="cockpit-manifest">sysdeck-klanker</launchable>
 
   <categories>
     <category>System</category>
@@ -119,6 +131,20 @@
   </keywords>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.4" date="2026-09-12">
+      <description>
+        <p>v0.4.4: ten package managers on both editions — pacman,
+        emerge, lunar, sorcery, xbps, apk, zypper, dnf/yum, and apt
+        with the identical detection order, parsers, and mutation
+        table on the cockpit bridge and the web console, locked in by
+        fixture tests; honest capability reporting (lunar has no
+        update-preview subcommand, so its summary says so). BLOG.md
+        rebuilt as the long-form engineering essay; release history
+        lives in QA.md and worklog.md. Docs pass: standalone-first
+        positioning — the web console is the default shape, the
+        Cockpit plugin suite optional.</p>
+      </description>
+    </release>
     <release version="0.4.3" date="2026-09-12">
       <description>
         <p>v0.4.3: the multi-expert QA pass. Privileged writes ride stdin

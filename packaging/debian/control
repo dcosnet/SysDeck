@@ -14,14 +14,16 @@ Depends: cockpit-bridge (>= 239), python3 (>= 3.9), ${misc:Depends}
 Recommends: podman, nftables, lynis, iproute2, fwupd, tpm2-tools, opensc, pcscd, glances, lm-sensors, sysbench, polkitd, appstream, kata-containers, jellyfin
 Suggests: kubectl, cryptsetup, mkosi, vmdb2, archiso, live-build, photoprism, piwigo, lychee, librephotos, nextcloud-server, ceph, glusterfs-server, moosefs-master, beegfs-meta, orangefs-server
 Description: Unified operations surface for Linux infrastructure
- SysDeck is a drop-in plugin for an existing Cockpit install.
- It consolidates twenty-three domain modules — containers, firewall,
- integrity auditing, network security, service mesh, encryption vaults,
- fleet compute, Kata Containers, firmware, image building, mining,
- theme engine, hardware authentication, DAG-driven build orchestration,
- system monitoring, hardware sensors, system benchmarking, package
- management, policy & permissions, database control, Jellyfin media
- server, photo manager (PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/
- LibrePhotos), and remote filesystem manager (Ceph/GlusterFS/MooseFS/
- BeeGFS/OrangeFS) — behind a single dashboard accessible from the
- Cockpit web UI.
+ SysDeck is a standalone Linux operations console that also ships as a
+ Cockpit plugin suite. This package installs the Cockpit plugin edition:
+ 27 domain modules — containers, firewall, integrity auditing, network
+ security, service mesh, encryption vaults, fleet compute, Kata
+ Containers, firmware, image building, mining, theme engine, hardware
+ authentication, DAG-driven build orchestration, system monitoring,
+ hardware sensors, system benchmarking, package management, policy &
+ permissions, database control, Jellyfin media server, photo manager
+ (PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/LibrePhotos), remote
+ filesystem manager (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS), the
+ service/port editor, the 3rd-party module installer, and the AI
+ gateway client — behind the Cockpit web UI. The standalone web
+ console (no Cockpit required) ships in the master tarball.

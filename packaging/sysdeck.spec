@@ -33,16 +33,19 @@ Recommends:     ceph
 Recommends:     glusterfs
 
 %description
-SysDeck is a drop-in plugin for an existing Cockpit install.
-It consolidates twenty-three domain modules — containers, firewall, integrity
-auditing, network security, service mesh, encryption vaults, fleet
-compute, Kata Containers, firmware, image building, mining, theme engine,
-hardware authentication, DAG-driven build orchestration, system monitoring,
+SysDeck is a standalone Linux operations console that also ships as a
+Cockpit plugin suite. This package installs the Cockpit plugin edition:
+27 domain modules — containers, firewall, integrity auditing, network
+security, service mesh, encryption vaults, fleet compute, Kata
+Containers, firmware, image building, mining, theme engine, hardware
+authentication, DAG-driven build orchestration, system monitoring,
 hardware sensors, system benchmarking, package management, policy &
 permissions, database control, Jellyfin media server, photo manager
-(PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/LibrePhotos), and remote
-filesystem manager (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS) — behind a
-single dashboard accessible from the cockpit web UI.
+(PhotoPrism/Piwigo/Lychee/Nextcloud-Memories/LibrePhotos), remote
+filesystem manager (Ceph/GlusterFS/MooseFS/BeeGFS/OrangeFS), the
+service/port editor, the 3rd-party module installer, and the AI
+gateway client — behind the Cockpit web UI. The standalone web
+console (no Cockpit required) ships in the master tarball.
 
 This RPM is for Fedora / RHEL / CentOS. For Arch Linux, use the
 PKGBUILD. For Debian/Ubuntu, use the dpkg-buildpackage packaging.

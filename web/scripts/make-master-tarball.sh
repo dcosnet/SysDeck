@@ -242,7 +242,7 @@ printf 'DATABASE_URL=file:../db/custom.db\n# unix-account login (cockpit-style, 
 cat > "$STAGE/web/README.md" <<'EOF'
 # SysDeck — the standalone web console
 
-SysDeck's browser-native front end: 30 bridge modules behind one
+SysDeck's browser-native front end: 31 bridge modules behind one
 console, every one of them reading **real host state** — /proc and /sys
 collectors, systemctl, lsblk, the host's real package manager, live
 service APIs — with honest empty inventories (and install guidance)
@@ -527,7 +527,7 @@ the AI Gateway panel assume the person at the machine is the operator. The
   user and wrong password look identical, and a wedged PAM helper
   fails CLOSED. 0.3.1 v1 tokens still verify as legacy sessions so
   upgrades don't log anyone out. Still LAN-side posture: loopback binds
-  stay the outer boundary (see ../QUICKSTART.md §10.4).
+  stay the outer boundary (see ../QUICKSTART.md §2).
 - **Guards stay layered under the login.** The bridge endpoint
   allowlists every module+command, caps request bodies at 256 KB,
   applies a per-IP rate limit, and returns generic errors (full detail
