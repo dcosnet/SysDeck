@@ -1,7 +1,7 @@
 # SysDeck
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.4-orange.svg)](#)
+[![Version](https://img.shields.io/badge/version-0.4.5-orange.svg)](#)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![Runtime](https://img.shields.io/badge/runtime-Bun-f9f1e0.svg)](https://bun.sh)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#)
@@ -10,7 +10,7 @@
 **A standalone Linux operations console — Unix-account login, real host state, no fabricated data. Cockpit is optional: the same module catalog loads there too.**
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net> · [github.com/dcosnet/SysDeck](https://github.com/dcosnet/SysDeck)
-Version: **0.4.4** · License: **MIT**
+Version: **0.4.5** · License: **MIT**
 
 ![SysDeck — the standalone console, Overview panel](docs/screenshots/overview.png)
 
@@ -50,7 +50,7 @@ The same module catalog also ships as a **Cockpit plugin suite** — 27 standalo
 |-------|----------|----------|
 | **Standalone web console** (default) | Run the whole console in the browser — no Cockpit on the host at all | `web/` · one process on `:3000` |
 | **Cockpit plugin suite** (optional) | Drop the same 27 domain modules into an existing Cockpit install | `/usr/share/cockpit/sysdeck-*/` · `https://<host>:9090` |
-| **Master tarball** | Both shapes + vendored services in one bundle | `sysdeck-0.4.4-master.tar.bz2` (`make master`) |
+| **Master tarball** | Both shapes + vendored services in one bundle | `sysdeck-0.4.5-master.tar.bz2` (`make master`) |
 
 The parity rule runs both directions. Every domain module in the console has a counterpart plugin in `plugins/sysdeck-*/`, and the packages module, for instance, runs the same ten-manager step-down (pacman, emerge, lunar, sorcery, xbps, apk, zypper, dnf/yum, apt) with the same parsers and fixture tests on both sides. The console additionally detects every *installed* cockpit module on the host — distro modules like cockpit-machines and cockpit-podman, addons, anything with a `menu` entry in its manifest — and loads each into its own sidebar. Install a cockpit module on the box, and it shows up in the console; no cockpit login required to browse it.
 
@@ -116,7 +116,7 @@ Every spawn uses the array form with an allowlisted command set — no `eval`, n
 
 - **Cockpit manifest.** Each plugin's `manifest.json` registers under the `index` menu key; cockpit serves the page at `/cockpit/@localhost/sysdeck-<name>/index.html`. The web console discovers the same modules from its own registry.
 - **Module registry.** `scripts/generate-plugins.py` is the declarative source for the plugin catalog; `web/src/lib/sysdeck/registry.ts` is the console's counterpart. Adding a module means appending an entry and dropping a plugin directory — no other wiring.
-- **Zero-demo envelope.** Every bridge response is `{ ok, data, source, note }` where `source` is `'live' | 'hybrid' | 'unavailable'` — the TypeScript union does not admit a `'demo'` value, so the compiler rejects any reintroduction.
+- **Zero-demo envelope.** Every bridge response is `{ ok, data, source, note }` where `source` is `'live' | 'hybrid' | 'unavailable'` — the TypeScript union admits no `'demo'` value, so the compiler rejects one at build time.
 
 ## Module catalog
 
@@ -214,7 +214,7 @@ Live rows where the backend exists, honest empties where it does not — both fr
 ### Standalone console (default — no Cockpit required)
 
 ```bash
-tar xjf sysdeck-0.4.4-master.tar.bz2
+tar xjf sysdeck-0.4.5-master.tar.bz2
 cd sysdeck-0.4.4-master
 make web-dev        # bun install + db:push + fester (:3010) + next dev (:3000)
 ```

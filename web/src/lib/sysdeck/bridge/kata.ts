@@ -155,8 +155,10 @@ export const commands = {
     } catch {
       // monitor absent — filesystem facts only
     }
-    const shimSock = await readText(`/run/vc/sbs/${id}/shim.sock`).then((t) => t)
-    if (shimSock !== undefined) detail.shimSocket = `/run/vc/sbs/${id}/shim.sock`
+    // readText yields '' for every failure mode — an empty string is
+    // an absent socket, and only a non-empty read proves the shim.
+    const shimSock = await readText(`/run/vc/sbs/${id}/shim.sock`)
+    if (shimSock !== '') detail.shimSocket = `/run/vc/sbs/${id}/shim.sock`
     return ok(detail, 'live')
   },
 

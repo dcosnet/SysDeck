@@ -1,10 +1,14 @@
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
+	# The Fester event stream needs a WS hop; the upstream set is an
+	# explicit allowlist — a query parameter must never open arbitrary
+	# loopback ports (databases, admin interfaces) to whoever can reach
+	# this listener.
+	@fester_port_query {
+		query XTransformPort=3010
 	}
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
+	handle @fester_port_query {
+		reverse_proxy localhost:3010 {
 			header_up Host {host}
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}

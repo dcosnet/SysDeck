@@ -65,13 +65,17 @@ export async function mount(panel, { bridge, EventBus }) {
 
     // Clean up the interval when the panel leaves the DOM
     // (house pattern from netsec.js).
-    const observer = new MutationObserver(() => {
+    // one observer per panel: a re-mount releases the previous one
+    // instead of stacking body-wide observers on every refresh
+    if (panel.festerObserver) panel.festerObserver.disconnect();
+    if (panel.festerObserver) panel.festerObserver.disconnect();
+    panel.festerObserver = new MutationObserver(() => {
         if (!document.body.contains(panel)) {
             clearInterval(panel._festerInterval);
-            observer.disconnect();
+            panel.festerObserver.disconnect();
         }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    panel.festerObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 // ── refresh loop ────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 # Upstream: https://dcos.net
 
 pkgname=sysdeck
-pkgver=0.4.4
+pkgver=0.4.5
 pkgrel=1
 pkgdesc="Unified operations surface for Linux infrastructure — the Cockpit plugin edition: 27 domain modules plus the Python bridge (the standalone web console ships in the master tarball)"
 arch=('any')
@@ -43,35 +43,15 @@ optdepends=(
 )
 makedepends=('make')
 backup=()
+install=sysdeck.install
 source=("${pkgname}-${pkgver}.tar.bz2")
-sha256sums=('SKIP')  # Replace with actual hash for release
+sha256sums=('e579dc82aca5f3def1d6a3df6bcc7671b9dd3b30e78dd710f6ea14a93f3c176b')
 
 package() {
     cd "${srcdir}/${pkgname}-${pkgver}"
     make install DESTDIR="${pkgdir}"
-
-    # Arch-specific: ensure cockpit can find the bridge Python package.
-    # The bridge installs to /usr/lib/sysdeck/bridge/; add a symlink
-    # from the Arch Python site-packages so `python3 -m sysdeck.bridge.*`
-    # resolves correctly from the cockpit spawn context.
-    local site_packages
-    site_packages=$(python3 -c "import site; print(site.getsitepackages()[0])")
-    install -d "${pkgdir}${site_packages}"
-    ln -sf /usr/lib/sysdeck/bridge "${pkgdir}${site_packages}/sysdeck"
-}
-
-post_install() {
-    # Restart cockpit.socket so the new plugin appears in the menu.
-    systemctl try-restart cockpit.socket 2>/dev/null || true
-    echo ">>> SysDeck installed. Restart cockpit.socket if not done automatically."
-    echo ">>>   sudo systemctl restart cockpit.socket"
-}
-
-post_upgrade() {
-    systemctl try-restart cockpit.socket 2>/dev/null || true
-}
-
-post_remove() {
-    systemctl try-restart cockpit.socket 2>/dev/null || true
-    echo ">>> SysDeck removed. Restart cockpit.socket to flush the menu."
+    # No python site-packages symlink: the bridge's invocation contract
+    # is `python3 /usr/lib/sysdeck/bridge/<mod>.py <sub>` by absolute
+    # path (check-no-broken-python-module enforces it), so no import
+    # path needs to resolve.
 }

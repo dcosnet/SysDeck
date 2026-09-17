@@ -3,9 +3,8 @@
 SysDeck - Theme Engine Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.0.34 EXPANDED TO 1999 POWER-TOOL STYLE. Per user directive:
-"themes and mining they need to be expanded for maximum ui control.
-think 1999 power tool style here." The Theme Engine panel surfaces
+1999 POWER-TOOL STYLE: maximum UI control over every theme surface.
+The Theme Engine panel surfaces
 the full set of cockpit.conf theming knobs plus a preset gallery
 and live-preview CSS-variable overrides.
 
@@ -440,6 +439,22 @@ def cmd_variable_set(args: list[str]) -> dict[str, Any]:
     spec = next((v for v in CSS_VARIABLES if v["name"] == name), None)
     if spec is None:
         return {"error": f"variable {name} not in the surface"}
+    # Values land in overrides.css, which every SysDeck page loads.
+    # Accept color literals and numeric expressions only: no braces,
+    # semicolons, quotes, or url()/import tokens — a value that could
+    # break out of the declaration or fetch a remote asset is rejected
+    # at the door, not sanitized after the fact.
+    if not re.fullmatch(r"[A-Za-z0-9 #%(),./_-]{1,128}", value):
+        return {"error": "value must be 1-128 chars of color/number syntax "
+                         "(letters, digits, space, # % ( ) , . / _ -)"}
+    # Values land in overrides.css, which every SysDeck page loads.
+    # Accept color literals and numeric expressions only: no braces,
+    # semicolons, quotes, or url()/import tokens — a value that could
+    # break out of the declaration or fetch a remote asset is rejected
+    # at the door, not sanitized after the fact.
+    if not re.fullmatch(r"[A-Za-z0-9 #%(),./_-]{1,128}", value):
+        return {"error": "value must be 1-128 chars of color/number syntax "
+                         "(letters, digits, space, # % ( ) , . / _ -)"}
     try:
         SYSDECK_THEME_DIR.mkdir(parents=True, exist_ok=True)
         # Read existing overrides, replace or append this variable.

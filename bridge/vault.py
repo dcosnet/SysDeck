@@ -21,7 +21,7 @@ def list_luks() -> list:
     try:
         r = subprocess.run(
             ["lsblk", "-o", "NAME,FSTYPE,MOUNTPOINT,SIZE,TYPE", "-J"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=20,
         )
         data = json.loads(r.stdout) if r.stdout.strip() else {}
         devices = []

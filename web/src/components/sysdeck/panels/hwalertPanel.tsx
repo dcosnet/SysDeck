@@ -35,7 +35,7 @@ import {
   PanelSkeleton,
   StatCard,
 } from '@/components/sysdeck/ui'
-import { Badge } from '@/components/ui/badge'
+import {} from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,

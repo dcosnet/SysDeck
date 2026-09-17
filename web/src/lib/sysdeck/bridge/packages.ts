@@ -168,14 +168,6 @@ export interface Backend {
 
 // helpers shared by backends
 
-function tailField(txt: string, ...keys: string[]): string {
-  for (const k of keys) {
-    const re = new RegExp(`^${k}\\s*:\\s?(.*)$`, 'mi')
-    const m = txt.match(re)
-    if (m && m[1].trim()) return m[1].trim()
-  }
-  return ''
-}
 
 /** dbPath size changes on human timescales — the walk is TTL-cached
  *  so the summary poll does not re-run `du` on every tick. */

@@ -131,7 +131,6 @@ async function glusterRows(active: boolean): Promise<FsRow[]> {
     const started = status === 'Started'
     const statusOut = await run('gluster', ['volume', 'status', name], 15_000)
     let sizeGb = 0
-    let usedGb = 0
     for (const line of statusOut.stdout.split('\n')) {
       if (line.includes('/')) {
         const cols = line.trim().split(/\s+/)

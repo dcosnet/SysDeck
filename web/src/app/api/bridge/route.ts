@@ -50,7 +50,7 @@ function clientIp(req: Request): string {
 }
 
 // Mutation policy: 'admin' (default) gates the mutation registry behind
-// an admin session; 'any' restores the single-operator posture for
+// an admin session; 'any' selects the single-operator posture for
 // consoles where every login IS the operator.
 const MUTATIONS_REQUIRE_ADMIN = process.env.SYSDECK_MUTATIONS !== 'any'
 

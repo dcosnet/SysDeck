@@ -166,13 +166,18 @@ export function SysDeckShell({
   const [navOpen, setNavOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [theme, setTheme] = useState('midnight')
-  const [now, setNow] = useState(() => Date.now())
+  // 0 until the first client tick: the server and the client render the
+  // same value, so the countdown never fights hydration across a minute
+  // boundary.
+  const [now, setNow] = useState(0)
   const reduced = useReducedMotion() ?? false
 
   const meta = MODULE_MAP[active]
 
-  // session clock — refresh the countdown chip twice a minute
+  // session clock — set immediately, then refresh the countdown chip
+  // twice a minute
   useEffect(() => {
+    setNow(Date.now())
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
@@ -209,7 +214,15 @@ export function SysDeckShell({
     } catch {
       /* non-fatal */
     }
-    bridgeCall('themes', 'setActive', { theme: t })
+    // the bridge is session-gated; a refusal (non-admin) surfaces
+    // instead of vanishing — the local theme still applies for this view
+    bridgeCall('themes', 'setActive', { theme: t }).then((r) => {
+      if (!r.ok) {
+        toast.error('theme not persisted', {
+          description: r.error ?? 'themes.setActive was refused',
+        })
+      }
+    })
   }, [])
 
   // Ctrl/Cmd+K opens the module palette

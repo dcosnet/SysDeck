@@ -9,6 +9,7 @@
 import { toast } from 'sonner'
 import { Check, Palette } from 'lucide-react'
 import { useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
+import { applySdTheme } from '@/lib/sysdeck/theme'
 import { ErrorCard, HintCard, Mono, PanelHeader, PanelSkeleton, StatCard } from '@/components/sysdeck/ui'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -45,16 +46,24 @@ export default function ThemesPanel() {
 
   async function applyTheme(t: ThemeMeta) {
     const previous = active
-    // apply instantly (the header quick-switch flips the same dataset key)
-    document.documentElement.setAttribute('data-sd-theme', t.id)
+    // applySdTheme is the one decision point: dataset key + tailwind dark
+    // class + light-theme mapping stay in sync with the shell quick-switch.
+    applySdTheme(t.id)
     const res = await action('themes', 'setActive', { theme: t.id })
     if (res.ok) {
+      // mirror for the login screen (the bridge is session-gated; the
+      // pre-auth login screen reads localStorage)
+      try {
+        localStorage.setItem('sd_theme', t.id)
+      } catch {
+        /* non-fatal */
+      }
       toast.success(`theme switched — ${t.name}`, {
         description: 'the whole suite re-themes live; persisted through the themes bridge (ThemeSetting)',
       })
     } else {
-      // revert the DOM if the bridge refused the id
-      document.documentElement.setAttribute('data-sd-theme', previous)
+      // the bridge refused the id — the DOM follows the persisted truth
+      applySdTheme(previous)
       toast.error('setActive failed', { description: res.error })
     }
   }

@@ -8,10 +8,8 @@
  * user directive: "kata containers should be called SysDeck Kata and
  * moved out of the tools area."
  *
- * v0.0.34 was a merged two-tab panel (Podman + Kata iframe). The
- * v0.0.35 split restores the one-module-one-concern shape: this
- * panel manages Podman containers only; the SysDeck Kata plugin
- * hosts the pre-built cockpit-kata React app for Kata sandboxes & VMs.
+ * One module, one concern: this panel manages Podman containers
+ * only; the SysDeck Kata plugin owns Kata sandboxes & VMs.
  *
  * Bridge surface (see shared/bridge.js → bridge.containers):
  *   list()                    → podman ps --format json (normalized)
@@ -21,7 +19,6 @@
  */
 
 export async function mount(panel, { bridge, EventBus }) {
-    panel.innerHTML = renderSkeleton();
     panel.innerHTML = renderShell();
     await renderPodmanTable(panel, { bridge, EventBus });
     EventBus.emit('containers.loaded', {});
@@ -40,14 +37,15 @@ function renderShell() {
                 <h3 class="suite-card-title" id="containers-summary">Loading containers…</h3>
                 <button class="suite-btn suite-btn-ghost" id="btn-containers-refresh">↻ Refresh</button>
             </div>
+            <div id="containers-flash" class="suite-badge danger" style="display:none; margin-bottom:0.5rem; padding:0.4rem 0.6rem;"></div>
             <div id="containers-table-host"></div>
         </div>
         <div class="suite-card">
             <div class="suite-card-body">
                 <p class="suite-muted" style="font-size:0.85rem">
-                    Kata Containers (hardware-virtualized OCI sandboxes) is now a
-                    standalone sidebar entry — <strong>SysDeck Kata</strong>. Open it
-                    to manage Kata sandboxes & VMs from the pre-built React app.
+                    Kata Containers (hardware-virtualized OCI sandboxes) lives in its
+                    own sidebar entry — <strong>SysDeck Kata</strong> — real sandbox
+                    and VM state from the host, not a bundle mock.
                 </p>
             </div>
         </div>
@@ -90,6 +88,15 @@ async function renderPodmanTable(panel, { bridge, EventBus }) {
                 EventBus.emit('container.action', { id, action });
             } catch (err) {
                 EventBus.emit('container.error', { id, error: err.message });
+                // the operator sees the failure where they clicked it —
+                // the table re-render alone would silently swallow it
+                const flash = panel.querySelector('#containers-flash');
+                if (flash) {
+                    flash.textContent = `action failed: ${err.message || err}`;
+                    flash.style.display = 'inline-block';
+                    clearTimeout(panel._containersFlashTimer);
+                    panel._containersFlashTimer = setTimeout(() => { flash.style.display = 'none'; }, 4000);
+                }
             }
             renderPodmanTable(panel, { bridge, EventBus });
         });

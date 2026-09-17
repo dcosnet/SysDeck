@@ -11,7 +11,7 @@ row shows the license, developer, source URL, and homepage link
 right next to a 1-click Install button. Clicking Install IS the
 operator's acceptance of the inline-displayed license.
 
-Design rules (per v0.0.46 directive):
+Design rules:
   1. The catalog is the single source of truth — no per-module code
      branches. Adding a module = appending a dict to CATALOG.
   2. No pulls are executed without an explicit install call from
@@ -640,16 +640,27 @@ def status() -> list[dict[str, Any]]:
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+def _arg(a: list[str], i: int = 0, default: str = "") -> str:
+    """Positional argv read with an honest usage error, never IndexError."""
+    if len(a) <= i or not a[i]:
+        raise _UsageError(f"missing required argument {i + 1}")
+    return a[i]
+
+
+class _UsageError(Exception):
+    pass
+
+
 COMMANDS: dict[str, Callable[[list[str]], Any]] = {
     "catalog":  lambda _a: [e.to_public_dict() for e in catalog_entries()],
     "status":   lambda _a: status(),
-    "preflight": lambda a: preflight(a[0]),
+    "preflight": lambda a: preflight(_arg(a)),
     "install":  lambda a: install(
-        a[0],
+        _arg(a),
         accept_license=("--accept-license" in a) or ("--accept-license=1" in a),
     ),
-    "uninstall": lambda a: uninstall(a[0]),
-    "audit":    lambda a: audit(int(a[0]) if a else 200),
+    "uninstall": lambda a: uninstall(_arg(a)),
+    "audit":    lambda a: audit(int(a[0]) if a and str(a[0]).isdigit() else 200),
 }
 
 
@@ -661,7 +672,11 @@ def main(argv: list[str]) -> int:
     if not cmd:
         print(f"Unknown subcommand: {argv[0]}", file=sys.stderr)
         return 2
-    result = cmd(argv[1:])
+    try:
+        result = cmd(argv[1:])
+    except _UsageError as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
+        return 2
     print(json.dumps(result, indent=2, default=str))
     return 0 if (not isinstance(result, dict) or result.get("ok", True)) else 1
 

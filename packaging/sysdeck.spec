@@ -7,16 +7,18 @@
 #       Debian/Ubuntu users: see packaging/debian/
 
 Name:           sysdeck
-Version:        0.4.4
+Version:        0.4.5
 Release:        1%{?dist}
 Summary:        Unified operations surface for Linux infrastructure
 
 License:        MIT
 URL:            https://dcos.net
 Source0:        %{name}-%{version}.tar.bz2
+BuildArch:      noarch
 
 BuildRequires:  make
 BuildRequires:  python3-devel
+BuildRequires:  nodejs
 Requires:       cockpit-bridge >= 239
 Recommends:     podman
 Recommends:     nftables
@@ -27,10 +29,10 @@ Recommends:     tpm2-tools
 Recommends:     glances
 Recommends:     lm_sensors
 Recommends:     sysbench
-Recommends:     kata-containers
-Recommends:     jellyfin
-Recommends:     ceph
-Recommends:     glusterfs
+Suggests:       kata-containers
+Suggests:       jellyfin
+Suggests:       ceph
+Suggests:       glusterfs
 
 %description
 SysDeck is a standalone Linux operations console that also ships as a
@@ -62,16 +64,19 @@ make install DESTDIR=%{buildroot}
 %files
 %license LICENSE
 %doc README.md QUICKSTART.md BLOG.md QA.md
-/usr/share/cockpit/%{name}/manifest.json
-/usr/share/cockpit/%{name}/index.html
-/usr/share/cockpit/%{name}/suite.js
-/usr/share/cockpit/%{name}/suite.css
-/usr/share/cockpit/%{name}/logo.svg
-/usr/share/cockpit/%{name}/src/
-/usr/lib/%{name}/bridge/
-/usr/lib/%{name}/tests/
+# The install target ships: 27 plugins under
+# /usr/share/cockpit/sysdeck-*/ (manifest.json, index.html, module js),
+# the sysdeck-common bridge library, the Python bridge at
+# /usr/lib/sysdeck/bridge/, tests, docs, share assets (diagnose +
+# smoke + uninstall scripts, firewall templates + policies, prometheus
+# configs), AppStream metainfo, and both polkit actions.
+/usr/share/cockpit/sysdeck-*/
+/usr/lib/%{name}/
+/usr/share/%{name}/
+/usr/share/doc/%{name}/
 /usr/share/metainfo/sysdeck.metainfo.xml
 /usr/share/polkit-1/actions/org.sysdeck.policy
+/usr/share/polkit-1/actions/org.sysdeck.modules3p.policy
 
 %post
 # Restart cockpit.socket so the new plugin appears in the menu.
@@ -87,6 +92,23 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Thu Sep 17 2026 Jeremy Anderson <info@dcos.net> - 0.4.5-1
+- v0.4.5 production-hardening release: full MoE QA pass. Makefile
+  web-dev splice fixed; reproducible dist + clean-tree release gate;
+  master tarball hygiene (no dev logs, no .env). Bridge security:
+  prometheus push-log filename validation + label escaping, single-
+  statement read-only SQL guard, glances availability step-down,
+  mutation timeout safety, vmdb2 output-dir guard, theme CSS value
+  allowlist, subprocess timeouts across helpers. Web: applySdTheme on
+  every theme path, valid table rows, registry-sourced version
+  surface, cached fester probes, tsc+eslint as build gates. Firewall:
+  six structurally validated nftables rulesets, table-scoped flush
+  everywhere, no-services loopback+SSH fixes, vps SSH verdict fix,
+  Cilium policy scoping. Packaging: noarch spec with %files matching
+  the 27-plugin install, nodejs build dependency, sysdeck.install
+  hooks, AppStream extends, Caddyfile port allowlist. Decisive
+  comment language across the first-party tree.
+
 * Sat Sep 12 2026 Jeremy Anderson <info@dcos.net> - 0.4.4-1
 - v0.4.4: package parity + blog essay. Ten package-manager backends on
   both editions (bridge/packages.py gains emerge/lunar/sorcery/xbps/
@@ -134,7 +156,6 @@ fi
   HMAC session cookie, gated API routes, fester WS session check,
   audited logins) — the 0.3.0 audit follow-through.
 
-%changelog
 * Fri Sep 11 2026 Jeremy Anderson <info@dcos.net> - 0.3.0-1
 - v0.3.0 AI GATEWAY EDITION: klanker-gate (Frosty Deno LLM gateway,
   independent version 0.9.0) vendored at /klanker-gate with full Arch
@@ -153,9 +174,9 @@ fi
 - bridge/fester.py: real REST client (11 subcommands) replacing the
   v0.0.31 systemd-listing stub; fester panel fully built; bridge.js
   fester surface 1 -> 11 methods.
-- Makefile: tab-indented recipes restored (0.1.3 shipped 8-space indents
-  that GNU make rejected); new targets fester-start, web-install,
-  web-dev, master.
+- Makefile: recipes are tab-indented (GNU make rejects the 8-space
+  indent form; a build-time guard enforces tabs); new targets
+  fester-start, web-install, web-dev, master.
 * Tue Aug 19 2026 Jeremy Anderson <info@dcos.net> - 0.1.3-1
 - v0.1.3 CRITICAL FIX: host package import was silently failing + mkosi
   still wasn't reading the profile config. Two root causes fixed, plus
@@ -1030,11 +1051,10 @@ fi
   setcap, getcap (in addition to v0.0.32 set: setfacl, getfacl, mkdir,
   mount, ip, bpftool, lsns, aa-enforce, aa-complain, aa-status).
 - DOCUMENTATION REWRITE: README.md, QUICKSTART.md, BLOG.md, LICENSE
-  rewritten with decisive language. Every design choice recorded as a
-  decision, not as history. Removed "restored/brought back/was dropped/
-  surviving artifact" wording from active code comments and current-
-  version docs (historical release narratives in BLOG.md preserved as
-  record).
+  state every design choice as a standing decision in the present
+  tense; active code comments and current-version docs carry no
+  development-churn narration (release history stays in the changelog,
+  where it belongs).
 - STEP-DOWN LOGIC: SELinux decision documented in BLOG.md v0.0.33
   entry — three options considered (implement / skip / detect-only);
   option 2 won because it composes best with the rest of the system.
@@ -1287,8 +1307,8 @@ fi
   real data. With v0.0.26 the other 15 modules should now load real data.
 - New guard: check-no-broken-python-module in `make check` scans every JS
   file for spawn calls using `python3 -m sysdeck.bridge` and fails with a
-  clear message. Regression-tested: deliberately reintroducing the broken
-  pattern causes `make check` to fail.
+  clear message. Negative-tested: the broken pattern makes `make check`
+  fail.
 
 * Sun Aug 17 2026 Jeremy Anderson <info@dcos.net> - 0.0.25-1
 - ROOT CAUSE FOUND AND FIXED: every plugin page showed "Module load
@@ -1354,9 +1374,8 @@ fi
   rewrites `import cockpit from "cockpit"` to `module.exports = cockpit`.
 - New guard: check-no-broken-cockpit-import in `make check` scans every
   JS file in plugins/ and shared/ for the broken `import cockpit from`
-  pattern. Regression-tested: deliberately reintroducing the v0.0.22
-  import causes `make check` to fail with a clear message citing the
-  cockpit source code.
+  pattern. Negative-tested: the v0.0.22 import form makes `make check`
+  fail with a clear message citing the cockpit source code.
 
 * Sun Aug 17 2026 Jeremy Anderson <info@dcos.net> - 0.0.22-1
 - ROOT CAUSE FOUND AND FIXED: the `requires.cockpit` field was set to
@@ -1516,17 +1535,17 @@ fi
   at build time.
 
 * Sun Aug 17 2026 Jeremy Anderson <info@dcos.net> - 0.0.15-1
-- RESTORE: bridge/grafana.py, bridge/hwalert.py, bridge/prometheus.py
-  were silently dropped from the v0.0.13 release tarball and shipped
-  missing through v0.0.14. All three are restored (1489 lines of code).
-- RESTORE: nextjs-dashboard/ directory (standalone Next.js variant
-  dashboard) and prometheus/ config directory (Prometheus + Grafana
-  YAML configs) are restored to the source tree.
+- SOURCE COMPLETENESS: bridge/grafana.py, bridge/hwalert.py, and
+  bridge/prometheus.py ship in the tarball (the v0.0.13-v0.0.14
+  tarballs omitted them; 1489 lines of code).
+- SOURCE COMPLETENESS: nextjs-dashboard/ directory (standalone Next.js
+  variant dashboard) and prometheus/ config directory (Prometheus +
+  Grafana YAML configs) ship in the source tree.
 - Makefile dist target now includes prometheus/ and nextjs-dashboard/.
 - Makefile install target now installs prometheus configs to
   /etc/sysdeck/prometheus/ and the Next.js dashboard to
   /usr/share/sysdeck/nextjs-dashboard/.
-- Tarball size restored to ~280 KB (was 80 KB in v0.0.14 due to
+- Tarball size back at ~280 KB (v0.0.14 shipped an 80 KB tarball due to
   the dropped code).
 
 * Sun Aug 17 2026 Jeremy Anderson <info@dcos.net> - 0.0.14-1

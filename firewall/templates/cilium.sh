@@ -251,9 +251,12 @@ fw_stop() {
         return 0
     fi
 
-    # Delete all Cilium policies (reverts to default allow-all).
+    # Delete all Cilium policies. Cilium's default posture without a
+    # policy is allow-all — stopping the agent opens the host; the
+    # operator hears that decision, not just "done".
     # This does NOT unload the BPF programs — cilium-agent keeps running
     # so the operator can re-apply a policy without reinstalling.
+    log_warn "stopping the cilium backend returns the host to allow-all — re-apply a policy or load an nftables template before exposing the host"
     "$CILIUM_BIN" policy delete --all 2>/dev/null || log_warn "policy delete --all failed (no policies loaded?)."
 
     if [[ -x "$CILIUM_AGENT_BIN" ]] && systemctl is-active --quiet "$CILIUM_AGENT_SVC" 2>/dev/null; then

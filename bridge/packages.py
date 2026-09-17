@@ -1065,13 +1065,7 @@ def install(args: list[str]) -> dict[str, str]:
     # Actually run it. The cockpit bridge runs as the cockpit user; the
     # JS panel's cockpit.spawn(..., { superuser: 'try' }) makes cockpit
     # prompt the operator for auth and run us as root via polkit.
-    r = subprocess.run(
-        cmd, capture_output=True, text=True, check=False,
-        timeout=600, env=SCRUBBED_ENV,
-    )
-    return {"action": "install", "package": pkg, "manager": PKG_MANAGER,
-            "command": " ".join(cmd), "success": r.returncode == 0,
-            "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
+    return _run_mutation(cmd, "install", pkg)
 
 
 def remove(args: list[str]) -> dict[str, str]:
@@ -1087,13 +1081,7 @@ def remove(args: list[str]) -> dict[str, str]:
     if not cmd:
         return {"action": "remove", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no remove command for {PKG_MANAGER}"}
-    r = subprocess.run(
-        cmd, capture_output=True, text=True, check=False,
-        timeout=600, env=SCRUBBED_ENV,
-    )
-    return {"action": "remove", "package": pkg, "manager": PKG_MANAGER,
-            "command": " ".join(cmd), "success": r.returncode == 0,
-            "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
+    return _run_mutation(cmd, "remove", pkg)
 
 
 def update(args: list[str]) -> dict[str, str]:
@@ -1116,11 +1104,53 @@ def update(args: list[str]) -> dict[str, str]:
     if not cmd:
         return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update command for {PKG_MANAGER}"}
-    r = subprocess.run(
-        cmd, capture_output=True, text=True, check=False,
-        timeout=600, env=SCRUBBED_ENV,
-    )
-    return {"action": "update", "package": pkg, "manager": PKG_MANAGER,
+    return _run_mutation(cmd, "update", pkg)
+
+
+def _run_mutation(cmd: list[str], action: str, pkg: str = "") -> dict[str, str]:
+    """Run a package-manager mutation; never raises.
+
+    Ten-minute package operations are normal, and a missing binary is
+    a state, not a crash: both come back as a structured failure the
+    panel can render, exactly like the read path.
+    """
+    try:
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, check=False,
+            timeout=600, env=SCRUBBED_ENV,
+        )
+    except subprocess.TimeoutExpired:
+        return {"action": action, "package": pkg, "manager": PKG_MANAGER,
+                "success": False, "stderr": "package manager timed out after 600s — "
+                "it may still be running; check with the manager directly"}
+    except FileNotFoundError:
+        return {"action": action, "package": pkg, "manager": PKG_MANAGER,
+                "success": False, "stderr": f"{cmd[0]} is not installed"}
+    return {"action": action, "package": pkg, "manager": PKG_MANAGER,
+            "command": " ".join(cmd), "success": r.returncode == 0,
+            "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
+
+
+def _run_mutation(cmd: list[str], action: str, pkg: str = "") -> dict[str, str]:
+    """Run a package-manager mutation; never raises.
+
+    Ten-minute package operations are normal, and a missing binary is
+    a state, not a crash: both come back as a structured failure the
+    panel can render, exactly like the read path.
+    """
+    try:
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, check=False,
+            timeout=600, env=SCRUBBED_ENV,
+        )
+    except subprocess.TimeoutExpired:
+        return {"action": action, "package": pkg, "manager": PKG_MANAGER,
+                "success": False, "stderr": "package manager timed out after 600s — "
+                "it may still be running; check with the manager directly"}
+    except FileNotFoundError:
+        return {"action": action, "package": pkg, "manager": PKG_MANAGER,
+                "success": False, "stderr": f"{cmd[0]} is not installed"}
+    return {"action": action, "package": pkg, "manager": PKG_MANAGER,
             "command": " ".join(cmd), "success": r.returncode == 0,
             "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
 
@@ -1137,13 +1167,7 @@ def update_all() -> dict[str, str]:
     if not cmd:
         return {"action": "update-all", "manager": PKG_MANAGER,
                 "success": False, "stderr": f"no update-all command for {PKG_MANAGER}"}
-    r = subprocess.run(
-        cmd, capture_output=True, text=True, check=False,
-        timeout=600, env=SCRUBBED_ENV,
-    )
-    return {"action": "update-all", "manager": PKG_MANAGER,
-            "command": " ".join(cmd), "success": r.returncode == 0,
-            "rc": r.returncode, "output": r.stdout, "stderr": r.stderr}
+    return _run_mutation(cmd, "update-all", "")
 
 
 def dry_run(args: list[str]) -> dict[str, str]:

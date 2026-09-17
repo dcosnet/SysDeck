@@ -14,6 +14,7 @@ import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Check, Copy, ExternalLink, Server, Terminal } from 'lucide-react'
 import { PanelCard, PanelHeader } from '@/components/sysdeck/ui'
+import { MODULES } from '@/lib/sysdeck/registry'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -105,8 +106,8 @@ export default function RunbookPanel() {
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {[
-              ['Cockpit plugin shell', 'one page at / with a 29-module sidebar registry'],
-              ['bridge/*.py (27 modules)', 'POST /api/bridge → TypeScript bridge modules, same command surface'],
+              ['Cockpit plugin shell', `one page at / with a ${MODULES.length}-module sidebar registry`],
+              ['bridge/*.py (28 helpers)', 'POST /api/bridge → TypeScript bridge modules, same command surface'],
               ['cockpit.conf + file state', 'Prisma + SQLite at db/custom.db (theme, baselines, runs)'],
               ['Fester (sidecar)', 'bundled mini-service on :3010 — REST proxied, events over WebSocket'],
               ['klanker-gate', 'optional — point the AI Gateway panel at any running gateway'],

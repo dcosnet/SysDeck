@@ -201,7 +201,7 @@ function renderBackendSelector(backends, excluded, activeBackend, templates, act
             ? '<span class="suite-badge success" style="margin-left:0.25rem">installed</span>'
             : '<span class="suite-badge danger" style="margin-left:0.25rem">not installed</span>';
         return `
-            <label class="suite-template-card ${isActive ? 'active' : ''}" style="display:block;padding:0.75rem;border:1px solid var(--sysdeck-border);border-radius:6px;margin-bottom:0.5rem;cursor:pointer;${isActive ? 'border-color:var(--sysdeck-accent);background:rgba(6,102,204,0.08);' : ''}">
+            <label class="suite-template-card ${isActive ? 'active' : ''}" style="display:block;padding:0.75rem;border:1px solid var(--sysdeck-border);border-radius:6px;margin-bottom:0.5rem;cursor:pointer;${isActive ? 'border-color:var(--sysdeck-accent);background:rgba(63,201,176,0.08);' : ''}">
                 <input type="radio" name="fw-backend" value="${escapeHtml(b.id)}" ${isActive ? 'checked' : ''} style="margin-right:0.5rem" />
                 <strong>${escapeHtml(b.name)}</strong>
                 ${techBadge}
@@ -431,7 +431,7 @@ function renderTemplateSelector(templates, activeTemplate, state, activeBackend,
     const items = filteredTemplates.map((t) => {
         const isActive = t.name === activeTemplate;
         return `
-            <label class="suite-template-card ${isActive ? 'active' : ''}" style="display:block;padding:0.75rem;border:1px solid var(--sysdeck-border);border-radius:6px;margin-bottom:0.5rem;cursor:pointer;${isActive ? 'border-color:var(--sysdeck-accent);background:rgba(6,102,204,0.08);' : ''}">
+            <label class="suite-template-card ${isActive ? 'active' : ''}" style="display:block;padding:0.75rem;border:1px solid var(--sysdeck-border);border-radius:6px;margin-bottom:0.5rem;cursor:pointer;${isActive ? 'border-color:var(--sysdeck-accent);background:rgba(63,201,176,0.08);' : ''}">
                 <input type="radio" name="fw-template" value="${escapeHtml(t.name)}" ${isActive ? 'checked' : ''} style="margin-right:0.5rem" />
                 <strong>${escapeHtml(t.name)}</strong>
                 ${isActive ? '<span class="suite-badge success" style="margin-left:0.5rem">active</span>' : ''}
@@ -542,7 +542,7 @@ function renderBans(bans, total) {
                 </tbody>
             </table>
             <p class="suite-muted" style="margin-top:0.5rem;font-size:0.8rem">
-                Ban sets: <code>${sets.join(', ')}</code>.
+                Ban sets: <code>${escapeHtml(sets.join(', '))}</code>.
                 ssh_abuse = SSH brute-force ban (1h timeout),
                 port_scanners = port scan detection (1h timeout),
                 connlimit_abuse = connection rate limit exceeded (10m timeout).

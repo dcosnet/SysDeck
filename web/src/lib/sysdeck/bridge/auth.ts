@@ -181,7 +181,6 @@ export const commands = {
   certs: async () => {
     const certs = await tokenCerts()
     if (certs.length) {
-      const now = Date.now()
       return ok(
         {
           certs: certs.map((c) => ({

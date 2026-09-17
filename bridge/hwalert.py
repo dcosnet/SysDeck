@@ -512,12 +512,10 @@ def _device_path_ok(device_id):
     paths (/sys/bus/usb/devices/..., /sys/bus/thunderbolt/devices/...,
     /sys/bus/pci/devices/...). block/unblock write to <id>/authorized as
     root, so the id must resolve inside one of those scanned bases —
-    otherwise cmd_block was an arbitrary file-overwrite ('0') and
-    cmd_unblock was a root shell injection via `sudo sh -c` with the
-    f-string path (found by the 0.3.0 security audit; both sudo
-    fallbacks are also gone: the cockpit superuser channel already
-    escalates this helper via polkit, so shelling out through sudo
-    only ever added the injection primitive)."""
+    anything else would make cmd_block an arbitrary file-overwrite ('0')
+    and cmd_unblock a shell-injection primitive. The cockpit superuser
+    channel escalates this helper via polkit; no sudo shell-out exists
+    anywhere in this helper."""
     if not isinstance(device_id, str) or not device_id.startswith("/"):
         return False
     bases = (
@@ -551,10 +549,9 @@ def cmd_unblock(device_id):
         return {"action": "unblock", "deviceId": device_id, "result": "invalid-device-path"}
     auth_path = os.path.join(device_id, "authorized")
     if os.path.exists(auth_path):
-        # v0.1.4 SECURITY: was `sudo sh -c f"echo 1 > {auth_path}"` — a
-        # device_id containing shell metacharacters was literal root RCE.
-        # Direct write (this helper already runs privileged through the
-        # cockpit superuser channel when the operator approves polkit).
+        # Direct write, never a shell: the helper already runs
+        # privileged through the cockpit superuser channel when the
+        # operator approves polkit.
         try:
             with open(auth_path, 'w') as f:
                 f.write('1')
@@ -594,14 +591,21 @@ def cmd_whitelist(device_id):
 
 
 def cmd_unwhitelist(device_id):
-    """Remove a device from the whitelist."""
+    """Remove one device from the whitelist by exact identity.
+
+    Match on exact serial, exact device id, or exact vendorId:productId —
+    never a substring, which would remove every entry sharing a letter.
+    """
     whitelist = load_whitelist()
-    # Remove by matching serial or vendorId:productId
-    new_wl = []
-    for entry in whitelist:
-        if entry.get("serial") and device_id in entry.get("serial", ""):
-            continue
-        new_wl.append(entry)
+    new_wl = [
+        entry for entry in whitelist
+        if not (
+            device_id == entry.get("serial")
+            or device_id == entry.get("id")
+            or device_id == entry.get("deviceId")
+            or device_id == f"{entry.get('vendorId', '')}:{entry.get('productId', '')}"
+        )
+    ]
     save_whitelist(new_wl)
     return {"action": "unwhitelist", "deviceId": device_id, "remaining": len(new_wl)}
 

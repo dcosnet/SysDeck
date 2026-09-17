@@ -17,7 +17,7 @@
  * rest of the v0.0.20+ component vocabulary (.sysdeck-* and the
  * .suite-* compatibility aliases).
  *
- * Reverting to the classic 0.1.x skin:
+ * Switch back to the classic 0.1.x skin:
  *     sudo rm /usr/share/cockpit/sysdeck-common/sysdeck-web.css
  * (pages 404 the missing link and fall back to base sysdeck.css).
  *
@@ -174,7 +174,7 @@ a:hover { text-decoration: underline; text-underline-offset: 2px; }
     border-color: rgba(239, 68, 68, 0.30);
 }
 
-.suite-badge.info {
+.suite-badge.info, .sysdeck-badge.info {
     background: rgba(63, 201, 176, 0.14);
     color: #3fc9b0;
     border-color: rgba(63, 201, 176, 0.30);
@@ -256,7 +256,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--sysdeck-accent
 
 /* ── 8. stats + progress ──────────────────────────────────────────── */
 
-.suite-stat-value {
+.suite-stat-value, .sysdeck-stat-value {
     font-size: 1.75rem;
     font-weight: 600;
     line-height: 1.15;
@@ -265,7 +265,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--sysdeck-accent
     font-variant-numeric: tabular-nums;
 }
 
-.suite-stat-value.suite-warn { color: #fbbf24; }
+.suite-stat-value.suite-warn, .sysdeck-stat-value.sysdeck-warn { color: #fbbf24; }
 
 .suite-stat-label {
     font-size: 0.75rem;

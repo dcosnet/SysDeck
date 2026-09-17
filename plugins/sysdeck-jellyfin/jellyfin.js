@@ -79,10 +79,10 @@ function renderServiceCard(summary, available, running, webUrl) {
                 <h3 class="suite-card-title">Jellyfin Service</h3>
                 <div class="suite-card-body">
                     <p class="suite-muted">
-                        ${escapeHtml(summary?.reason || webStatus?.reason || 'Jellyfin is not installed.')}
+                        ${escapeHtml(summary?.reason || 'Jellyfin is not installed.')}
                     </p>
-                    ${(summary?.install || webStatus?.install)
-                        ? `<p class="suite-muted" style="margin-top:0.5rem"><code>${escapeHtml(summary?.install || webStatus?.install)}</code></p>`
+                    ${summary?.install
+                        ? `<p class="suite-muted" style="margin-top:0.5rem"><code>${escapeHtml(summary.install)}</code></p>`
                         : ''}
                     <p class="suite-muted" style="margin-top:0.5rem">
                         Jellyfin is GPL-2.0 licensed by the Jellyfin contributors —

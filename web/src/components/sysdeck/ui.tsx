@@ -5,9 +5,9 @@
 
 import { type ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import {} from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import type { DataSource } from '@/lib/sysdeck/types'
@@ -157,18 +157,43 @@ export function DataTable<T>({
   )
 }
 
+// State vocabulary -> tone. One lookup, step-down order: exact key,
+// then tone default. Adding a state = adding a table entry.
+const STATE_TONES: Record<string, string> = {
+  running: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  online: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  healthy: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  succeeded: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  unlocked: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  playing: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  done: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  allow: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  installed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  pass: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  stopped: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  offline: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  locked: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  queued: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  idle: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  deny: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  uninstalled: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  failed: 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30',
+  error: 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30',
+  danger: 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30',
+  crit: 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30',
+  critical: 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30',
+  warn: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  degraded: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  warned: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  frozen: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  paused: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+  acknowledged: 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30',
+}
+
 export function StateBadge({ state }: { state: string }) {
-  const s = state.toLowerCase()
-  const cls =
-    s === 'running' || s === 'online' || s === 'healthy' || s === 'succeeded' || s === 'active' || s === 'unlocked' || s === 'playing' || s === 'done' || s === 'allow' || s === 'installed' || s === 'pass'
-      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-      : s === 'stopped' || s === 'offline' || s === 'locked' || s === 'queued' || s === 'idle' || s === 'deny' || s === 'uninstalled'
-        ? 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30'
-        : s === 'failed' || s === 'error' || s === 'danger' || s === 'crit' || s === 'critical'
-          ? 'bg-red-500/15 text-red-700 dark:text-red-500 border-red-500/30'
-          : s === 'warn' || s === 'degraded' || s === 'warned' || s === 'frozen' || s === 'paused' || s === 'acknowledged'
-            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-500 border-amber-500/30'
-            : 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30'
+  const cls = STATE_TONES[state.toLowerCase()]
+    ?? 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30'
   return (
     <span className={cn('rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', cls)}>
       {state}

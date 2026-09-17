@@ -10,7 +10,7 @@
 // nativeMetrics is a REAL ring buffer (own /proc parsing, no overview
 // imports): cpu/mem pct + per-interval net rates, last 120 samples.
 import { readFileSync } from 'fs'
-import { connect } from 'net'
+import {} from 'net'
 import { ok } from './shared'
 
 // ── real /proc collectors (module-local, no overview internals) ───────

@@ -6,9 +6,8 @@ Author: Jeremy Anderson (https://dcos.net)
 Aggregates system monitoring data from the Glances CLI
 (https://github.com/nicolargo/glances) into a structured JSON document.
 
-v0.0.34 INTEGRATES THE GLANCES BUILT-IN WEB UI. The user directive:
-"glances is not integrated yet i just assumed you would integrate the
-built in webui as a module." Glances ships a webserver via
+The bridge integrates the Glances built-in web UI. Glances ships a
+webserver via
 `glances -w` (default port 61208, 127.0.0.1). The bridge starts that
 webserver as a background process; the JS panel iframes the running
 web UI at http://127.0.0.1:61208 — full Glances web UI (all graphs,
@@ -16,22 +15,22 @@ all sensors, all top processes, all history) without SysDeck
 re-implementing any of it.
 
 Subcommands:
-  snapshot       — full system snapshot (kept from v0.0.11)
-  cpu            — CPU metrics subset (kept)
-  memory         — memory metrics subset (kept)
-  network        — network metrics subset (kept)
+  snapshot       — full system snapshot
+  cpu            — CPU metrics subset
+  memory         — memory metrics subset
+  network        — network metrics subset
   start-web      — start glances -w on 127.0.0.1:61208 (background)
                    writes the PID to /var/lib/sysdeck/glances/web.pid
   stop-web       — kill the background webserver (read PID file)
   web-status     — return {running, pid, port, url}
   web-port       — return the actual listening port (defaults to 61208)
 
-Cockpit way (v0.0.31+ pattern): the bridge runs glances via subprocess
-directly — no `sudo` shell-out. The JS panel passes { superuser: 'try' }
-to cockpit.spawn so the cockpit bridge prompts the operator via polkit
-for the org.sysdeck.system.manage action (shipped since v0.0.17 —
-authorizes /usr/bin/systemctl, /usr/bin/hostnamectl, etc., and by
-extension any system-level subprocess the bridge runs).
+Privilege model: the bridge runs glances via subprocess directly —
+no `sudo` shell-out. The JS panel passes { superuser: 'try' } to
+cockpit.spawn so the cockpit bridge prompts the operator via polkit
+for the org.sysdeck.system.manage action (authorizes
+/usr/bin/systemctl, /usr/bin/hostnamectl, etc., and by extension any
+system-level subprocess the bridge runs).
 
 Glances is GPL-3.0 licensed by Nicolargo. This bridge helper invokes
 it as a separate process via subprocess — the suite (MIT) and Glances
@@ -118,35 +117,70 @@ def _is_pid_alive(pid: int) -> bool:
         return False
 
 
-def run_glances(args: list[str]) -> str:
-    """Run glances with the given args, returning stdout."""
-    return subprocess.run(
-        ["glances", *args], capture_output=True, text=True, check=True,
-    ).stdout
+GLANCES_INSTALL_HINT = (
+    "pip install glances  # or: pacman -S glances / apt install glances / dnf install glances"
+)
+
+
+def run_glances(args: list[str], timeout: int = 30) -> tuple[str, str | None]:
+    """Run glances, returning (stdout, failure_reason).
+
+    Step-down contract shared by the whole snapshot family: glances
+    missing, wedged, or erroring degrades to a reason string — the
+    caller renders {"available": false}, never a traceback.
+    """
+    if not _have("glances"):
+        return "", "glances not installed"
+    try:
+        r = subprocess.run(
+            ["glances", *args], capture_output=True, text=True, check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "", f"glances timed out after {timeout}s"
+    except OSError as exc:
+        return "", f"glances failed to start: {exc}"
+    if r.returncode != 0 and not r.stdout.strip():
+        return "", (r.stderr.strip() or f"glances exited {r.returncode}")[:200]
+    return r.stdout, None
 
 
 def snapshot() -> dict[str, Any]:
     """Full system snapshot from glances JSON export.
 
     Calls: glances --time 1 --quiet --export json --once
-    Returns the parsed JSON document.
+    Returns the parsed JSON document, or {"available": false, ...}
+    when glances cannot answer.
     """
-    output = run_glances(["--time", "1", "--quiet", "--export", "json", "--once"])
+    output, reason = run_glances(["--time", "1", "--quiet", "--export", "json", "--once"])
+    if reason:
+        return {"available": False, "reason": reason, "install": GLANCES_INSTALL_HINT}
     lines = output.strip().splitlines()
     if not lines:
-        return {}
-    return json.loads(lines[-1])
+        return {"available": False, "reason": "glances produced no output"}
+    try:
+        return json.loads(lines[-1])
+    except json.JSONDecodeError:
+        return {"available": False, "reason": "glances output was not valid JSON"}
+
+
+def _available_false(data: dict[str, Any]) -> bool:
+    return isinstance(data, dict) and data.get("available") is False
 
 
 def cpu() -> dict[str, Any]:
     """CPU metrics subset from a glances snapshot."""
     data = snapshot()
+    if _available_false(data):
+        return data
     return data.get("cpu", {})
 
 
 def memory() -> dict[str, Any]:
     """Memory metrics subset from a glances snapshot."""
     data = snapshot()
+    if _available_false(data):
+        return data
     return {
         "mem": data.get("mem", {}),
         "memswap": data.get("memswap", {}),
@@ -156,6 +190,8 @@ def memory() -> dict[str, Any]:
 def network() -> dict[str, Any]:
     """Network interface metrics subset from a glances snapshot."""
     data = snapshot()
+    if _available_false(data):
+        return data
     return data.get("network", {})
 
 

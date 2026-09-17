@@ -247,6 +247,6 @@ function renderSkeleton() {
 function renderError(err) {
     return `<div class="suite-card">
         <h3 class="suite-card-title">Photos bridge unavailable</h3>
-        <p class="suite-card-body suite-muted">${err.message || err}. Ensure the bridge helper is installed at /usr/lib/sysdeck/bridge/photos.py.</p>
+        <p class="suite-card-body suite-muted">${escapeHtml(String(err.message || err))}. Ensure the bridge helper is installed at /usr/lib/sysdeck/bridge/photos.py.</p>
     </div>`;
 }

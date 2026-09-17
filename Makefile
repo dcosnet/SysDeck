@@ -14,11 +14,11 @@
 # /usr/lib/sysdeck/bridge/ (called via cockpit.spawn).
 #
 # Targets:
-#   make install     - install all 26 plugins + bridge + scripts + firewall templates
-#   make uninstall   - remove all 26 plugins + bridge + scripts
+#   make install     - install all 27 plugins + bridge + scripts + firewall templates
+#   make uninstall   - remove all 27 plugins + bridge + scripts
 #   make check       - validate all manifests against cockpit-podman pattern,
 #                      syntax-check JS/Python/shell sources, run unit tests
-#   make plugins     - regenerate plugins/ and shared/ from scripts/generate-plugins.py
+#   make plugins     - verify plugins/ + shared/ match the generator catalog
 #   make clean       - remove build artifacts
 #   make dist        - build the source tarball (runs check first)
 #   make distcheck   - extract the tarball into a clean dir and run check inside
@@ -30,7 +30,7 @@
 # Distro support: Arch Linux, Debian/Ubuntu, Fedora/RHEL/CentOS.
 
 PACKAGE := sysdeck
-VERSION := 0.4.4
+VERSION := 0.4.5
 LIB_DIR := $(DESTDIR)/usr/lib/$(PACKAGE)
 PYTHON_DIR := $(LIB_DIR)/bridge
 SHARE_DIR := $(DESTDIR)/usr/share/$(PACKAGE)
@@ -62,14 +62,17 @@ GENERATOR := scripts/generate-plugins.py
 
 .PHONY: install uninstall check clean dist distcheck plugins fester-start web-install web-dev master install-branding uninstall-branding
 
-# ─── plugins: regenerate from generator ──────────────────────────────
+# ─── plugins: verify the tree against the generator catalog ─────────
+# The shipped plugins/ and shared/ assets are hand-maintained source;
+# the generator VERIFIES catalog <-> disk consistency and never writes.
+# (--force exists only to bootstrap a tree with missing plugin dirs.)
 plugins:
-	@echo ">>> Regenerating plugins/ and shared/ from $(GENERATOR)"
+	@echo ">>> Verifying plugins/ and shared/ against the catalog in $(GENERATOR)"
 	python3 $(GENERATOR)
 
-# ─── install: 26 visible plugins + shared/ + bridge + scripts + metainfo ────
+# ─── install: 27 visible plugins + shared/ + bridge + scripts + metainfo ────
 install:
-	@echo ">>> Installing $(PACKAGE) $(VERSION): 26 standalone Cockpit plugins"
+	@echo ">>> Installing $(PACKAGE) $(VERSION): 27 standalone Cockpit plugins"
 	# Each plugin: /usr/share/cockpit/sysdeck-<name>/{manifest.json,index.html,<module>.js}
 	@for plugin in plugins/sysdeck-*; do \
 	    [ -d "$$plugin" ] || continue; \
@@ -166,16 +169,20 @@ install:
 	install -m 0644 $(POLKIT_FILE) $(DESTDIR)/usr/share/polkit-1/actions/org.sysdeck.policy
 	# v0.0.46: 3rd-party-modules polkit action (org.sysdeck.modules3p.modify)
 	install -m 0644 packaging/polkit/org.sysdeck.modules3p.policy $(DESTDIR)/usr/share/polkit-1/actions/
-	# Reload polkit + refresh AppStream cache.
-	-@if command -v systemctl >/dev/null 2>&1; then \
-	    systemctl reload polkit 2>/dev/null || true; \
-	fi
-	-@if command -v appstreamcli >/dev/null 2>&1; then \
-	    appstreamcli refresh-cache 2>/dev/null || true; \
+	# Host integration (polkit reload, AppStream refresh) runs only
+	# on a real install — a DESTDIR staging install (deb/rpm/pacman
+	# package build) must never mutate the build host.
+	-@if [ -z "$(DESTDIR)" ]; then \
+	    if command -v systemctl >/dev/null 2>&1; then \
+	        systemctl reload polkit 2>/dev/null || true; \
+	    fi; \
+	    if command -v appstreamcli >/dev/null 2>&1; then \
+	        appstreamcli refresh-cache 2>/dev/null || true; \
+	    fi; \
 	fi
 	@echo ">>> Done. Restart cockpit.socket to pick up the new plugins:"
 	@echo "    sudo systemctl restart cockpit.socket"
-	@echo ">>> 26 sidebar entries should appear under 'SysDeck <Name>' in Cockpit."
+	@echo ">>> 27 sidebar entries should appear under 'SysDeck <Name>' in Cockpit."
 
 # ─── uninstall: remove EVERY trace of EVERY prior version ──────────
 # This target is deliberately over-aggressive. It removes:
@@ -212,17 +219,17 @@ uninstall:
 	    rm -rf "$$dir"; \
 	done
 	# Python bridge helpers (all versions)
-	rm -rf $(LIB_DIR)
+	rm -rf "$(LIB_DIR)"
 	# Diagnostic + smoke-test scripts + firewall templates (v0.0.19+)
 	# v0.0.31: firewall/templates/*.sh live under here too.
-	rm -rf $(DESTDIR)/usr/share/$(PACKAGE)
+	rm -rf "$(DESTDIR)/usr/share/$(PACKAGE)"
 	# Documentation (v0.0.20+)
-	rm -rf $(DESTDIR)/usr/share/doc/$(PACKAGE)
+	rm -rf "$(DESTDIR)/usr/share/doc/$(PACKAGE)"
 	# AppStream metainfo (v0.0.17+)
-	rm -f $(DESTDIR)/usr/share/metainfo/sysdeck.metainfo.xml
+	rm -f "$(DESTDIR)/usr/share/metainfo/sysdeck.metainfo.xml"
 	# PolKit policy (v0.0.17+)
-	rm -f $(DESTDIR)/usr/share/polkit-1/actions/org.sysdeck.policy
-	rm -f $(DESTDIR)/usr/share/polkit-1/actions/org.sysdeck.modules3p.policy
+	rm -f "$(DESTDIR)/usr/share/polkit-1/actions/org.sysdeck.policy"
+	rm -f "$(DESTDIR)/usr/share/polkit-1/actions/org.sysdeck.modules3p.policy"
 	# Python site-packages symlink (all versions)
 	@SITE_PACKAGES=$$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null); \
 	if [ -n "$$SITE_PACKAGES" ] && [ -L "$(DESTDIR)$$SITE_PACKAGES/$(PACKAGE)" ]; then \
@@ -255,7 +262,7 @@ check-metainfo-consistency:
 #   - menu keys other than `index` (the magic key)
 #   - `path` field inside menu entries
 check-manifest-consistency:
-	@echo ">>> Checking all 25 plugin manifests against cockpit-podman reference"
+	@echo ">>> Checking all 27 plugin manifests against cockpit-podman reference"
 	@python3 tests/check_manifest_consistency.py
 
 check-makefile-recipes:
@@ -323,6 +330,23 @@ check-no-broken-python-module:
 	fi
 	echo "    OK: no JS file uses the broken python3 -m sysdeck.bridge pattern"
 
+# check-release-tree: supply-chain gate from docs/SECURITY-HARDENING.md —
+# a release tarball builds from a clean tree, never from a working copy
+# with uncommitted edits (the 2019 Webmin build-host compromise class).
+# Steps down by environment: git tree → git status must be clean;
+# plain tarball tree → skip (nothing to verify against).
+check-release-tree:
+	@if [ -d .git ]; then \
+	    if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then \
+		echo "FAIL: working tree has uncommitted changes — commit or stash before building a release."; \
+		git status --porcelain | sed 's/^/    /'; \
+		exit 1; \
+	    fi; \
+	    echo "    OK: git working tree is clean"; \
+	else \
+	    echo "    OK: not a git tree (tarball build) — nothing to verify"; \
+	fi
+
 check-version-sync:
 	@echo ">>> Checking version consistency across release surfaces"
 	@v=$(VERSION); \
@@ -341,7 +365,7 @@ check-version-sync:
 	done; \
 	echo "    OK: all release surfaces report v$$v"
 
-check: check-metainfo-consistency check-manifest-consistency check-makefile-recipes check-no-broken-cockpit-import check-no-broken-python-module check-bridge-subcommands check-version-sync
+check: check-metainfo-consistency check-manifest-consistency check-makefile-recipes check-no-broken-cockpit-import check-no-broken-python-module check-bridge-subcommands check-version-sync check-release-tree
 	@echo ">>> Syntax-checking Python sources"
 	@python3 -m py_compile bridge/*.py bridge/modules/*.py
 	@echo ">>> Syntax-checking JS sources (node --check)"
@@ -367,7 +391,10 @@ clean:
 dist: check
 	@echo ">>> Building $(PACKAGE)-$(VERSION).tar.bz2"
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	tar cjf $(PACKAGE)-$(VERSION).tar.bz2 \
+	LC_ALL=C tar cjf $(PACKAGE)-$(VERSION).tar.bz2 \
+	    --sort=name \
+	    --mtime="@$(SOURCE_DATE_EPOCH)" \
+	    --owner=0 --group=0 --numeric-owner \
 	    --exclude='__pycache__' \
 	    --exclude='*.pyc' \
 	    --exclude='*.tar.bz2' \
@@ -378,21 +405,25 @@ dist: check
 	    sysdeck-diagnose.sh cockpit-smoke-test.sh sysdeck-uninstall.sh
 	@echo ">>> $(PACKAGE)-$(VERSION).tar.bz2 ready"
 
+# SOURCE_DATE_EPOCH: pin the tarball mtime for reproducible builds.
+# Release builds set it explicitly (e.g. `make dist SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)`);
+# unpacked trees without git fall back to a fixed epoch.
+SOURCE_DATE_EPOCH ?= 0
+
 # distcheck: verify the tarball extracts into <package>-<version>/ and
 # passes `make check` from inside the extracted tree.
 distcheck: dist
 	@echo ">>> Distcheck: extracting $(PACKAGE)-$(VERSION).tar.bz2"
-	rm -rf /tmp/sysdeck-distcheck-$$
-	mkdir -p /tmp/sysdeck-distcheck-$$
-	tar xjf $(PACKAGE)-$(VERSION).tar.bz2 -C /tmp/sysdeck-distcheck-$$
-	@if [ ! -d /tmp/sysdeck-distcheck-$$/$(PACKAGE)-$(VERSION) ]; then \
+	DISTCHECK_DIR=$$(mktemp -d /tmp/sysdeck-distcheck.XXXXXX)
+	tar xjf $(PACKAGE)-$(VERSION).tar.bz2 -C $$DISTCHECK_DIR
+	@if [ ! -d $$DISTCHECK_DIR/$(PACKAGE)-$(VERSION) ]; then \
 	    echo "FAIL: tarball did not extract into $(PACKAGE)-$(VERSION)/"; \
-	    rm -rf /tmp/sysdeck-distcheck-$$; \
+	    rm -rf $$DISTCHECK_DIR; \
 	    exit 1; \
 	fi
 	@echo ">>> Distcheck: running make check inside extracted tree"
-	@(cd /tmp/sysdeck-distcheck-$$/$(PACKAGE)-$(VERSION) && make check)
-	@rm -rf /tmp/sysdeck-distcheck-$$
+	@(cd $$DISTCHECK_DIR/$(PACKAGE)-$(VERSION) && make check)
+	@rm -rf $$DISTCHECK_DIR
 	@echo ">>> Distcheck passed: tarball is self-sufficient and structurally correct."
 
 # ─── v0.3.0 master edition: web + fester + klanker-gate ─────────────────────────────
@@ -413,6 +444,10 @@ web-install:
 	cd $(FESTER_DIR) && bun install
 
 web-dev: web-install
+	@echo ">>> Starting fester in the background (log: /tmp/fester.log)"
+	cd $(FESTER_DIR) && nohup bun run dev >/tmp/fester.log 2>&1 &
+	@echo ">>> Starting SysDeck Web Edition on :3000 (Ctrl+C stops next; fester keeps running)"
+	cd web && bun run dev
 
 # ─── branding: theme the Cockpit SHELL chrome to the web-edition look ────
 # /usr/share/cockpit/branding.css is Cockpit's documented override point
@@ -442,11 +477,6 @@ uninstall-branding:
 	    echo "    reinstall the cockpit-bridge package to restore defaults"; \
 	fi
 
-	@echo ">>> Starting fester in the background (log: /tmp/fester.log)"
-	cd $(FESTER_DIR) && nohup bun run dev >/tmp/fester.log 2>&1 &
-	@echo ">>> Starting SysDeck Web Edition on :3000 (Ctrl+C stops next; fester keeps running)"
-	cd web && bun run dev
-
 # master: rebuild the master tarball from this tree (cockpit + web + fester + klanker-gate)
 master:
 	@echo ">>> Building $(PACKAGE)-$(VERSION)-master.tar.bz2 (cockpit + web + fester + klanker-gate)"
@@ -454,6 +484,7 @@ master:
 	    --exclude='__pycache__' --exclude='*.pyc' --exclude='*.tar.bz2' \
 	    --exclude='*node_modules*' --exclude='*.next' --exclude='*.tsbuildinfo' \
 	    --exclude='*public/download*' --exclude='*.db' --exclude='*.db-*' \
+	    --exclude='dev.log' --exclude='server.log' --exclude='*.log' --exclude='.env' \
 	    --transform 's,^,$(PACKAGE)-$(VERSION)-master/,' \
 	    bridge plugins shared tests packaging compat standalone-plugins \
 	    prometheus scripts firewall docs web klanker-gate \

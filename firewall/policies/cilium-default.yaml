@@ -1,4 +1,4 @@
-# Cilium default network policy — shipped with sysdeck-0.0.36.
+# Cilium default network policy — shipped with the SysDeck firewall module.
 # Author: Jeremy Anderson <info@dcos.net>
 #
 # This policy is applied by firewall/templates/cilium.sh `start` action
@@ -6,9 +6,11 @@
 # panel. It implements a sensible default:
 #
 #   - default-deny ingress + egress at the cluster level
-#   - allow DNS (UDP/TCP 53) to kube-dns / systemd-resolved
-#   - allow SSH (TCP 22) from anywhere
-#   - allow HTTP/HTTPS (TCP 80/443) from anywhere
+#   - allow DNS (UDP/TCP 53) to kube-dns (K8s) or any local resolver
+#     (standalone installs run systemd-resolved without kube labels)
+#   - allow SSH (TCP 22) from anywhere — no L7 parser on port 22
+#   - allow HTTP/HTTPS (TCP 80/443) from anywhere, with the HTTP
+#     method allow-list scoped to 80/443 only
 #
 # Operators can drop a custom policy at
 # /etc/sysdeck/firewall/cilium-policy.yaml to override.
@@ -22,27 +24,37 @@ metadata:
   namespace: default
   annotations:
     sysdeck.io/managed-by: "sysdeck-firewall-cilium"
-    sysdeck.io/version: "0.0.36"
+    sysdeck.io/version: "0.4.5"
 spec:
   description: "SysDeck default policy — deny all ingress + egress, then re-allow DNS/SSH/HTTP/HTTPS"
   endpointSelector: {}
   ingress:
-    # Allow all endpoints to receive traffic from anywhere on SSH/HTTP/HTTPS.
+    # SSH passes at L3/L4 only: an HTTP L7 filter on port 22 would deny
+    # every non-HTTP byte of an SSH session.
     - toPorts:
         - ports:
             - port: "22"
               protocol: TCP
+    # HTTP/HTTPS carry the method allow-list — scoped to these ports
+    # alone, never to the whole toPorts block.
+    - toPorts:
+        - ports:
             - port: "80"
               protocol: TCP
+              rules:
+                http:
+                  - method: "GET"
+                  - method: "POST"
+                  - method: "HEAD"
             - port: "443"
               protocol: TCP
-          rules:
-            http:
-              - method: "GET"
-              - method: "POST"
-              - method: "HEAD"
+              rules:
+                http:
+                  - method: "GET"
+                  - method: "POST"
+                  - method: "HEAD"
   egress:
-    # Allow DNS to kube-dns (K8s) or systemd-resolved (standalone).
+    # DNS to kube-dns on Kubernetes deployments.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -56,7 +68,18 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Allow egress to anywhere on SSH/HTTP/HTTPS.
+    # DNS to any local resolver on the host network — standalone Cilium
+    # (the documented sysdeck mode) has no kube-dns labels to match.
+    - toEndpoints:
+        - matchLabels:
+            reserved:world
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Egress to anywhere on SSH/HTTP/HTTPS.
     - toPorts:
         - ports:
             - port: "22"
@@ -65,7 +88,8 @@ spec:
               protocol: TCP
             - port: "443"
               protocol: TCP
-    # Allow egress to anywhere on HTTPS (for system updates).
+    # Egress to public HTTPS (for system updates) — private ranges stay
+    # blocked so endpoints cannot reach internal services uninvited.
     - toCIDRSet:
         - cidr: 0.0.0.0/0
           except:

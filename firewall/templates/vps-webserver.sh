@@ -605,7 +605,10 @@ generate_rules() {
 # SSH: ${SSH_DETECTED:+:${SSH_PORT}} ${FORGEJO_DETECTED:+Forgejo SSH: :${FORGEJO_SSH_PORT}}
 # Web: ${VARNISH_DETECTED:+Varnish:${VARNISH_PORT} -> }Caddy:${CADDY_HTTP_PORT}/${CADDY_HTTPS_PORT}
 
-flush ruleset
+# Table-scoped reset: foreign tables (docker, libvirt, systemd-networkd)
+# are not ours to destroy.
+add table inet ${TABLE_NAME}
+flush table inet ${TABLE_NAME}
 
 table inet ${TABLE_NAME} {
 
@@ -699,16 +702,17 @@ table inet ${TABLE_NAME} {
         ip6 nexthdr icmpv6 drop comment "ICMPv6 rejected"
 
         # ---- Connection rate limiting ----
-        ct state new limit rate 50/second burst 100 accept
-        ct state new add @connlimit_abuse ip saddr drop comment "Connlimit exceeded"
+        ct state new limit rate over 50/second burst 100 add @connlimit_abuse { ip saddr } counter drop comment "Connlimit exceeded"
 
         # ---- SSH with brute-force protection ----
         $(if [[ "$SSH_DETECTED" == "yes" ]]; then echo "
         # SSH - aggressive protection (pubkey-only assumed)
         tcp dport $SSH_PORT ip saddr @ssh_abuse drop comment \"SSH banned\"
-        tcp dport $SSH_PORT ct state new limit rate ${ssh_rate_limit} burst 5 \
-            $(if [[ "$SYNPROXY_ENABLED" == "yes" ]]; then echo "synproxy mss 1460 wscale 7 timestamp sack-perm"; else echo "accept"; fi)
-        tcp dport $SSH_PORT ct state new add @ssh_abuse ip saddr drop comment \"SSH brute force\"
+        # A verdict-less synproxy statement here let every in-rate SSH
+        # login fall through to the ban rule below; the rate limit +
+        # ban set is the protection this chain ships.
+        tcp dport $SSH_PORT ct state new limit rate ${ssh_rate_limit} burst 5 accept
+        tcp dport $SSH_PORT ct state new add @ssh_abuse { ip saddr } drop comment \"SSH brute force\"
         "; fi)
 
         # ---- Forgejo SSH (separate from system SSH) ----
@@ -716,7 +720,7 @@ table inet ${TABLE_NAME} {
         # Forgejo SSH
         tcp dport $FORGEJO_SSH_PORT ip saddr @ssh_abuse drop comment \"Forgejo SSH banned\"
         tcp dport $FORGEJO_SSH_PORT ct state new limit rate ${ssh_rate_limit} burst 5 accept
-        tcp dport $FORGEJO_SSH_PORT ct state new add @ssh_abuse ip saddr drop comment \"Forgejo SSH brute force\"
+        tcp dport $FORGEJO_SSH_PORT ct state new add @ssh_abuse { ip saddr } drop comment \"Forgejo SSH brute force\"
         "; fi)
 
         # ---- Public TCP services ----

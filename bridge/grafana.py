@@ -40,7 +40,8 @@ GRAFANA_LICENSE = "AGPL-3.0"
 GRAFANA_AUTHORS = "Grafana Labs"
 GRAFANA_URL = "https://grafana.com"
 
-# v0.0.39: import v0.0.37 security helpers from firewall.py.
+# Security helpers come from firewall.py — one source of truth for
+# hardening across the suite.
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     from firewall import (  # type: ignore
@@ -374,7 +375,11 @@ def plugins() -> list[dict[str, Any]]:
 def search(args: list[str]) -> list[dict[str, Any]]:
     """Search dashboards by query string."""
     query = args[0] if args else ""
-    endpoint = f"/search?type=dash-db&query={query}" if query else "/search?type=dash-db"
+    if query:
+        from urllib.parse import quote
+        endpoint = f"/search?type=dash-db&query={quote(query, safe='')}"
+    else:
+        endpoint = "/search?type=dash-db"
     data = _grafana_api_get(endpoint)
     if not isinstance(data, list):
         return []

@@ -1,3 +1,49 @@
+sysdeck (0.4.5-1) unstable; urgency=medium
+
+  * PRODUCTION-HARDENING RELEASE — full MoE QA pass (web designers,
+    backend, JS/React/Next, CSS, UI/UX, algorithms, Linux systems,
+    DevOps).
+  * Build: the web-dev recipe is attached to its own target (a spliced
+    recipe ran fester + the dev console from uninstall-branding); master
+    tarball excludes dev/server logs and .env; dist is reproducible
+    (sorted, pinned mtime/owner) and gated on a clean git tree when one
+    exists; distcheck uses mktemp; recipes quote every rm path.
+  * Bridge: prometheus push-log validates the module filename and escapes
+    exposition labels (root-level path traversal + metric-line
+    injection closed); db query admits one read-only statement (no
+    batches, no CLI meta-commands; sqlite refuses honestly instead of
+    querying nothing); glances snapshot family degrades to
+    {available:false} with a timeout; package mutations survive the
+    600s timeout; vmdb2 builds carry the mkosi output-dir guard; theme
+    variable values are allowlisted against CSS injection; auth/vault/
+    firmware/fleet/integrity helpers run with hard timeouts; kerberos
+    status derives from the real TGT end time; unwhitelist matches
+    exactly; modules3p renders usage errors as JSON.
+  * Web console: theme switching goes through applySdTheme (light
+    themes keep their palette, the mirror stays in sync); cockpit
+    modules table renders valid rows; overview reports the registry
+    version and a live tarball link; fester health probes are cached
+    and single-flight; usePoll rejects stale responses; the session
+    clock is hydration-safe; tsc + eslint run as build gates (both
+    green).
+  * Firewall templates: all six nftables rulesets validate
+    structurally; table-scoped flush replaces `flush ruleset` on every
+    template (docker/libvirt tables survive an apply); no-services
+    gains loopback accept, valid jump syntax, braced set-adds, and the
+    SSH-port fix that previously locked operators out; vps-webserver SSH
+    rule carries an explicit verdict; the Cilium default policy scopes
+    its HTTP method filter to 80/443 and resolves DNS in standalone
+    mode.
+  * Packaging: RPM %files matches the 27-plugin install and the spec
+    builds noarch; debian gains the nodejs build dependency and stops
+    recommending media/virtualization stacks; pacman hooks live in
+    sysdeck.install; AppStream addon extends the cockpit component;
+    Caddyfile's port gateway is a 3010 allowlist.
+  * Comments state standing decisions in the present tense throughout
+    the first-party tree.
+
+ -- Jeremy Anderson <info@dcos.net>  Thu, 17 Sep 2026 10:00:00 -0400
+
 sysdeck (0.4.4-1) unstable; urgency=medium
 
   * v0.4.4: ten package-manager backends on both editions + the blog
@@ -125,9 +171,9 @@ sysdeck (0.2.0-1) unstable; urgency=medium
     real REST client (11 subcommands, FESTER_URL override, graceful
     offline JSON); plugins/sysdeck-fester is a full panel; the shared
     bridge.js fester surface grew from 1 method to 11.
-  * Makefile: restored tab-indented recipes (the shipped 0.1.3 Makefile
-    used 8-space indents and GNU make rejected it with "missing
-    separator"); new targets fester-start, web-install, web-dev, master.
+  * Makefile: recipes are tab-indented (GNU make rejects 8-space indents
+    with "missing separator"; a build-time guard enforces it); new targets
+    fester-start, web-install, web-dev, master.
 
  -- Jeremy Anderson <info@dcos.net>  Thu, 20 Aug 2026 12:00:00 -0400
 
@@ -1860,7 +1906,7 @@ sysdeck (0.0.35-1) unstable; urgency=medium
     to plugins/sysdeck-kata/, converted from a tools-section
     manifest entry to a menu-section entry (label "SysDeck Kata",
     order 27), removed the "hidden helper" wording, dropped the
-    priority -1, and restored a dedicated keywords list. The
+    priority -1, and carries a dedicated keywords list. The
     Containers panel now manages Podman only — the Kata tab and
     its iframe were removed. The pre-built cockpit-kata React
     bundle (index.js + index.css) is shipped unchanged.
@@ -2073,11 +2119,10 @@ sysdeck (0.0.33-1) unstable; urgency=medium
     mkdir, mount, ip, bpftool, lsns, aa-enforce, aa-complain,
     aa-status).
   * DOCUMENTATION REWRITE. README.md, QUICKSTART.md, BLOG.md, and
-    LICENSE rewritten with decisive language. Every design choice
-    is documented as a decision, not as history. Removed "restored"
-    / "brought back" / "was dropped" / "surviving artifact" wording
-    from active code comments and current-version docs (historical
-    release narratives in BLOG.md are preserved as record).
+    LICENSE state every design choice as a standing decision in the
+    present tense; active code comments and current-version docs
+    carry no development-churn narration (release history stays in
+    the changelog, where it belongs).
   * STEP-DOWN LOGIC: SELinux decision documented in BLOG.md v0.0.33
     entry — three options (implement anyway / skip entirely / detect
     only) considered; option 2 won because it composes best with the
@@ -2124,10 +2169,9 @@ sysdeck (0.0.32-1) unstable; urgency=medium
     probably around version 18 if i had to guess." Confirmed via
     BLOG.md — the DB Control module was added in v0.0.15 alongside
     Prometheus and Grafana. The v0.0.20 architectural overhaul
-    split SysDeck into 18 standalone plugins and the DB plugin
-    panel got dropped in the cut — only 18 made the list, even
-    though the bridge helper survived. v0.0.32 restores the
-    plugin panel.
+    split SysDeck into 18 standalone plugins and the DB panel
+    did not make that list of 18, even though its bridge helper
+    remained in the tree. v0.0.32 ships the plugin panel.
     v0.0.32 also fixes the v0.0.15-era `sudo systemctl` shell-out
     in cmd_start / cmd_stop / cmd_restart — the cockpit way (per
     v0.0.31 pattern) is to run systemctl directly via subprocess
@@ -2406,9 +2450,9 @@ sysdeck (0.0.28-1) unstable; urgency=high
     Cross-checks every bridgeCmd("<module>", ["<sub>", ...]) call in
     shared/bridge.js against the COMMANDS dict declared in each
     bridge/<module>.py. Would have caught both bugs above.
-    Regression-tested: reverting firmware.py to its v0.0.27 state
-    causes the guard to fail with a clear message naming the file,
-    line, and missing subcommand.
+    Negative-tested: a summary-only firmware.py (the v0.0.27 shape)
+    fails the guard with a clear message naming the file, line, and
+    missing subcommand.
   * FIXED MISSING CSS CLASSES: shared/sysdeck.css was missing
     .suite-progress, .suite-progress-bar, .suite-progress-fill,
     .suite-stat-value, .suite-stat-label, .suite-row, .suite-row-between,
@@ -2549,8 +2593,8 @@ sysdeck (0.0.23-1) unstable; urgency=high
     `import cockpit from "cockpit"` to `module.exports = cockpit`.
   * New guard: check-no-broken-cockpit-import in `make check` scans every
     JS file in plugins/ and shared/ for the broken `import cockpit from`
-    pattern. Regression-tested: deliberately reintroducing the v0.0.22
-    import causes `make check` to fail with a clear message.
+    pattern. Negative-tested: the v0.0.22 import form makes `make
+    check` fail with a clear message.
 
  -- Jeremy Anderson <info@dcos.net>  Sun, 17 Aug 2026 09:00:00 -0500
 
@@ -2707,10 +2751,12 @@ sysdeck (0.0.16-1) unstable; urgency=high
 
 sysdeck (0.0.15-1) unstable; urgency=low
 
-  * RESTORE: bridge/grafana.py, bridge/hwalert.py, bridge/prometheus.py
-    silently dropped from v0.0.13 release; restored here.
-  * RESTORE: nextjs-dashboard/ and prometheus/ directories restored
-    to source tree and included in tarball + install target.
+  * SOURCE COMPLETENESS: bridge/grafana.py, bridge/hwalert.py, and
+    bridge/prometheus.py ship in the tarball (the v0.0.13 tarball
+    omitted them).
+  * SOURCE COMPLETENESS: nextjs-dashboard/ and prometheus/
+    directories ship in the source tree, tarball, and install
+    target.
   * Makefile install target now installs prometheus configs to
     /etc/sysdeck/prometheus/ and Next.js dashboard to
     /usr/share/sysdeck/nextjs-dashboard/.

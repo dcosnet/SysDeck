@@ -8,20 +8,17 @@ host and returns a unified JSON interface so the Builder panel can list
 available build profiles / image specs without knowing which tool the
 operator picked.
 
-v0.0.30 REWRITE: the previous version was a thin `systemctl is-active
-osbuild-composer.service` shim — which is Fedora/RHEL-only and silently
-returns 'inactive' on Arch and Debian. Per the user's directive, the
-target distros are now Arch Linux and Debian:
+Target distros: Arch Linux and Debian (the decision that shapes
+every backend choice below):
 
   - Arch Linux  → mkosi     (systemd's own image builder; pacman -S mkosi)
                  ↘ archiso  (Arch Live ISO builder; pacman -S archiso)
   - Debian      → vmdb2     (Debian project's image builder; apt install vmdb2)
                  ↘ live-build (Debian Live ISO builder; apt install live-build)
 
-Fedora/RHEL (osbuild-composer / composer-cli) is no longer targeted.
-osbuild-composer is not packaged for Arch or Debian, so the v0.0.29
-panel was permanently 'inactive' on every distro this suite ships to.
-mkosi and vmdb2 are the canonical equivalents and are invoked as
+Fedora/RHEL (osbuild-composer / composer-cli) is out of scope:
+osbuild-composer is not packaged for Arch or Debian. mkosi and vmdb2
+are the canonical equivalents and are invoked as
 separate processes via subprocess — the suite (MIT) and the image
 builders remain independent programs. No builder code is bundled.
 
@@ -183,13 +180,12 @@ def _primary_backend() -> dict[str, Any] | None:
 #                    /etc/live-build/, ~/.config/live-build/
 
 MKOSI_DIRS = [
-    # v0.1.0: per-profile directories under /etc/mkosi/profiles/<name>/
-    # are the primary location. Each profile gets its own directory
-    # containing a real `mkosi.conf` (the only filename mkosi reads
-    # automatically from the cwd). v0.0.50 wrote drop-in fragments
-    # to /etc/mkosi/mkosi.conf.d/<name>.conf, which mkosi silently
-    # ignores unless a parent /etc/mkosi/mkosi.conf exists to layer
-    # them onto — so every v0.0.x build ran with empty defaults.
+    # Per-profile directories under /etc/mkosi/profiles/<name>/ are the
+    # primary location. Each profile carries a real `mkosi.conf` — the
+    # only filename mkosi reads automatically from the cwd. Drop-in
+    # fragments under /etc/mkosi/mkosi.conf.d/ are ignored unless a
+    # parent /etc/mkosi/mkosi.conf exists to layer them onto, so
+    # profiles never rely on fragments.
     Path("/etc/mkosi/profiles"),
     Path("/etc/mkosi"),
     Path("/usr/share/mkosi"),
@@ -466,11 +462,10 @@ def install_hint() -> dict[str, str]:
     })
 
 
-# ── v0.0.31: Full-featured build operations ────────────────────────
+# ── Build operations ──────────────────────────────────────────────
 #
-# The v0.0.30 builder was a status+profile viewer. v0.0.31 adds the
-# ability to actually build images, create and delete profiles, list
-# build artifacts, and tail build logs.
+# Build images, create and delete profiles, list build artifacts,
+# and tail build logs.
 #
 # Build state lives under /var/lib/sysdeck/builder/:
 #   state/<build-id>.json   per-build state record
@@ -641,15 +636,13 @@ def _backend_build_command(backend_id: str, profile: dict[str, Any], options: di
     `options` may carry: output_dir, image_format, extra_args, force.
     Returns the argv list to subprocess.run.
 
-    v0.1.3 CRITICAL FIX: --include does NOT work as a config loader.
     mkosi's --include flag includes a drop-in fragment ON TOP OF the
-    base mkosi.conf — it does NOT replace the base config. If there's
-    no mkosi.conf in the cwd, mkosi uses defaults and ignores the
-    --include file entirely. This is why v0.1.2 still produced builds
-    with only 2 packages (mkosi's hardcoded base).
+    base mkosi.conf — it does NOT replace the base config. With no
+    mkosi.conf in the cwd, mkosi uses defaults and ignores the
+    --include file entirely.
 
-    The fix: build() now creates a temp directory, symlinks the
-    profile file into it as `mkosi.conf`, and sets work_dir to that
+    Therefore build() creates a temp directory, symlinks the profile
+    file into it as `mkosi.conf`, and sets work_dir to that
     temp dir. mkosi finds `mkosi.conf` (the symlink), follows it,
     reads the actual profile. This works for ANY profile path
     regardless of its filename or location.
@@ -682,6 +675,34 @@ def _backend_build_command(backend_id: str, profile: dict[str, Any], options: di
     if backend_id == "live-build":
         return ["lb", "build"]
     return []
+
+
+# Build environment: PATH/locale pinned like every privileged helper in
+# this suite, plus the proxy vars mkosi/vmdb2 legitimately need for
+# image fetches. Everything else from the invoking session is dropped.
+BUILD_ENV = {
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C", "LC_ALL": "C",
+    "HOME": "/root",
+    **{k: os.environ[k] for k in (
+        "http_proxy", "https_proxy", "no_proxy",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+    ) if k in os.environ},
+}
+
+
+# Build environment: PATH/locale pinned like every privileged helper in
+# this suite, plus the proxy vars mkosi/vmdb2 legitimately need for
+# image fetches. Everything else from the invoking session is dropped.
+BUILD_ENV = {
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C", "LC_ALL": "C",
+    "HOME": "/root",
+    **{k: os.environ[k] for k in (
+        "http_proxy", "https_proxy", "no_proxy",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+    ) if k in os.environ},
+}
 
 
 def _prepare_mkosi_work_dir(profile: dict[str, Any]) -> Path | None:
@@ -831,7 +852,7 @@ def build(args: list[str]) -> dict[str, Any]:
     # or /var/tmp/. This blocks /etc/, /usr/, /boot/, /bin/, /sbin/,
     # /lib/, /root/, /home/, etc. — anywhere a stray image.raw would
     # corrupt the system or pollute a user's home.
-    if backend_id == "mkosi":
+    if backend_id in ("mkosi", "vmdb2"):
         resolved_output_dir = Path(options.get("output_dir") or str(BUILDER_ARTIFACTS_DIR / pname))
         try:
             resolved = resolved_output_dir.resolve()
@@ -939,6 +960,7 @@ def build(args: list[str]) -> dict[str, Any]:
                 cwd=work_dir if work_dir else None,
                 stdout=logf, stderr=subprocess.STDOUT,
                 check=False, timeout=3600,
+                env=BUILD_ENV,
             )
         rc = r.returncode
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:

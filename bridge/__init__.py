@@ -7,11 +7,9 @@ via cockpit.spawn. Each module is standalone and runnable as a CLI:
 
     python3 /usr/lib/sysdeck/bridge/containers.py list
 
-(v0.0.26+ invocation: absolute path, no PYTHONPATH, no -m flag.
- The earlier `python3 -m sysdeck.bridge.containers` pattern was broken —
- it required a nested Python package layout (sysdeck/bridge/containers.py)
- that the Makefile install target never produced. bridge.js calls each
- helper by absolute path.)
+Invocation contract: absolute path, no PYTHONPATH, no -m flag.
+The installed layout is flat files at /usr/lib/sysdeck/bridge/<mod>.py,
+and bridge.js calls each helper by absolute path.
 
 The helpers exist for operations that are too complex for a single CLI
 call — e.g. cross-referencing podman and systemd, or aggregating TPM
@@ -22,7 +20,7 @@ import os
 import subprocess
 from typing import Literal
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 __author__ = "Jeremy Anderson"
 __url__ = "https://dcos.net"
 

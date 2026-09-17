@@ -23,14 +23,13 @@ Subcommands:
   backup <id>   - trigger a backup
   connections <id> - list active connections
 
-Cockpit way (v0.0.31+ pattern, applied here in v0.0.32): mutating
-ops (start / stop / restart / query) run via subprocess directly —
-no `sudo` shell-out. The JS panel passes { superuser: 'try' } to
-cockpit.spawn so the cockpit bridge prompts the operator via polkit
-for the org.sysdeck.db.modify action (added in v0.0.32 — authorizes
-/usr/bin/systemctl for engine service control). The bridge runs as
-the cockpit user and gets root privileges via polkit when the
-operator authenticates.
+Privilege model: mutating ops (start / stop / restart / query) run
+via subprocess directly — no `sudo` shell-out. The JS panel passes
+{ superuser: 'try' } to cockpit.spawn so the cockpit bridge prompts
+the operator via polkit for the org.sysdeck.db.modify action
+(authorizes /usr/bin/systemctl for engine service control). The
+bridge runs as the cockpit user and gets root privileges via polkit
+when the operator authenticates.
 
 Author: Jeremy Anderson (https://dcos.net)
 """
@@ -98,11 +97,16 @@ ENGINE_REGISTRY = [
 
 
 def run(cmd, timeout=10):
-    """Run a command, return stdout or empty string."""
+    """Run a command, return stdout or empty string.
+
+    Failures (missing binary, timeout, non-zero exit) log to stderr so
+    the distinction stays visible in the channel log; callers get "".
+    """
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return r.stdout.strip()
-    except Exception:
+    except Exception as exc:
+        print(f"[db.run] {cmd[0] if cmd else '?'}: {exc}", file=sys.stderr)
         return ""
 
 
@@ -294,17 +298,15 @@ def _engine_registered(engine_id):
     through the registry, but start/stop/restart passed the raw id into
     `systemctl <verb> {engine_id}.service` — letting any cockpit
     session stop/start ARBITRARY system units as root (db stop sshd).
-    All unit-control subcommands now require a registered engine."""
+    All unit-control subcommands require a registered engine."""
     return any(e[0] == engine_id for e in ENGINE_REGISTRY)
 
 
 def cmd_start(engine_id):
-    # v0.0.32: was `sudo systemctl start` — but sudo shell-out from
-    # the bridge fails when the cockpit user has no passwordless sudo
-    # (the typical case). The cockpit way: the JS panel passes
-    # { superuser: 'try' } to cockpit.spawn so the cockpit bridge
-    # prompts the operator via polkit for the org.sysdeck.db.modify
-    # action. The bridge runs systemctl directly as root (the cockpit
+    # The cockpit way: the JS panel passes { superuser: 'try' } to
+    # cockpit.spawn so the cockpit bridge prompts the operator via
+    # polkit for the org.sysdeck.db.modify action. The bridge runs
+    # systemctl directly as root (the cockpit
     # superuser channel escalates privileges via polkit when the
     # operator authenticates).
     # v0.1.4 SECURITY: registry check added (see _engine_registered).
@@ -351,42 +353,52 @@ def cmd_connections(engine_id):
 
 
 def cmd_query(engine_id, sql):
-    """Execute a read-only SQL query against an engine (SQL family only).
+    """Execute a single read-only SQL statement against an engine (SQL family only).
 
-    v0.1.4 SECURITY: the old comment said "refuse DDL/DML" but no check
-    existed — any statement (DROP DATABASE, COPY ... TO PROGRAM) ran as
-    root through psql/mysql/sqlite. The guard is now real: only
-    SELECT/WITH/SHOW/EXPLAIN/DESCRIBE/PRAGMA-first-token statements
-    pass. Mutations belong in the engine's own tooling, not in a
-    dashboard query box.
+    Security contract (enforced in code, not in comments):
+      * first token must be a read verb — SELECT/WITH/SHOW/EXPLAIN/
+        DESCRIBE/PRAGMA/TABLE/ANALYZE
+      * exactly one statement — any semicolon, psql meta-command, or
+        null byte rejects the request, so stacked statements cannot
+        ride in behind a read verb
+      * 4 KB cap — a query box entry is never megabytes
+    Mutations belong in the engine's own tooling, not in a dashboard
+    query box.
     """
     for e in ENGINE_REGISTRY:
         if e[0] == engine_id:
             family, cli = e[2], e[5]
             if family != "sql" and engine_id not in ("clickhouse", "timescaledb", "duckdb"):
                 return {"error": "Query only supported for SQL-family engines"}
-            # v0.1.4 SECURITY: read-only statement guard.
-            tokens = (sql or "").lstrip("(\t\r\n ").split(None, 1)
+            sql = (sql or "").strip().rstrip(";").strip()
+            if not sql or len(sql) > 4096 or "\x00" in sql:
+                return {"error": "query must be 1-4096 bytes of plain SQL"}
+            if ";" in sql or sql.startswith("\\"):
+                return {"error": "single read-only statement only — "
+                                "batched statements and CLI meta-commands are rejected"}
+            tokens = sql.lstrip("(\t\r\n ").split(None, 1)
             first_token = tokens[0].upper() if tokens else ""
-            read_only = first_token in (
-                "SELECT", "WITH", "SHOW", "EXPLAIN", "DESCRIBE", "DESC",
-                "PRAGMA", "TABLE", "ANALYZE",
-            )
-            if not read_only:
+            if first_token not in ("SELECT", "WITH", "SHOW", "EXPLAIN", "DESCRIBE",
+                                   "DESC", "PRAGMA", "TABLE", "ANALYZE"):
                 return {"error": "read-only queries only — DDL/DML is rejected "
                                 "(first token was not a read statement)"}
-            if cli == "psql":
-                out = run(["psql", "-tAc", sql], timeout=30)
-            elif cli in ("mysql", "mariadb"):
-                out = run(["mysql", "-e", sql], timeout=30)
-            elif cli == "cockroach":
-                out = run(["cockroach", "sql", "-e", sql], timeout=30)
-            elif cli == "clickhouse-client":
-                out = run(["clickhouse-client", "-q", sql], timeout=30)
-            elif cli == "sqlite3":
-                out = run(["sqlite3", sql], timeout=30)
-            else:
+            query_cmds = {
+                "psql": ["psql", "-tAc", sql],
+                "mysql": ["mysql", "-e", sql],
+                "mariadb": ["mysql", "-e", sql],
+                "cockroach": ["cockroach", "sql", "-e", sql],
+                "clickhouse-client": ["clickhouse-client", "-q", sql],
+            }
+            if cli == "sqlite3":
+                # sqlite3 treats a lone argument as a database filename,
+                # so running SQL through it queries nothing. The registry
+                # tracks no database path for sqlite — refuse honestly
+                # instead of pretending an empty :memory: is the engine.
+                return {"error": "sqlite3 queries need a database file — "
+                                "run 'sqlite3 <db> \".read\" style exports from a shell'"}
+            if cli not in query_cmds:
                 return {"error": f"No query handler for {cli}"}
+            out = run(query_cmds[cli], timeout=30)
             return {"output": out, "engine": engine_id, "query": sql}
     return {"error": f"Unknown engine: {engine_id}"}
 

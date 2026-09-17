@@ -55,13 +55,14 @@ KLIST_PRINCIPAL_RE = re.compile(r"^\s*Default principal:\s+(?P<principal>\S+)")
 KLIST_TICKET_RE = re.compile(r"^\s*(?P<start>\S+)\s+(?P<end>\S+)\s+(?P<renew>\S+)\s+(?P<kvno>\S+)\s+(?P<principal>\S+)")
 
 
-def run(argv: list[str]) -> str:
+def run(argv: list[str], timeout: int = 20) -> str:
     """Run a command, returning stdout. Returns '' on failure."""
     try:
         return subprocess.run(
-            argv, capture_output=True, text=True, check=True,
+            argv, capture_output=True, text=True, check=True, timeout=timeout,
         ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError):
         return ""
 
 
@@ -92,10 +93,8 @@ def readers() -> list[dict[str, str]]:
 def certs() -> dict[str, Any]:
     """PKCS#11 objects of type cert via pkcs11-tool.
 
-    v0.1.4: the auth panel's "List Certificates" button used to call a
-    bridge.spawn() that bridge.js never exported — the button has
-    always thrown. The listing now lives here (fixed argv list, no
-    shell), matching every other spawn in this suite.
+    Fixed argv list, no shell — the same spawn discipline every
+    helper in this suite follows.
     """
     if not shutil.which("pkcs11-tool"):
         return {"available": False,
@@ -184,12 +183,26 @@ def kerberos() -> list[dict[str, Any]]:
         if m:
             default_principal = m.group("principal")
 
+    # Ticket expiry from the TGT line (krtgt/...): the credential cache
+    # owns the truth. klist prints "MM/DD/YYYY hh:mm:ss" under C locale;
+    # anything unparsable reports active with an empty expiry rather
+    # than a guessed date.
+    tgt_end, tgt_start = "", ""
+    for line in raw.splitlines():
+        m = KLIST_TICKET_RE.match(line)
+        if m and "krbtgt" in m.group("principal"):
+            tgt_end = m.group("end")
+            tgt_start = m.group("start")
+            break
+
     if default_principal:
         user, realm = default_principal.split("@") if "@" in default_principal else (default_principal, "")
         principals.append({
             "principal": default_principal,
             "realm": realm,
             "kdc": "",
+            "startTime": tgt_start,
+            "endTime": tgt_end,
         })
 
     return principals
@@ -236,13 +249,21 @@ def identities() -> dict[str, Any]:
 
     # Kerberos principals as identity objects
     for i, p in enumerate(krb):
+        end = p.get("endTime", "")
+        status = "expired"
+        if end:
+            try:
+                status = "active" if datetime.strptime(
+                    end, "%m/%d/%Y %H:%M:%S") > datetime.now() else "expired"
+            except ValueError:
+                status = "active"  # klist spoke an unknown locale — report presence
         all_identities.append({
             "id": f"krb-{i}",
             "type": "kerberos-principal",
             "name": p.get("principal", f"principal-{i}"),
-            "status": "active" if p.get("endTime") else "expired",
+            "status": status,
             "createdAt": p.get("startTime", ""),
-            "expiresAt": p.get("endTime", ""),
+            "expiresAt": end,
             "details": p,
         })
 

@@ -1,0 +1,17 @@
+# SysDeck pacman hooks
+# Restart cockpit.socket so plugin changes appear in the menu.
+
+post_install() {
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+    echo ">>> SysDeck installed. Restart cockpit.socket if not done automatically:"
+    echo ">>>   sudo systemctl restart cockpit.socket"
+}
+
+post_upgrade() {
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+}
+
+post_remove() {
+    systemctl try-restart cockpit.socket 2>/dev/null || true
+    echo ">>> SysDeck removed. Restart cockpit.socket to flush the menu."
+}

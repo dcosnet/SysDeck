@@ -33,11 +33,10 @@ Also adds the service/port editor (4 new bridge subcommands):
   restart-service <id>  just restart the service (no port change).
                         Useful for "I edited the config by hand" flows.
 
-v0.0.31 REWRITE — PREVIOUS VERSION WAS READ-ONLY.
-The v0.0.30 bridge exposed only `ruleset` and `chains` subcommands: the
-panel could list active nftables rules but could not start, stop,
-restart, apply a template, ban an IP, unban an IP, show the ban list,
-or show service detection. The panel was a monitor, not a manager.
+FULL MANAGER, NOT A MONITOR: the bridge can start, stop, restart,
+apply a template, ban an IP, unban an IP, show the ban list, and show
+service detection — every operation the panel offers is wired to a
+subcommand below.
 
 v0.0.31 turned the firewall panel into a full manager (apply / stop /
 restart / ban / unban / clear-bans / detect / check).
@@ -112,7 +111,7 @@ Subcommands added in v0.0.36:
                               applied to this bridge (for display in
                               the panel's Security Card)
 
-Subcommands kept from v0.0.31:
+Subcommands:
   ruleset / chains / templates / template-info / detect / apply /
   stop / restart / status / ban / unban / banned / clear-bans / check
 
@@ -154,10 +153,10 @@ following subcommands (the bridge invokes them as
 
 Templates must be POSIX-compliant bash and work on both Arch and
 Debian. The templates shipped in this release are:
-  vps-webserver.sh   (v0.0.31, kept)
-  no-services.sh     (v0.0.31, kept)
-  cilium.sh          (v0.0.36, Cilium eBPF backend)
-  sysdeck-fw.sh      (v0.0.37, unified nftables zone firewall)
+  vps-webserver.sh   (public VPS web tier)
+  no-services.sh     (SSH-only hardened host)
+  cilium.sh          (Cilium eBPF backend)
+  sysdeck-fw.sh      (unified nftables zone firewall)
   remote-admin.sh    (v0.0.44, SSH + Cockpit public-server variant)
   public-webserver.sh (v0.0.44, Caddy + Varnish + MariaDB variant)
   ai-llm.sh          (v0.0.44, Ollama + OpenWebUI + Hermes + Odysseus variant)
@@ -723,7 +722,7 @@ def safe_tar_create(archive_path: Path, files: list[Path], cwd: Path) -> tuple[i
         return 127, "", str(exc)
 
 
-# ── Ruleset parser (v0.0.30 logic, kept) ───────────────────────────
+# ── Ruleset parser ────────────────────────────────────────────────
 
 
 def parse_ruleset(output: str) -> list[dict[str, Any]]:
@@ -1201,12 +1200,10 @@ def cmd_status(_args: list[str]) -> dict[str, Any]:
 
 # ── Subcommand: ban ─────────────────────────────────────────────────
 #
-# v0.0.36: _validate_ip is defined in the validation helpers section
-# above (line ~373). It uses ipaddress.ip_address for strict IPv4 + IPv6
-# validation — replacing the v0.0.31 hand-rolled IPv4-only validator.
-# The old validator accepted leading zeros (e.g. "010.010.010.010") which
-# some systems interpret as octal — a subtle attack vector. The new
-# validator rejects them. CVE-2024-2947 lesson.
+# _validate_ip (validation helpers above) uses ipaddress.ip_address
+# for strict IPv4 + IPv6 validation. Leading zeros (e.g.
+# "010.010.010.010") are rejected — some systems interpret them as
+# octal, a subtle attack vector. CVE-2024-2947 lesson.
 
 
 def cmd_ban(args: list[str]) -> dict[str, Any]:
@@ -1287,7 +1284,7 @@ def cmd_check(_args: list[str]) -> dict[str, Any]:
     }
 
 
-# ── Subcommand: ruleset (v0.0.30, kept) ─────────────────────────────
+# ── Subcommand: ruleset ────────────────────────────────────────────
 
 
 def cmd_ruleset(_args: list[str]) -> list[dict[str, Any]]:
@@ -1298,7 +1295,7 @@ def cmd_ruleset(_args: list[str]) -> list[dict[str, Any]]:
     return parse_ruleset(out)
 
 
-# ── Subcommand: chains (v0.0.30, kept) ───────────────────────────────
+# ── Subcommand: chains ─────────────────────────────────────────────
 
 
 def cmd_chains(_args: list[str]) -> list[str]:
@@ -2021,10 +2018,10 @@ SERVICES_REGISTRY: list[dict[str, Any]] = [
         ],
         # Varnish's listen port is set via -a :6081 or VARNISH_LISTEN_PORT=6081.
         "port_regex": re.compile(
-            r"(?:(\-a\s*:?[a-z0-9.]*:)|VARNISH_LISTEN_PORT\s*=\s*)(\d+)",
+            r"(?P<pre>-a\s*:?[a-z0-9.]*:|VARNISH_LISTEN_PORT\s*=\s*)(?P<port>\d+)",
             re.MULTILINE,
         ),
-        "port_replace_template": r"\g<1>{port}",
+        "port_replace_template": r"\g<pre>{port}",
         "default_port": 6081,
         "description": "Varnish HTTP cache. Default listen port 6081 (overridden to 8080 in the public-webserver template).",
     },
@@ -2660,10 +2657,10 @@ def cmd_restart_service(args: list[str]) -> dict[str, Any]:
 # ── Dispatch table ─────────────────────────────────────────────────
 
 COMMANDS = {
-    # v0.0.30 read-only subcommands (kept for back-compat):
+    # Read-only subcommands:
     "ruleset":       cmd_ruleset,
     "chains":        cmd_chains,
-    # v0.0.31 manager subcommands:
+    # Manager subcommands:
     "templates":     cmd_templates,
     "template-info": cmd_template_info,
     "detect":        cmd_detect,

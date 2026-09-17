@@ -207,7 +207,10 @@ build_ruleset() {
     cat <<RULESET
 #!/usr/sbin/nft -f
 
-flush ruleset
+# Table-scoped reset: foreign tables (docker, libvirt,
+# systemd-networkd) are not ours to destroy.
+add table inet ${TABLE_NAME}
+flush table inet ${TABLE_NAME}
 
 table inet ${TABLE_NAME} {
 
@@ -322,6 +325,16 @@ fw_start() {
     log_info "  hermes=${HERMES_PORT} (public)"
     log_info "  odysseus=${ODYSSEUS_PORT} (public)"
     build_ruleset > "$RULES_FILE"
+    # Root check + validate-then-load: a ruleset that cannot parse must
+    # never reach the kernel, and only the polkit bridge runs us.
+    if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+        echo "ERROR: $0 must run as root (via the sysdeck firewall bridge)" >&2
+        exit 1
+    fi
+    if ! "$NFT_CMD" -c -f "$RULES_FILE"; then
+        echo "ERROR: ruleset failed validation — nothing was loaded" >&2
+        exit 1
+    fi
     "$NFT_CMD" -f "$RULES_FILE"
     log_info "Firewall loaded."
 }

@@ -28,7 +28,7 @@ def run(argv: list[str]) -> str:
     """Run a command, returning stdout. Returns '' on failure."""
     try:
         return subprocess.run(
-            argv, capture_output=True, text=True, check=True,
+            argv, capture_output=True, text=True, check=True, timeout=20,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ""
@@ -85,10 +85,11 @@ def peers() -> list[dict[str, str]]:
 
 def summary() -> dict[str, Any]:
     """Local host info plus peer list."""
+    peers_list = peers()
     return {
         "local": local_host(),
-        "peers": peers(),
-        "peerCount": len(peers()),
+        "peers": peers_list,
+        "peerCount": len(peers_list),
     }
 
 

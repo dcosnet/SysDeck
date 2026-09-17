@@ -102,19 +102,24 @@ function netDev(): { rxMb: number; txMb: number; ifaces: string[] } {
   return { rxMb: Math.round((rx / 1024 ** 2) * 10) / 10, txMb: Math.round((tx / 1024 ** 2) * 10) / 10, ifaces }
 }
 
-async function festerOnline(): Promise<boolean> {
-  try {
-    // server-to-server hop: mint the short-lived session cookie (fester
-    // verifies the same HMAC token the web console issues)
-    const { mintServerCookie } = await import('../session')
-    const res = await fetch('http://127.0.0.1:3010/api/health', {
-      headers: { Cookie: await mintServerCookie() },
-      signal: AbortSignal.timeout(1500),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
+// Cached + single-flight: every overview ticker (5s) and summary (10s)
+// poll shares one 5s probe of the sidecar; a down fester stalls the
+// panel for at most 1.5s per cache window instead of per request.
+function festerOnline(): Promise<boolean> {
+  return cached('fester:online', 5_000, async () => {
+    try {
+      // server-to-server hop: mint the short-lived session cookie (fester
+      // verifies the same HMAC token the web console issues)
+      const { mintServerCookie } = await import('../session')
+      const res = await fetch('http://127.0.0.1:3010/api/health', {
+        headers: { Cookie: await mintServerCookie() },
+        signal: AbortSignal.timeout(1500),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  })
 }
 
 export const commands = {

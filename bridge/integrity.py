@@ -32,10 +32,15 @@ def score() -> int | None:
 
 def scan() -> dict[str, Any]:
     """Run a fresh lynis audit and return the parsed result."""
+    # A lynis audit runs for minutes by design; 15 minutes is the hard
+    # ceiling so a wedged audit cannot hang the bridge forever.
     try:
         subprocess.run(
             ["lynis", "audit", "system"], capture_output=True, text=True, check=True,
+            timeout=900,
         )
+    except subprocess.TimeoutExpired:
+        return {"error": "lynis audit timed out after 900s", "score": None}
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return {"error": str(exc), "score": None}
     return {"score": score()}

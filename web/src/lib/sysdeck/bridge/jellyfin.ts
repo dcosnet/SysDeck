@@ -234,9 +234,9 @@ export const commands = {
     const library = String(args.library ?? '')
     const limit = Math.max(1, Math.min(500, Number(args.limit) || 200))
     const dir = `${MEDIA_ROOT}/${library}`
-    let entries: import('fs').Dirent[]
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      // readdir doubles as the existence probe for the library root
+      await readdir(dir, { withFileTypes: true })
     } catch {
       return failE(`library '${library}' not found under ${MEDIA_ROOT}`)
     }

@@ -10,7 +10,7 @@
  *
  * Install:
  *     sudo make install-branding     (backs up any existing branding.css)
- * Revert:
+ * Uninstall:
  *     sudo make uninstall-branding   (restores the backup, if any)
  *
  * Selector strategy: Cockpit ≥ 300 uses PatternFly v5 (pf-v5-*), older

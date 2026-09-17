@@ -129,25 +129,25 @@ body {
  */
 
 /* Layout primitives */
-.suite-row          { display: flex; flex-direction: row; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
-.suite-row-between  { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.suite-row, .sysdeck-row { display: flex; flex-direction: row; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.suite-row-between, .sysdeck-row-between { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 0.5rem; }
 
-.suite-grid         { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-.suite-grid.cols-2  { grid-template-columns: repeat(2, 1fr); }
-.suite-grid.cols-3  { grid-template-columns: repeat(3, 1fr); }
+.suite-grid, .sysdeck-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.suite-grid.cols-2, .sysdeck-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.suite-grid.cols-3, .sysdeck-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 /* Legacy column-width helpers (used by glances + packages alongside .suite-row) */
 .suite-col-2        { flex: 1 1 calc(50% - 0.5rem); min-width: 0; }
 .suite-col-3        { flex: 1 1 calc(33.333% - 0.667rem); min-width: 0; }
 
 /* Buttons */
-.suite-btn-primary  { background: var(--sysdeck-accent); color: #fff; border-color: var(--sysdeck-accent); }
-.suite-btn-primary:hover:not(:disabled) { background: #0872d4; border-color: #0872d4; color: #fff; }
+.suite-btn-primary, .sysdeck-btn-primary { background: var(--sysdeck-accent); color: #fff; border-color: var(--sysdeck-accent); }
+.suite-btn-primary:hover:not(:disabled), .sysdeck-btn-primary:hover:not(:disabled) { background: var(--sysdeck-accent); filter: brightness(1.15); border-color: var(--sysdeck-accent); color: #fff; }
 
 /* Badges */
-.suite-badge.info   { background: var(--sysdeck-accent); color: #fff; }
+.suite-badge.info, .sysdeck-badge.info { background: var(--sysdeck-accent); color: #fff; }
 
 /* Stat blocks */
-.suite-stat-value   { font-size: 1.8rem; font-weight: 600; line-height: 1.1; margin: 0.25rem 0; }
+.suite-stat-value, .sysdeck-stat-value { font-size: 1.8rem; font-weight: 600; line-height: 1.1; margin: 0.25rem 0; }
 .suite-stat-value.suite-warn { color: var(--sysdeck-accent-warn); }
 .suite-stat-label   { font-size: 0.8rem; color: var(--sysdeck-muted); margin-bottom: 0.5rem; }
 
@@ -162,6 +162,30 @@ body {
 .suite-progress-fill     { height: 100%; background: var(--sysdeck-accent-success); border-radius: 3px; transition: width 0.3s ease; }
 
 /* Form inputs */
-.suite-input            { background: rgba(255,255,255,0.04); border: 1px solid var(--sysdeck-border); color: var(--sysdeck-fg); padding: 0.4rem 0.6rem; border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
-.suite-input:focus       { outline: none; border-color: var(--sysdeck-accent); }
-.suite-input::placeholder { color: var(--sysdeck-muted); }
+.suite-input, .sysdeck-input { background: rgba(255,255,255,0.04); border: 1px solid var(--sysdeck-border); color: var(--sysdeck-fg); padding: 0.4rem 0.6rem; border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
+.suite-input:focus, .sysdeck-input:focus { outline: none; border-color: var(--sysdeck-accent); }
+
+/* Keyboard focus on every button, even without the web-edition skin. */
+.suite-btn:focus-visible, .sysdeck-btn:focus-visible {
+    outline: 2px solid var(--sysdeck-accent);
+    outline-offset: 2px;
+}
+.suite-input::placeholder, .sysdeck-input::placeholder { color: var(--sysdeck-muted); }
+
+/* Narrow viewports: multi-column grids collapse to one column. */
+@media (max-width: 720px) {
+    .suite-grid.cols-2, .sysdeck-grid.cols-2,
+    .suite-grid.cols-3, .sysdeck-grid.cols-3 { grid-template-columns: 1fr; }
+}
+
+/* Narrow viewports: multi-column grids collapse to one column. */
+@media (max-width: 720px) {
+    .suite-grid.cols-2, .sysdeck-grid.cols-2,
+    .suite-grid.cols-3, .sysdeck-grid.cols-3 { grid-template-columns: 1fr; }
+}
+
+/* Narrow viewports: multi-column grids collapse to one column. */
+@media (max-width: 720px) {
+    .suite-grid.cols-2, .sysdeck-grid.cols-2,
+    .suite-grid.cols-3, .sysdeck-grid.cols-3 { grid-template-columns: 1fr; }
+}

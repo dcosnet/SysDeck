@@ -1,6 +1,6 @@
 {
   "_comment": "Compatibility Manifest — sysdeck v0.1.3",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "suite_requires": { "cockpit": ">=239", "python": ">=3.9" },
   "modules": {
     "containers": {
@@ -18,7 +18,7 @@
       "distro_support": { "arch": "full", "debian": "full", "fedora": "full" }
     },
     "kata": {
-      "_comment_v0.0.35": "SysDeck Kata — restored to its own sidebar entry per user directive. Hosts the pre-built cockpit-kata React app (index.js + index.css). Requires cockpit ≥ 286 because the React bundle uses newer cockpit-podman base1 APIs. The standalone cockpit-kata sub-project is consolidated into SysDeck.",
+      "_comment": "SysDeck Kata — its own sidebar entry. Hosts the pre-built cockpit-kata React app (index.js + index.css). Requires cockpit ≥ 286 because the React bundle uses newer cockpit-podman base1 APIs. The standalone cockpit-kata sub-project is consolidated into SysDeck.",
       "requires": { "cockpit": ">=286" },
       "conditions": [{ "path-or-exists": "/usr/bin/kata-runtime" }, { "path-or-exists": "/usr/bin/kata-containerd-shim-v2" }],
       "config": {

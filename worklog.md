@@ -1984,3 +1984,26 @@ Work Log:
 Stage Summary:
 - docs/screenshots/{overview,login,packages,services,firewall}.png — real console, real host state, no mocks.
 - README now carries the visual identity the sibling dcosnet repos have.
+
+---
+Task ID: moe-qa-045
+Agent: Super Z (main agent, MoE QA pass)
+Task: Full Mixture-of-Experts production-readiness pass over SysDeck v0.4.4 (uploaded tarball); decisive comment language; Unix step-down logic at every fork; produce v0.4.5.
+
+Work Log:
+- Extracted upload to sysdeck/; read README, QA.md, Makefile, bridge core (auth/session/bridge route).
+- Launched four parallel expert reviews (bridge Python; web Next.js; cockpit plugins JS/CSS; packaging/devops) and collected a findings ledger.
+- Makefile: reattached the web-dev recipe (was fused into uninstall-branding); master tarball excludes dev/server logs + .env; reproducible dist (LC_ALL=C, --sort=name, pinned mtime/owner); new check-release-tree gate; distcheck mktemp; quoted rm paths; stale plugin counts corrected.
+- Bridge: prometheus push-log filename validation + label escaping + guarded write; db single-statement read-only guard + honest sqlite refusal; glances availability step-down; packages mutation timeout safety; builder vmdb2 output-dir guard + BUILD_ENV; themes CSS value allowlist; timeouts across auth/vault/firmware/fleet/integrity; kerberos TGT status; hwalert exact unwhitelist; modules3p usage envelopes; remotefs probe table; policy ns-show by id; fleet single scan; mining password sentinel.
+- Web: themesPanel via applySdTheme + localStorage mirror; cockpitModules valid rows; overview version/count/tarball from registry; kata shim-socket check; cached fester probes; usePoll sequencing; StateBadge lookup; hydration-safe clock; theme-persist failure surfacing; gates enforced (ignoreBuildErrors false, exhaustive-deps + no-unused-vars as eslint errors, both green); dead CSS + tailwind.config.ts removed; toast systems collapsed.
+- Plugins: renderError escapes (photos/remotefs/db); builder escapes + spawn-promise download; jellyfin webStatus scope fix; containers flash error surface; observer reuse guards (netsec/fester/klanker); superuser right-sizing (podman + sysbench via 'try', lynis keeps root); CSP drops unsafe-eval; CSS .sysdeck-* parity + teal unification + base focus styles + 720px grid collapse.
+- Firewall: table-scoped flush everywhere; sysdeck-fw redirect/empty-set/blanket-SYN/ICMPv6/mktemp fixes; no-services $SSH_IP + jump syntax + braced set-adds + loopback accept + connlimit + services contract; vps SSH verdict + set braces; ai-llm/public/remote-admin root+validate before load; cilium policy scoping + standalone DNS + stop warning. Six rulesets structurally validated via shim harness (nft_structural_check.py).
+- Packaging: RPM %files rebuilt for 27-plugin install + noarch + nodejs; debian control nodejs + Suggests demotion; Makefile DESTDIR guard (no build-host mutation); PKGBUILD sysdeck.install hooks + symlink removal; metainfo <extends>; Caddyfile 3010 allowlist; version surfaces bumped to 0.4.5 with changelog/spec/metainfo entries.
+- Incident + recovery: one accidental generator invocation wiped hand-maintained plugin JS + overwrote manifests/index.html with stale embedded templates. Restored from the upload tarball; rewrote generate-plugins.py as a catalog VERIFIER (never writes; --force bootstraps only); removed the stale embedded BRIDGE_JS/SHARED_CSS constants. make plugins now verifies 24 catalog entries + shared/.
+- manage-users.mjs: stripped TS annotations from .mjs (Bun >= 1.3 parses .mjs strictly); CLI verified.
+- Language: churn narration (restored/brought back/was dropped/surviving artifact/re-added/revert) removed from bridge comments, plugin sources, shared assets, generator, web console, active docs, and packaging history — all rewritten as standing decisions. Functional backup/restore features keep their names.
+- Validation: make check 267/267; tsc clean; eslint clean; nft structural checks green; generator verifier green; .gitignore added.
+
+Stage Summary:
+- v0.4.5 production-hardening release: 12 security fixes, 5 build/packaging repairs, 6 validated firewall rulesets, enforced type+lint gates, generator converted to verifier, decisive language tree-wide.
+- Deliverables: sysdeck-0.4.5.tar.bz2 (dist) via make dist; QA.md v0.4.5 section appended; this worklog entry.

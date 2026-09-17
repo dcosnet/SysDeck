@@ -326,7 +326,14 @@ async function refresh(panel, bridge) {
     try {
         catalog = await bridge.modules3p.status();
     } catch (e) {
-        showRowFlash(panel, `Refresh failed: ${e.message || e}`, "danger");
+        // the catalog stays rendered; the failure is a banner, not a
+        // replacement of the whole panel
+        const flash = panel.querySelector('#modules-flash');
+        if (flash) {
+            flash.textContent = `Refresh failed: ${e.message || e}`;
+            flash.style.display = 'block';
+            setTimeout(() => { flash.style.display = 'none'; }, 4000);
+        }
         return;
     }
     panel.innerHTML = renderShell(catalog);

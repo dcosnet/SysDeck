@@ -3,9 +3,8 @@
 SysDeck - Mining Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.0.34 EXPANDED TO 1999 POWER-TOOL STYLE. Per user directive:
-"themes and mining they need to be expanded for maximum ui
-control. think 1999 power tool style here." The Mining Dashboard
+1999 POWER-TOOL STYLE: maximum UI control over every mining surface.
+The Mining Dashboard
 panel surfaces every XMRig REST API knob:
 
   summary            — GET /1/summary (live hashrate, pool, threads)
@@ -219,11 +218,13 @@ def cmd_pool_config_set(args: list[str]) -> dict[str, Any]:
     if len(args) < 2:
         return {"error": "usage: pool-config-set <url> <username> [password]"}
     url, username = args[0], args[1]
-    password = args[2] if len(args) > 2 else "x"
+    # None = the operator sent no password; "x" is XMRig's conventional
+    # dummy and only ever goes on the wire, never into the report.
+    password = args[2] if len(args) > 2 else None
     cfg = _http_get("/1/config")
     if cfg is None:
         return {"available": False, "reason": "XMRig REST API not reachable"}
-    new_pool = {"url": url, "user": username, "pass": password, "rig-id": "", "nicehash": False, "keep-alive": True, "enabled": True}
+    new_pool = {"url": url, "user": username, "pass": password or "x", "rig-id": "", "nicehash": False, "keep-alive": True, "enabled": True}
     if not cfg.get("pools"):
         cfg["pools"] = [new_pool]
     else:
@@ -233,7 +234,7 @@ def cmd_pool_config_set(args: list[str]) -> dict[str, Any]:
         "set": result is not None,
         "url": url,
         "username": username,
-        "password_set": password != "x",
+        "password_set": password is not None,
         "raw": result,
     }
 

@@ -3,8 +3,8 @@
 SysDeck - Policy & Permissions Bridge
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.0.32 NEW MODULE — modern policy management and permissions
-manager for groups. The user directive:
+Modern policy management and permissions manager for groups.
+Design contract:
 
   "modern policy management and permissions manager for groups.
    such as acl, cgroups, vlans, ebpf namespace separation and
@@ -665,14 +665,20 @@ def cmd_ns_show(args: list[str]) -> dict[str, Any]:
     lsns = shutil.which("lsns")
     if not lsns:
         return {"available": False, "reason": "lsns (util-linux) not installed"}
-    rc, out, _ = _run([lsns, "-J", "-t", nsid])
+    # lsns has no lookup-by-namespace-id flag; -t expects a type. Take
+    # the full JSON listing once and select the requested id from it.
+    rc, out, _ = _run([lsns, "-J"])
     if rc == 0 and out.strip():
         try:
-            data = json.loads(out)
-            return {"available": True, "info": data, "format": "json"}
+            listing = json.loads(out)
+            for ns in listing.get("namespaces", []):
+                if str(ns.get("ns", "")) == nsid:
+                    return {"available": True, "info": ns, "format": "json"}
+            return {"available": False,
+                    "reason": f"namespace {nsid} not found in the live listing"}
         except json.JSONDecodeError:
             pass
-    rc2, out2, _ = _run([lsns, "-t", nsid])
+    rc2, out2, _ = _run([lsns])
     return {"available": True, "raw": out2, "format": "text"}
 
 

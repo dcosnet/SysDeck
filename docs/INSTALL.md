@@ -203,7 +203,7 @@ The JS bridge client calls each helper by absolute path — `python3 /usr/lib/sy
 
 ### Content Security Policy violations
 
-The manifests declare `content-security-policy: default-src 'self' 'unsafe-inline'`. `unsafe-eval` was dropped from every plugin in the 0.3.0 security audit. If your cockpit deployment enforces a stricter policy, tighten the manifest to match — the panels do not require it.
+The manifests declare `content-security-policy: default-src 'self' 'unsafe-inline'` — no plugin evaluates code, so `unsafe-eval` stays out of every manifest. If your cockpit deployment enforces a stricter policy, tighten the manifest to match; the panels do not require it.
 
 ### Web console: login loop or 401 on every route
 

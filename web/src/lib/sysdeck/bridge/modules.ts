@@ -20,7 +20,7 @@
 // which() probes.
 import { db } from '@/lib/db'
 import { ok, fail, which, run } from './shared'
-import { writeFile, rm, mkdir, readdir, mkdtemp } from 'fs/promises'
+import { rm, mkdir, readdir, mkdtemp } from 'fs/promises'
 import { existsSync } from 'fs'
 
 function failE(error: string, source: 'live' | 'hybrid' = 'live') {

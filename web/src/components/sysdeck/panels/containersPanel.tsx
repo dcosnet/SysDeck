@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Boxes, Cpu, MemoryStick, Play, Snowflake, Square, TerminalSquare, Trash2 } from 'lucide-react'
+import { Boxes, Cpu, Play, Snowflake, Square, TerminalSquare, Trash2 } from 'lucide-react'
 import { useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
 import type { BridgeResponse } from '@/lib/sysdeck/types'
 import {
@@ -22,7 +22,6 @@ import {
   StatCard,
   StateBadge,
 } from '@/components/sysdeck/ui'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -246,8 +245,10 @@ export default function ContainersPanel() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Ctr | null>(null)
 
-  const rows = list.data?.data?.containers ?? []
-  const drivers = summary.data?.data?.drivers ?? []
+  // stable identities: the ?? [] fallback must not mint a new array
+  // per render (it would churn the filtered memo below)
+  const rows = useMemo(() => list.data?.data?.containers ?? [], [list.data])
+  const drivers = useMemo(() => summary.data?.data?.drivers ?? [], [summary.data])
 
   const filtered = useMemo(
     () =>
@@ -469,12 +470,14 @@ export default function ContainersPanel() {
           />
         </PanelCard>
 
-        <p className="pb-2 text-xs text-muted-foreground">
-          no container runtimes are installed on this host (probed: podman, docker, incus, lxc, virsh, firecracker) — the
-          fleet is empty, nothing is fabricated. Install any of them and instances appear here live on the next poll;
-          start/stop/freeze/delete/exec run the runtime&apos;s own commands (freeze applies to containers only — the bridge
-          refuses VMs).
-        </p>
+        {rows.length === 0 && (
+          <p className="pb-2 text-xs text-muted-foreground">
+            no container runtimes are installed on this host (probed: podman, docker, incus, lxc, virsh, firecracker) — the
+            fleet is empty, nothing is fabricated. Install any of them and instances appear here live on the next poll;
+            start/stop/freeze/delete/exec run the runtime&apos;s own commands (freeze applies to containers only — the bridge
+            refuses VMs).
+          </p>
+        )}
       </div>
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>

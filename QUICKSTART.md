@@ -369,7 +369,7 @@ demo, mock, stub, or seeded data anywhere in the codebase:
   live-ruleset tab: `nft -j list ruleset` / `iptables-save`) and the
   template catalog covers all seven shipped topologies.
 - The bridge `DataSource` type no longer admits a `'demo'` value — the
-  compiler itself rejects any reintroduction. Absent backends always
+  compiler itself rejects the value at build time. Absent backends always
   render honest empty inventories with install guidance.
 
 ### 10.6 The MoE QA pass (v0.4.3)
@@ -461,7 +461,7 @@ scrollbars) onto the classic cockpit panels. Nothing else changes — the
 class vocabulary, the bridge, and every module are untouched.
 
 ```bash
-# revert the plugin pages to the classic 0.1.x skin:
+# switch the plugin pages back to the classic 0.1.x skin:
 sudo rm /usr/share/cockpit/sysdeck-common/sysdeck-web.css
 
 # also theme the Cockpit SHELL chrome (sidebar, header, login) to match:

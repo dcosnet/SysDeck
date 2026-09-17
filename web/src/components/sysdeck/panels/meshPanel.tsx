@@ -20,8 +20,7 @@ import {
   PanelHeader,
   PanelSkeleton,
   StatCard,
-  StateBadge,
-} from '@/components/sysdeck/ui'
+  } from '@/components/sysdeck/ui'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -230,7 +229,6 @@ export default function MeshPanel() {
   const action = useBridgeAction()
 
   const dlg = usePodDialog()
-  const [scaleDep, setScaleDep] = useState<Dep | null>(null)
 
   async function openPod(kind: 'describe' | 'logs', pod: string) {
     dlg.setMode(kind)

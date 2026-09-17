@@ -313,11 +313,30 @@ def cmd_cluster_info(bid: str) -> dict[str, Any]:
         return {"error": f"Unknown backend: {bid}"}
     (bid2, name, family, port, unit, cli, configs, lic, homepage, install_hint) = e
 
+    # One probe table, not five copy-pasted branches: each backend
+    # maps to its argv; a CLI that is not installed is a state the panel
+    # can render, not a traceback.
+    probes: dict[str, list[str]] = {
+        "ceph": ["ceph", "status", "--format=json"],
+        "glusterfs": ["gluster", "pool", "list"],
+        "moosefs": ["moosefs-cli", "info"],
+        "beegfs": ["beegfs-ctl", "--listnodes"],
+        "orangefs": ["pvfs2-server", "-m"],
+    }
+    argv = probes.get(bid2)
+    if argv is None:
+        return {"error": f"No cluster-info handler for {bid2}"}
+    try:
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=15)
+    except FileNotFoundError:
+        return {"available": False,
+                "reason": f"{argv[0]} is not installed",
+                "install": install_hint or ""}
+    except subprocess.TimeoutExpired:
+        return {"available": False,
+                "reason": f"{argv[0]} timed out after 15s"}
+
     if bid2 == "ceph":
-        out = subprocess.run(
-            ["ceph", "status", "--format=json"],
-            capture_output=True, text=True, timeout=15,
-        )
         if out.returncode != 0:
             return {"error": out.stderr.strip() or f"ceph status returned {out.returncode}"}
         try:
@@ -337,55 +356,12 @@ def cmd_cluster_info(bid: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             return {"backend": bid2, "rawText": out.stdout[:4000]}
 
-    if bid2 == "glusterfs":
-        out = subprocess.run(
-            ["gluster", "pool", "list"],
-            capture_output=True, text=True, timeout=15,
-        )
-        return {
-            "backend": bid2,
-            "rawText": out.stdout[:4000] if out.returncode == 0 else "",
-            "stderr": out.stderr.strip() if out.returncode != 0 else "",
-            "rc": out.returncode,
-        }
-
-    if bid2 == "moosefs":
-        out = subprocess.run(
-            ["moosefs-cli", "info"],
-            capture_output=True, text=True, timeout=15,
-        )
-        return {
-            "backend": bid2,
-            "rawText": out.stdout[:4000] if out.returncode == 0 else "",
-            "stderr": out.stderr.strip() if out.returncode != 0 else "",
-            "rc": out.returncode,
-        }
-
-    if bid2 == "beegfs":
-        out = subprocess.run(
-            ["beegfs-ctl", "--listnodes"],
-            capture_output=True, text=True, timeout=15,
-        )
-        return {
-            "backend": bid2,
-            "rawText": out.stdout[:4000] if out.returncode == 0 else "",
-            "stderr": out.stderr.strip() if out.returncode != 0 else "",
-            "rc": out.returncode,
-        }
-
-    if bid2 == "orangefs":
-        out = subprocess.run(
-            ["pvfs2-server", "-m"],
-            capture_output=True, text=True, timeout=15,
-        )
-        return {
-            "backend": bid2,
-            "rawText": out.stdout[:4000] if out.returncode == 0 else "",
-            "stderr": out.stderr.strip() if out.returncode != 0 else "",
-            "rc": out.returncode,
-        }
-
-    return {"error": f"No cluster-info handler for {bid2}"}
+    return {
+        "backend": bid2,
+        "rawText": out.stdout[:4000] if out.returncode == 0 else "",
+        "stderr": out.stderr.strip() if out.returncode != 0 else "",
+        "rc": out.returncode,
+    }
 
 
 def main(argv: list[str]) -> int:

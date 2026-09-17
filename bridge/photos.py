@@ -6,9 +6,9 @@ Manages self-hosted photo management backends as systemd services
 and exposes the built-in admin web UI for iframe embedding in the
 SysDeck panel.
 
-v0.0.35 directive: "as well as a photo manager of equal quality.
-with its own module." Following the Jellyfin pattern: start/stop/
-restart the service via systemctl; the panel iframes the running
+A photo manager of equal quality to the Jellyfin module, as its own
+module. Following the Jellyfin pattern: start/stop/restart the
+service via systemctl; the panel iframes the running
 admin web UI. Equal quality means the photo manager module ships
 with the same service-control + iframe-load shape as Jellyfin.
 

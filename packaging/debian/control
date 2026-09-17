@@ -2,7 +2,9 @@ Source: sysdeck
 Section: admin
 Priority: optional
 Maintainer: Jeremy Anderson <info@dcos.net>
-Build-Depends: debhelper-compat (= 13), make, python3 (>= 3.9)
+# nodejs: `make check` syntax-checks every shipped JS file via
+# `node --check` — a clean sbuild chroot needs it at build time.
+Build-Depends: debhelper-compat (= 13), make, python3 (>= 3.9), nodejs
 Standards-Version: 4.7.0
 Homepage: https://dcos.net
 Vcs-Browser: https://dcos.net
@@ -11,8 +13,8 @@ Vcs-Git: https://dcos.net/sysdeck.git
 Package: sysdeck
 Architecture: all
 Depends: cockpit-bridge (>= 239), python3 (>= 3.9), ${misc:Depends}
-Recommends: podman, nftables, lynis, iproute2, fwupd, tpm2-tools, opensc, pcscd, glances, lm-sensors, sysbench, polkitd, appstream, kata-containers, jellyfin
-Suggests: kubectl, cryptsetup, mkosi, vmdb2, archiso, live-build, photoprism, piwigo, lychee, librephotos, nextcloud-server, ceph, glusterfs-server, moosefs-master, beegfs-meta, orangefs-server
+Recommends: podman, nftables, lynis, iproute2, fwupd, tpm2-tools, opensc, pcscd, glances, lm-sensors, sysbench, polkitd, appstream
+Suggests: kata-containers, jellyfin, kubectl, cryptsetup, mkosi, vmdb2, archiso, live-build, photoprism, piwigo, lychee, librephotos, nextcloud-server, ceph, glusterfs-server, moosefs-master, beegfs-meta, orangefs-server
 Description: Unified operations surface for Linux infrastructure
  SysDeck is a standalone Linux operations console that also ships as a
  Cockpit plugin suite. This package installs the Cockpit plugin edition:

@@ -19,7 +19,7 @@
 // python bridge used).
 import { readFileSync } from 'fs'
 import { db } from '@/lib/db'
-import { ok, fail, readText, run } from './shared'
+import { ok, fail, run } from './shared'
 import { readdir, readFile, writeFile } from 'fs/promises'
 
 function failE(error: string, source: 'live' | 'hybrid' = 'live') {

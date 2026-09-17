@@ -1914,8 +1914,8 @@ class TestFirewallV047ManifestsAndMetainfo(unittest.TestCase):
         )
 
     def test_version_sync_all_surfaces_report_020(self):
-        # Every release surface must report v0.4.4 (package parity + blog essay).
-        v = "0.4.4"
+        # Every release surface must report v0.4.5 (production hardening).
+        v = "0.4.5"
         files_to_check = [
             "Makefile",
             "bridge/__init__.py",

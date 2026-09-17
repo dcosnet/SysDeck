@@ -3,13 +3,9 @@
 SysDeck - Fester Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.2.0 REAL INTEGRATION. The v0.1.x helper was a stub: its only
-subcommand (`build-jobs`) listed systemd units whose name contained
-"fester" or "build" — it never talked to a build orchestrator. The
-Cockpit edition now ships against the vendored fester service (the
-same one the Web Edition runs): web/mini-services/fester, a
-distributed DAG build orchestrator speaking REST + WebSocket on
-127.0.0.1:3010.
+REAL INTEGRATION against the vendored fester service (the same one
+the Web Edition runs): web/mini-services/fester, a distributed DAG
+build orchestrator speaking REST + WebSocket on 127.0.0.1:3010.
 
 This helper is a thin stdlib-only REST client (urllib.request + json,
 4s timeout — no requests library, no curl dependency). Every
@@ -35,8 +31,6 @@ Subcommands:
   cancel <id>   POST /api/builds/<id>/cancel
   replay <buildId> [--label <l>]
                 POST /api/sessions      → session
-
-The old `build-jobs` subcommand is REMOVED.
 
 Usage:
     python3 /usr/lib/sysdeck/bridge/fester.py status

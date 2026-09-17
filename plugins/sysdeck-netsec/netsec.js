@@ -11,7 +11,7 @@
  *
  * The panel has three sections (matching iptraf-ng's views):
  *   1. Interface Overview — live RX/TX rate cards (bytes/s, packets/s)
- *      per interface. Auto-refreshes every 3s. The traffic subcommand
+ *      per interface. Auto-refreshes every 5s. The traffic subcommand
  *      samples /proc/net/dev twice (1s apart) to compute live rates.
  *   2. IP Traffic Monitor — active TCP/UDP connections table (proto,
  *      state, local addr:port, remote addr:port, TX/RX queue). Reads

@@ -140,7 +140,7 @@ def _parse_sysbench(output: str) -> dict[str, Any]:
                 result["events_per_sec"] = float(line.split(":")[-1].strip())
             except ValueError:
                 pass
-        if "avg:" in line.lower() and "latency" not in result:
+        if "avg:" in line.lower() and "latency_ms" not in result:
             parts = line.split()
             for i, p in enumerate(parts):
                 if p == "avg:" and i + 1 < len(parts):

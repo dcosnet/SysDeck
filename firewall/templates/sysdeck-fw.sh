@@ -208,8 +208,6 @@ build_ruleset() {
 # AirWall: ${AIRWALL}
 # Flow offload: ${FLOW_OFFLOAD}
 
-flush table inet ${TABLE_NAME} 2>/dev/null
-
 table inet ${TABLE_NAME} {
     # ── Sets ─────────────────────────────────────────────────────────
     set ssh_abuse        { type ipv4_addr; flags interval; timeout 1h; }
@@ -244,14 +242,19 @@ table inet ${TABLE_NAME} {
         ct state established,related accept
         ct state invalid drop
 
-        ct state new tcp flags & (fin|syn|rst|ack) == syn limit rate 50/second burst 100 packets accept
-        ct state new tcp flags & (fin|syn|rst|ack) == syn drop
+        # Flood control only — the accept decisions stay with the zone
+        # rules below, so no rate-limited blanket SYN accept exists here.
+        ct state new tcp flags & (fin|syn|rst|ack) == syn limit rate over 50/second burst 100 packets counter drop comment "SYN flood rate limit"
 
         ip protocol icmp icmp type echo-request limit rate 5/second accept
-        ip6 nexthdr icmpv6 icmpv6 type { echo-request, nd-neighbor-solicit, nd-router-advert } accept
 
-        iifname "$RED_IF"   tcp dport { $red_tcp_in }   accept comment "RED inbound TCP"
-        iifname "$RED_IF"   udp dport { $red_udp_in }   accept comment "RED inbound UDP"
+        # Full IPv6 control-plane set: NDP (solicit + advert, both
+        # router and neighbor) and PMTUD errors — without these, on-link
+        # IPv6 and path MTU discovery silently break.
+        ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+        $( [[ -n "$red_tcp_in" ]] && echo "        iifname \"$RED_IF\"   tcp dport { $red_tcp_in }   accept comment \"RED inbound TCP\"" )
+        $( [[ -n "$red_udp_in" ]] && echo "        iifname \"$RED_IF\"   udp dport { $red_udp_in }   accept comment \"RED inbound UDP\"" )
         $( [[ -n "$GREEN_IF" ]]  && echo "iifname \"$GREEN_IF\"  ip saddr @green_net  tcp dport { $green_tcp_in }  accept comment \"GREEN inbound (source-verified)\"" )
         $( [[ -n "$GREEN_IF" ]]  && echo "iifname \"$GREEN_IF\"  ip saddr @green_net  udp dport { $green_udp_in }  accept comment \"GREEN inbound (source-verified)\"" )
         $( [[ -n "$ORANGE_IF" ]] && echo "iifname \"$ORANGE_IF\" ip saddr @orange_net tcp dport { $orange_tcp_in } accept comment \"ORANGE inbound (source-verified)\"" )
@@ -269,8 +272,10 @@ table inet ${TABLE_NAME} {
         ct state established,related accept
         ct state invalid drop
 
-        # SYN flood protection on RED ingress (synproxy).
-        iifname "$RED_IF" tcp flags syn notrack accept comment "synproxy: pass new SYN to synproxy chain"
+        # Flood control on RED ingress: drop the excess, never blanket
+        # accept — the DMZ port-forwards below are the only RED -> ORANGE
+        # paths and each one carries an explicit dport + daddr.
+        iifname "$RED_IF" ct state new limit rate over 100/second burst 200 packets counter drop comment "RED new-connection flood limit"
 
         # ── Zone-to-zone matrix (source-verified) ──────────────────────
         # GREEN -> RED  : allow
@@ -311,12 +316,6 @@ EOF
 
     cat <<EOF
     }
-
-    # ── synproxy chain (SYN flood mitigation) ────────────────────────
-    chain synproxy {
-        tcp flags syn notrack accept
-    }
-
     # ── Output ───────────────────────────────────────────────────────
     chain output {
         type filter hook output priority filter; policy accept;
@@ -393,9 +392,15 @@ fw_start() {
 
     log_info "Validating..."
     if ! "$NFT_CMD" -c -f "$RULES_FILE"; then
-        cp "$RULES_FILE" /tmp/sysdeck-fw-failed.nft
-        die "Validation failed. Ruleset saved to /tmp/sysdeck-fw-failed.nft"
+        # mktemp, never a fixed /tmp path a local user could pre-place
+        local failed_nft
+        failed_nft="$(mktemp /tmp/sysdeck-fw-failed.XXXXXX.nft)" || die "mktemp failed"
+        cp "$RULES_FILE" "$failed_nft"
+        die "Validation failed. Ruleset saved to ${failed_nft}"
     fi
+    # Fresh table on every apply: the shell owns the redirect, and a
+    # missing table is not an error here (first apply).
+    "$NFT_CMD" delete table inet "${TABLE_NAME}" 2>/dev/null || true
 
     log_info "Loading..."
     if "$NFT_CMD" -f "$RULES_FILE"; then

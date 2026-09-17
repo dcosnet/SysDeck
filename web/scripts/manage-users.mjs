@@ -28,7 +28,7 @@ import { Database } from 'bun:sqlite'
 const dbUrl = process.env.DATABASE_URL ?? 'file:../db/custom.db'
 const dbFile = dbFileOf(dbUrl)
 
-function dbFileOf(url: string): string {
+function dbFileOf(url) {
   const raw = url.replace(/^file:/, '').split('?')[0]
   return path.resolve(process.cwd(), raw)
 }
@@ -54,13 +54,13 @@ function openDb() {
 // scrypt in the exact format src/lib/sysdeck/users.ts verifies:
 // salt$N$r$p$hex  (constant-time verify lives there)
 const N = 16384, R = 8, P = 1, KEYLEN = 32
-function hashPassword(password: string): string {
+function hashPassword(password) {
   const salt = randomBytes(16).toString('hex')
   const key = scryptSync(password, salt, KEYLEN, { N, r: R, p: P })
   return [salt, N, R, P, key.toString('hex')].join('$')
 }
 
-function promptPassword(): string {
+function promptPassword() {
   const rl = createInterface({ input: process.stdin, output: process.stderr })
   return new Promise((resolve) => {
     process.stderr.write('password: ')
@@ -72,7 +72,7 @@ function promptPassword(): string {
   })
 }
 
-function validName(name: string): boolean {
+function validName(name) {
   return /^[a-z_][a-z0-9_.-]*\$?$/i.test(name) && name.length <= 64
 }
 

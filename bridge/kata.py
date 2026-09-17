@@ -3,19 +3,10 @@
 SysDeck - Kata Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.0.38 PRODUCTION REWRITE. The v0.0.35-v0.0.37 Kata panel shipped a
-pre-built React bundle from the upstream cockpit-kata sub-project. That
-bundle displayed HARDCODED MOCK DATA — 5 fake sandboxes (web-frontend-
-prod, api-gateway-staging, etc.) with synthetic UUIDs and createdAt
-timestamps, fake metrics (cpuUsagePercent, memoryUsageMB, historyCpu/
-historyMemory arrays), a fake QCrows bundle catalog, and a fake PXE
-status (always dnsmasqRunning:true). The only real features were the
-QCrows kernel-bundle extraction (qcrows-export / qcrows-initrd-regen
-via cockpit.spawn) and the kata-runtime check call.
-
-v0.0.38 deletes the React bundle and ships a vanilla-JS panel backed
-by this Python bridge helper. Every subcommand calls the REAL Kata
-Containers 3.x APIs:
+ZERO-DEMO CONTRACT. Every subcommand calls the real Kata Containers
+3.x APIs and reads the real host state — sandbox lists, metrics, bundle
+catalogs, and PXE status are live data or honest unavailability, never
+fabricated records:
 
   list                enumerate kata sandboxes via:
                         1. kata-monitor HTTP /sandboxes (if running)
@@ -543,8 +534,7 @@ def cmd_check(_args: list[str]) -> dict[str, Any]:
 
 # ── Subcommand: pxe-status ─────────────────────────────────────────
 #
-# Real PXE/TFTP status — replaces the v0.0.37 mock that always
-# returned dnsmasqRunning:true.
+# Real PXE/TFTP status straight from systemctl and /srv/tftp.
 
 
 def cmd_pxe_status(_args: list[str]) -> dict[str, Any]:
@@ -584,9 +574,8 @@ def cmd_pxe_status(_args: list[str]) -> dict[str, Any]:
 
 # ── Subcommand: qcrows-list ────────────────────────────────────────
 #
-# QCrows kernel bundles are the real feature for kata kernel/module
-# compilation. The v0.0.37 React bundle had a mock catalog; this
-# reads the real filesystem.
+# QCrows kernel bundles are the kata kernel/module compilation
+# surface; the listing reads the real filesystem.
 
 
 def cmd_qcrows_list(_args: list[str]) -> list[dict[str, Any]]:

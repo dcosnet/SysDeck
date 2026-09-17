@@ -39,8 +39,8 @@ PROM_LICENSE = "Apache-2.0"
 PROM_AUTHORS = "Prometheus Authors"
 PROM_URL = "https://prometheus.io"
 
-# v0.0.39: import v0.0.37 security helpers from firewall.py (single
-# source of truth for hardening).
+# Security helpers come from firewall.py — one source of truth for
+# hardening across the suite.
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     from firewall import (  # type: ignore
@@ -60,14 +60,11 @@ except ImportError:
     def _validate_filename(name: str) -> bool:
         return bool(name and len(name) <= 64 and _FILENAME_RE_FALLBACK.match(name))
 
-# Prometheus API endpoint from environment or default
-# v0.0.40: Prometheus defaults to port 9090, which is the SAME port
-# Cockpit-ws uses. Since Cockpit is already running on 9090 on every
-# SysDeck host, Prometheus MUST be moved to a different port. We
-# default to 9095 — it's in the familiar 909x range, doesn't conflict
-# with Pushgateway (9091), Alertmanager (9093), or Cockpit (9090).
-# Operators who already run Prometheus on a custom port can override
-# via the PROMETHEUS_API_URL environment variable.
+# Prometheus API endpoint from environment or default. Port 9090
+# belongs to cockpit-ws on every SysDeck host, so Prometheus defaults
+# to 9095 — same 909x range, clear of Pushgateway (9091), Alertmanager
+# (9093), and Cockpit (9090). Operators running Prometheus on a custom
+# port override it via PROMETHEUS_API_URL.
 PROM_API_URL = os.environ.get("PROMETHEUS_API_URL", "http://localhost:9095")
 # Pushgateway URL for log pipeline
 PUSHGATEWAY_URL = os.environ.get("PROMETHEUS_PUSHGATEWAY_URL", "http://localhost:9091")
@@ -373,23 +370,35 @@ def push_log(args: list[str]) -> dict[str, Any]:
         # Metadata JSON malformed: reject push request
         return {"error": "metadata_json must be valid JSON"}
 
+    # Filesystem contract: the module name becomes a filename under
+    # LOG_DIR. Validate it like every other filename this suite writes —
+    # no absolute paths, no traversal, no symlink tricks downstream.
+    if not _validate_filename(module):
+        return {"error": "invalid module name (max 64 chars of [A-Za-z0-9._-])"}
+
     ts = time.time()
     iso_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
-    # Build Prometheus exposition format
+    # Build Prometheus exposition format. Label values are escaped
+    # (backslash, quote, newline) per the exposition spec — raw values
+    # must never inject metric lines into the pushgateway payload.
+    def _esc(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+    mod_l, lvl_l, msg_l = _esc(module), _esc(level), _esc(message[:128])
     metrics = (
-        f'# TYPE sysdeck_log_total counter\n'
-        f'sysdeck_log_total{{module="{module}",level="{level}"}} 1\n'
-        f'# TYPE sysdeck_log_timestamp_seconds gauge\n'
-        f'sysdeck_log_timestamp_seconds{{module="{module}",level="{level}"}} {ts:.3f}\n'
-        f'# TYPE sysdeck_log_message_info gauge\n'
-        f'sysdeck_log_message_info{{module="{module}",level="{level}",msg="{message[:128]}"}} 1\n'
+        '# TYPE sysdeck_log_total counter\n'
+        f'sysdeck_log_total{{module="{mod_l}",level="{lvl_l}"}} 1\n'
+        '# TYPE sysdeck_log_timestamp_seconds gauge\n'
+        f'sysdeck_log_timestamp_seconds{{module="{mod_l}",level="{lvl_l}"}} {ts:.3f}\n'
+        '# TYPE sysdeck_log_message_info gauge\n'
+        f'sysdeck_log_message_info{{module="{mod_l}",level="{lvl_l}",msg="{msg_l}"}} 1\n'
     )
 
     pushed = _pushgateway_post("sysdeck_logs", metrics)
 
-    # Persist to local audit log
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Persist to local audit log. Path stays inside LOG_DIR by
+    # construction (validated module name, fixed directory).
     log_entry = {
         "module": module,
         "level": level,
@@ -399,10 +408,15 @@ def push_log(args: list[str]) -> dict[str, Any]:
         "pushedToPrometheus": pushed,
     }
     log_file = LOG_DIR / f"{module}.jsonl"
-    with open(log_file, "a") as f:
-        f.write(json.dumps(log_entry) + "\n")
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except OSError as exc:
+        return {"pushed": pushed, "timestamp": iso_ts, "entry": log_entry,
+                "persisted": False, "persistError": str(exc)}
 
-    return {"pushed": pushed, "timestamp": iso_ts, "entry": log_entry}
+    return {"pushed": pushed, "timestamp": iso_ts, "entry": log_entry, "persisted": True}
 
 
 def log_summary() -> dict[str, Any]:

@@ -20,7 +20,7 @@ def run(argv: list[str]) -> str:
     """Run a command, returning stdout. Returns '' on failure."""
     try:
         return subprocess.run(
-            argv, capture_output=True, text=True, check=True,
+            argv, capture_output=True, text=True, check=True, timeout=60,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ""

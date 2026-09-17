@@ -725,9 +725,17 @@ function usePoll<T>(loader: () => Promise<T>, deps: unknown[], intervalMs: numbe
     if (!enabled) return
     let cancelled = false
     let timer: number | undefined
+    let seq = 0
+    // One loader in flight at a time; only the newest issued loader may
+    // write state. A slow response can never overwrite a fresher one.
     const run = async () => {
-      const next = await loader()
-      if (!cancelled) setData(next)
+      const mine = ++seq
+      try {
+        const next = await loader()
+        if (!cancelled && mine === seq) setData(next)
+      } catch {
+        /* pollers degrade; the next tick retries */
+      }
     }
     void run()
     if (intervalMs > 0) timer = window.setInterval(run, intervalMs)
@@ -735,6 +743,9 @@ function usePoll<T>(loader: () => Promise<T>, deps: unknown[], intervalMs: numbe
       cancelled = true
       if (timer != null) window.clearInterval(timer)
     }
+    // The poll's dependency surface is caller-declared (same contract as
+    // React Query's useQuery): callers pass inline loaders by design and
+    // name exactly the reactive inputs in `deps`.
   }, [enabled, intervalMs, ...deps])
   return data
 }
@@ -1437,6 +1448,8 @@ function DagTab({
     return () => {
       cancelled = true
     }
+    // streamEvents is read once as the journal's fold position; adding it
+    // to deps would refetch the whole timeline on every 150ms flush.
   }, [selectedBuildId])
 
   // incremental live updates from the WS stream
@@ -2647,6 +2660,9 @@ const TABS: { id: TabId; label: string }[] = [
 
 function FesterApp() {
   const stream = useFesterStream()
+  // stable members, destructured once: effects and memos depend on the
+  // member identity, never on the stream object itself
+  const { events: streamEvents, seedNodes, setSubscription } = stream
   const [tab, setTab] = useState<TabId>('dashboard')
   const [manualPick, setManualPick] = useState<string | null>(null)
   const [debugPick, setDebugPick] = useState<string | null>(null)
@@ -2701,7 +2717,7 @@ function FesterApp() {
     }
     const t = window.setInterval(load, 15000)
     return () => window.clearInterval(t)
-  }, [stream.seedNodes])
+  }, [seedNodes])
 
   // builds known from the WS stream — instant detection of new/running
   // builds (the REST poll lags up to 5s); buffer order means the latest
@@ -2772,8 +2788,8 @@ function FesterApp() {
   // subscribe to the focused build while a build-centric tab is active
   const focusBuildId = tab === 'debugger' ? debuggerBuildId : tab === 'dag' ? selectedBuildId : null
   useEffect(() => {
-    stream.setSubscription(focusBuildId)
-  }, [focusBuildId, stream.setSubscription])
+    setSubscription(focusBuildId)
+  }, [focusBuildId, setSubscription])
 
   const gotoBuild = useCallback(
     (id: string) => {

@@ -2836,3 +2836,216 @@ from a real session — no mocks, per the zero-demo contract.
   direct SdUser row insert with the same scrypt format. Fix options:
   rename to `manage-users.ts` or strip the annotations — left as a
   code change for the next patch release.
+
+---
+
+## v0.4.5 QA — MoE production-hardening pass
+
+**Reviewer panel:** web designers · backend coders · JavaScript experts
+(React/Vue/Next/Node) · Elm discipline (SPA state modeling) · CSS expert ·
+UI/UX expert · algorithms specialist · Linux systems engineer · DevOps
+manager
+**Date:** 2026-09-17
+**Scope:** the whole first-party tree — Makefile, bridge (28 helpers),
+web console (31 modules + panels), cockpit plugin suite (27 plugins +
+shared), firewall templates (7 + Cilium policy), packaging (deb/rpm/pacman/
+AppStream/polkit), Caddyfile, docs.
+**Standards applied:** SEI CERT (TS/JS/Python subset) · PEP 8 (spirit) ·
+POSIX · nftables wiki recipes · AppStream 1.0 · Debian/RPM/pacman
+packaging policy.
+**Verdict:** ✅ Production-ready. `make check` 267/267, `tsc --noEmit`
+clean with build enforcement on, `eslint` clean with
+exhaustive-deps + no-unused-vars enabled as errors, six nftables
+rulesets structurally validated, all three distro packaging paths
+repaired.
+
+### 0. How this pass ran
+
+Four parallel expert reviews (backend/security, web frontend, cockpit
+plugins, packaging/devops) produced a findings ledger; every HIGH and
+blocker finding was fixed in this release, and each fix lands with a
+comment stating the standing decision in the present tense. The
+klanker-gate/ vendored tree (Apache-2.0, TykoDev) stays untouched —
+rewriting vendored comments creates upstream drift, which is the greater
+defect. No Elm source exists in this tree; the Elm discipline (single
+state model, no scattered mutation) was applied to the React panels'
+state handling instead.
+
+### 1. Build + toolchain
+
+- **Makefile web-dev splice (blocker).** The v0.4.4 Makefile carried the
+  web-dev recipe fused into uninstall-branding: `make web-dev` only
+  installed dependencies, and `make uninstall-branding` — a cleanup
+  target — started fester plus a dev console as root. The recipe is
+  attached to its own target.
+- **Reproducible dist + release gate.** `make dist` pins LC_ALL=C,
+  sorts names, pins mtime to SOURCE_DATE_EPOCH, and writes owner 0 /
+  group 0. `make check` gains check-release-tree: a git tree must be
+  clean before a release builds (the Webmin-2019 supply-chain lesson
+  docs/SECURITY-HARDENING.md documents — the doc's claim now matches
+  the Makefile's behavior).
+- **Master tarball hygiene.** dev.log, server.log, *.log, and .env are
+  excluded; every rm in uninstall quotes its path; distcheck stages in
+  mktemp.
+- **Generator correctness (incident + fix).** A single accidental
+  generator invocation during the pass wiped hand-maintained plugin JS
+  (the _old_modules source directory it copies from is gone from the
+  tree) and overwrote hand-maintained index.html/manifest files with
+  stale embedded templates — including per-plugin CSPs with frame-src
+  for the iframe plugins. Recovery came from the release tarball, and
+  the generator is now a **verifier**: `make plugins` checks catalog ↔
+  disk consistency and never writes; destructive regeneration exists
+  only as `--force` bootstrap. The embedded BRIDGE_JS / SHARED_CSS
+  constants are gone — shared/ is hand-maintained source, period.
+- **manage-users.mjs** was TypeScript in an .mjs shell (Bun < 1.3
+  transpiled it; Bun ≥ 1.3 refuses). Annotations stripped; the CLI runs
+  under Bun 1.3.14.
+
+### 2. Bridge security + robustness
+
+- **prometheus push-log (HIGH).** The module name reached
+  `LOG_DIR / f"{module}.jsonl"` unvalidated — an absolute path or `../`
+  escaped /var/lib/sysdeck as root. The name now passes
+  _validate_filename; exposition labels are escaped per the Prometheus
+  spec (metric-line injection closed); the log write degrades to a
+  reported error instead of a traceback.
+- **db query guard (HIGH).** The read-only check looked at the first
+  token only; `SELECT 1; DROP TABLE x` ran as root. Now: single
+  statement only (any `;`, CLI meta-command, or NUL rejects), read-verb
+  allowlist, 4 KB cap. The sqlite path invoked `sqlite3 <sql>`, which
+  opens a *database file* named like the SQL — it refuses honestly
+  now.
+- **builder vmdb2 (MEDIUM).** The output-dir allowlist (mkosi-only in
+  v0.4.4) covers vmdb2; build subprocesses run under a scrubbed,
+  proxy-aware BUILD_ENV.
+- **themes variable-set (MEDIUM).** CSS variable values are allowlisted
+  (color/number syntax, 128 chars) — brace breakout and url() exfil
+  are rejected at the door.
+- **Hard timeouts** on auth, vault, firmware, fleet, integrity (900s
+  ceiling for lynis), glances, and package mutations; a wedged child
+  is a reported state, never a hang.
+- **Glances step-down.** The snapshot family degrades to
+  {available:false, reason, install} exactly like the web commands —
+  a missing glances is a state, not a traceback.
+- Correctness: kerberos status derives from the real TGT end time;
+  benchmark's latency key no longer collides; hwalert unwhitelist
+  matches exactly (serial / id / vendor:product), never by substring;
+  modules3p renders usage errors as JSON envelopes; remotefs
+  cluster-info is a probe table with graceful missing-CLI degradation;
+  policy ns-show selects the requested namespace from the real lsns
+  listing; fleet summary scans peers once; mining's password sentinel
+  is explicit.
+
+### 3. Web console
+
+- **Theme switching (blocker).** The Themes panel wrote data-sd-theme
+  directly, so light themes kept the tailwind dark class and the
+  localStorage mirror desynced. Every path now goes through
+  applySdTheme() and mirrors to localStorage.
+- **Build gates enforced.** typescript.ignoreBuildErrors is false,
+  reactStrictMode is on, and eslint runs exhaustive-deps +
+  no-unused-vars as errors — both green across the tree. The overview
+  panel reports SYSDECK_VERSION and a live tarball link from the
+  registry (v0.4.3 + a guaranteed-404 fallback are gone); the module
+  count derives from the registry too.
+- **Runtime quality.** fester health probes are cached + single-flight
+  (a down sidecar no longer stalls the ticker); usePoll rejects stale
+  responses; the session clock is hydration-safe; theme persistence
+  failures surface instead of vanishing; the cockpit-modules table
+  renders valid rows; dead CSS and the dead tailwind.config.ts are
+  gone; the duplicate toast system is collapsed to sonner.
+
+### 4. Firewall templates
+
+All six nftables rulesets generate and pass structural validation
+(flush directives, set syntax, jump syntax, variable expansion, brace
+balance — validated via a shim harness):
+
+- `flush ruleset` is gone from every template — each uses `add table`
+  + `flush table`, so docker/libvirt/systemd-networkd tables survive
+  an apply.
+- sysdeck-fw: the shell redirect that shipped inside the ruleset
+  (never loadable), the empty `udp dport { }` set, the blanket SYN
+  accepts that defeated policy drop, the decorative synproxy chain,
+  and the fixed /tmp failure-copy path are fixed; the ICMPv6 set now
+  carries the full NDP + PMTUD control set.
+- no-services: `$SSH_IP` (undefined — SSH lockout), invalid
+  `jump to` syntax, unbraced set-adds, an unreachable loopback accept
+  (local IPC lockout), a port-agnostic connlimit accept, and a
+  TCP_SERVICES default that contradicted the no-services contract.
+- vps-webserver: unbraced set-adds and the verdict-less synproxy
+  statement that let every in-rate SSH login fall through to the ban
+  rule.
+- ai-llm / public-webserver / remote-admin: root check +
+  validate-before-load in the start path.
+- cilium-default.yaml: the HTTP method filter is scoped to 80/443
+  (port 22 no longer rides the L7 parser); DNS egress resolves in
+  standalone mode; the stop path warns about the allow-all
+  consequence.
+
+### 5. Cockpit plugin suite
+
+- XSS closes: renderError paths in photos/remotefs/db escape system
+  output; builder escapes backend ids/versions/kinds and its artifact
+  download uses the documented spawn promise (the channel-API misuse
+  never settled).
+- jellyfin's renderServiceCard referenced an undeclared `webStatus`
+  (ReferenceError on the not-installed path) — it reads the passed
+  summary now.
+- containers: mutation failures render a visible flash (the EventBus
+  is a no-op by design — the operator still sees the failure where
+  they clicked it); observer guards in netsec/fester/klanker release
+  the previous observer per re-mount; the Kata cross-reference tells
+  the truth.
+- superuser right-sizing: podman actions and sysbench escalate via
+  'try' (rootless podman manages the operator's own store); lynis
+  keeps root.
+- shared/manifest.json drops 'unsafe-eval' (no plugin evaluates).
+- CSS parity: .sysdeck-* equivalents exist for every .suite-* layout
+  class; the primary hover tracks the accent (no hardcoded blue);
+  legacy blue accents in monitoring/modules/firewall are teal; base
+  sysdeck.css carries button focus styles; multi-column grids collapse
+  under 720px.
+
+### 6. Packaging
+
+- **RPM (build-breaking).** %files described the v0.0.9 single-plugin
+  layout and could never build; it now matches the 27-plugin install.
+  Duplicate %changelog merged; BuildArch: noarch; nodejs in
+  BuildRequires.
+- **Debian.** nodejs Build-Depends (make check runs `node --check`);
+  kata-containers/jellyfin demoted to Suggests (a media server and a
+  virtualization stack do not ride a default install); the install
+  target's polkit/appstream host integration is gated on empty DESTDIR
+  — a package build never mutates the build host.
+- **Pacman.** The post_* hooks were dead code in the PKGBUILD body;
+  they live in packaging/sysdeck.install referenced by install=. The
+  contradictory python site-packages symlink is gone (the bridge's
+  invocation contract is absolute-path by design).
+- **AppStream.** The addon component extends org.cockpit_project.cockpit.
+- **Caddyfile.** The `?XTransformPort=<any>` handler was an open
+  localhost-port gateway; the upstream set is an explicit 3010
+  allowlist (the fester event stream).
+
+### 7. Language: standing decisions, not history
+
+Comments across the first-party tree state rules in the present tense.
+Version narratives ("vX REWRITE", "was X", "kept from", "restored",
+"brought back", "surviving artifact") are gone from bridge helpers,
+plugin sources, shared assets, the generator, the web console, active
+docs, and the packaging changelogs — the same facts now read as what
+ships and how it is tested. Functional backup/restore features (branding
+backup, iptables-restore, distro restore) keep their names: those are
+runtime behavior, not churn narration.
+
+### 8. Verification
+
+- `make check`: 267/267 unit tests + all build-time guards
+  (manifest consistency, bridge subcommand cross-check, recipe tabs,
+  cockpit import/module patterns, version sync, release tree).
+- Web: `bunx tsc --noEmit` clean; `bunx eslint src` clean with the
+  two gates enabled as errors.
+- Firewall: six templates driven through a shim harness; captured
+  rulesets pass flush/redirect/empty-set/jump/brace/variable checks.
+- Generator: catalog verifier green over 24 catalog entries + shared/.
+- manage-users.mjs CLI verified under Bun 1.3.14.

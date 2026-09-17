@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, IdCard, KeyRound, Lock, LockOpen, ShieldCheck, Smartphone } from 'lucide-react'
+import { CreditCard, IdCard, KeyRound, Lock, ShieldCheck, Smartphone } from 'lucide-react'
 import { useBridgeAction, useBridgeQuery } from '@/lib/sysdeck/client'
 import {
   DataTable,

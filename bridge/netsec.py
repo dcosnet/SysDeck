@@ -3,11 +3,10 @@
 SysDeck - Netsec Bridge Helper
 Author: Jeremy Anderson (https://dcos.net)
 
-v0.0.43 REWRITE — IPTRAF-NG STYLE NETWORK MONITOR.
+IPTRAF-NG STYLE NETWORK MONITOR.
 
-The v0.0.10-v0.0.42 panel used `ss -tulpn` for a static socket list.
-v0.0.43 recreates the iptraf-ng UI by reading the same kernel sources
-iptraf-ng reads from directly — no fragile ncurses parsing.
+The monitor reads the same kernel sources iptraf-ng reads from
+directly — no fragile ncurses parsing, no static socket list.
 
 Data sources:
   /proc/net/dev    per-interface RX/TX byte + packet counters
@@ -26,8 +25,8 @@ Subcommands:
   connections     active TCP/UDP flows with PID mapping (like iptraf-ng IP monitor)
   interfaces      per-interface detailed stats (cumulative counters)
   protocols       /proc/net/snmp parsed: IP/TCP/UDP/ICMP counters
-  sockets         listening TCP+UDP sockets (kept from v0.0.10 for back-compat)
-  established     established TCP connections (kept from v0.0.10 for back-compat)
+  sockets         listening TCP+UDP sockets
+  established     established TCP connections
 
 Usage:
     python3 /usr/lib/sysdeck/bridge/netsec.py traffic
@@ -376,7 +375,7 @@ def cmd_summary(_args: list[str]) -> dict[str, Any]:
     }
 
 
-# ── Legacy subcommands (kept for back-compat) ─────────────────────
+# ── Socket-listing subcommands ───────────────────────────────────
 
 
 def parse_ss(output: str) -> list[dict[str, Any]]:
@@ -396,12 +395,12 @@ def parse_ss(output: str) -> list[dict[str, Any]]:
 
 
 def sockets() -> list[dict[str, Any]]:
-    """Listening TCP and UDP sockets (legacy, kept for back-compat)."""
+    """Listening TCP and UDP sockets from `ss -tulpn`."""
     return parse_ss(_run(["ss", "-tulpn"]))
 
 
 def established() -> list[dict[str, Any]]:
-    """Established TCP connections (legacy, kept for back-compat)."""
+    """Established TCP connections from `ss -tnp state established`."""
     return parse_ss(_run(["ss", "-tnp", "state", "established"]))
 
 

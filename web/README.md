@@ -30,18 +30,32 @@ right under Overview) with copy buttons on every command.
 - **Not required:** Cockpit, systemd, Docker, root. Runs as an
   unprivileged user on any Linux/BSD/macOS.
 
+## 1a. Release gates
+
+Before any release build, both gates run green from the tree root:
+
+```bash
+cd web
+bunx tsc --noEmit        # type errors fail the release
+bunx eslint src          # hook deps + unused vars fail the release
+```
+
+`next.config.ts` enforces the same type gate at build time
+(`typescript.ignoreBuildErrors: false`) — a console that administers
+hosts does not ship on a red typecheck.
+
 ## 2. Quickstart — dev
 
 From the extracted master tarball root, one command does everything
 (install + migrate + fester + web):
 
-    tar xjf sysdeck-0.4.4-master.tar.bz2
-    cd sysdeck-0.4.4-master
+    tar xjf sysdeck-0.4.5-master.tar.bz2
+    cd sysdeck-0.4.5-master
     make web-dev        # bun install + db:push + fester + next dev :3000
 
 Granular equivalent (what `make web-dev` does):
 
-    cd sysdeck-0.4.4-master/web
+    cd sysdeck-0.4.5-master/web
     bun install                     # dependencies
     bun run db:push                 # create + migrate db/custom.db (SQLite)
     bun run dev                     # Next.js on :3000

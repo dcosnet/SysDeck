@@ -32,6 +32,7 @@
 -->
 <component type="addon">
   <id>net.dcos.sysdeck</id>
+  <extends>org.cockpit_project.cockpit</extends>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>SysDeck</name>
@@ -80,7 +81,7 @@
        plugin's manifest.json. The cockpit apps page (pkg/apps/utils.tsx:152)
        reads launchable.type == "cockpit-manifest" and uses the text to
        link the AppStream component to the corresponding Cockpit plugin.
-       v0.0.35: SysDeck Kata restored as its own sidebar entry; added
+       v0.0.35: SysDeck Kata as its own sidebar entry; added
        sysdeck-jellyfin, sysdeck-photos, sysdeck-remotefs.
        v0.0.46: added sysdeck-modules (in-suite 3rd-party module installer).
        v0.0.47: added sysdeck-services (service/port editor promoted to
@@ -131,6 +132,18 @@
   </keywords>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.5" date="2026-09-17">
+      <description>
+        <p>v0.4.5: production-hardening release from a full
+        Mixture-of-Experts QA pass — security fixes in the bridge
+        (filename validation, single-statement SQL guard, CSS value
+        allowlist, subprocess timeouts), six structurally validated
+        nftables firewall templates with table-scoped flush, the web
+        console enforcing its type and lint gates, and packaging that
+        builds cleanly on all three distro paths. Comments state
+        standing decisions in the present tense.</p>
+      </description>
+    </release>
     <release version="0.4.4" date="2026-09-12">
       <description>
         <p>v0.4.4: ten package managers on both editions — pacman,
@@ -660,7 +673,7 @@
         plugins/sysdeck-containers-kata/ to plugins/sysdeck-kata/,
         converted from a "tools" manifest entry to a "menu" entry
         (label "SysDeck Kata", order 27), removed the "hidden helper"
-        wording, dropped the priority -1, and restored a dedicated
+        wording, dropped the priority -1, and added a dedicated
         keywords list. The Containers panel now manages Podman only —
         the Kata tab and its iframe were removed. The pre-built
         cockpit-kata React bundle (index.js + index.css) is shipped
@@ -814,7 +827,7 @@
         <p>NEW BUILD-TIME GUARD: `check-bridge-subcommands` in `make check`.
         Cross-checks every bridgeCmd() call in shared/bridge.js against the
         COMMANDS dict declared in each bridge/&lt;module&gt;.py. Would have
-        caught both bugs above. Regression-tested: reverting firmware.py to
+        caught both bugs above. Negative-tested: a summary-only firmware.py
         its v0.0.27 state causes the guard to fail with a clear message.</p>
         <p>FIXED MISSING CSS CLASSES: shared/sysdeck.css was missing
         .suite-progress, .suite-progress-bar, .suite-progress-fill,

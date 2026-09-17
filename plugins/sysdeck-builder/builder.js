@@ -120,8 +120,8 @@ export async function mount(panel, { bridge, EventBus }) {
             <h2 class="suite-panel-title">Image Builder</h2>
             <p class="suite-panel-subtitle">
                 ${primary
-                    ? `${primary.id} ${primary.version || ''} — <span class="suite-badge success">${summary.state}</span>`
-                    : `no backend installed — <span class="suite-badge danger">${summary.state}</span>`}
+                    ? `${escapeHtml(primary.id)} ${escapeHtml(primary.version || '')} — <span class="suite-badge success">${escapeHtml(summary.state)}</span>`
+                    : `no backend installed — <span class="suite-badge danger">${escapeHtml(summary.state)}</span>`}
                 · ${builds.length} build${builds.length === 1 ? '' : 's'} tracked
                 · ${artifacts.artifacts || 0} artifact${(artifacts.artifacts || 0) === 1 ? '' : 's'}
             </p>
@@ -172,10 +172,10 @@ function renderBackends(backends, primary) {
                 <ul class="suite-list">
                     ${backends.map(b => `
                         <li class="suite-mono">
-                            <strong>${b.id}</strong>
+                            <strong>${escapeHtml(b.id)}</strong>
                             ${b.version ? `<span class="suite-muted"> ${escapeHtml(b.version)}</span>` : ''}
                             ${b.id === (primary && primary.id) ? '<span class="suite-badge success">primary</span>' : ''}
-                            <span class="suite-muted">(${b.kind})</span>
+                            <span class="suite-muted">(${escapeHtml(b.kind)})</span>
                         </li>
                     `).join('')}
                 </ul>
@@ -309,7 +309,7 @@ function renderCreateProfile(backends, primary) {
         `;
     }
     const backendOptions = scaffoldable
-        .map(b => `<option value="${b.id}">${b.id}</option>`).join('');
+        .map(b => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.id)}</option>`).join('');
     return `
         <div class="suite-card">
             <div class="suite-card-header">
@@ -820,22 +820,14 @@ function wireEvents(panel, { bridge, EventBus }) {
             btn.disabled = true;
             btn.textContent = '⏳ ...';
             try {
-                // Read the file via cockpit.spawn cat. We use binary mode
-                // by reading as a binary stream. cockpit.spawn returns a
-                // channel that we collect into a byte array.
-                const channel = cockpit.spawn(["cat", path], {
+                // cockpit.spawn returns a promise; in binary mode it
+                // resolves to the full byte payload — the documented API,
+                // not the low-level channel surface.
+                const data = await cockpit.spawn(["cat", path], {
                     superuser: "try",
                     binary: true,
                 });
-                const chunks = [];
-                channel.ondata = (data) => { chunks.push(data); };
-                await new Promise((resolve, reject) => {
-                    channel.onclose = (resp) => {
-                        if (resp.exit_status === 0 || resp.exit_status === null) resolve();
-                        else reject(new Error(`cat exited ${resp.exit_status}`));
-                    };
-                });
-                const blob = new Blob(chunks, { type: 'application/octet-stream' });
+                const blob = new Blob([data], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;

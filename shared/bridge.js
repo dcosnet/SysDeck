@@ -99,7 +99,9 @@ export const bridge = {
         action: async (id, action) => {
             // containers.py has no 'action' subcommand; use podman directly
             const map = { stop: "stop", restart: "restart", rm: "rm" };
-            await spawn(["podman", map[action] || action, id], { superuser: true });
+            // 'try': rootless podman manages the operator's own store;
+            // escalation only when the host demands it
+            await spawn(["podman", map[action] || action, id], { superuser: "try" });
         },
         count: async () => {  // no 'count' subcommand; compute from list
             try {
@@ -607,10 +609,11 @@ export const bridge = {
 
     benchmark: {
         listTests:  () => bridgeCmd("benchmark", ["list-tests"]),
-        runCpu:     () => bridgeCmd("benchmark", ["run-cpu"], { superuser: true }),
-        runMemory:  () => bridgeCmd("benchmark", ["run-memory"], { superuser: true }),
-        runIo:      () => bridgeCmd("benchmark", ["run-io"], { superuser: true }),
-        runTest:    (name) => bridgeCmd("benchmark", ["run-test", name], { superuser: true }),
+        // sysbench needs no root; lynis (runLynis) does and keeps it
+        runCpu:     () => bridgeCmd("benchmark", ["run-cpu"], { superuser: "try" }),
+        runMemory:  () => bridgeCmd("benchmark", ["run-memory"], { superuser: "try" }),
+        runIo:      () => bridgeCmd("benchmark", ["run-io"], { superuser: "try" }),
+        runTest:    (name) => bridgeCmd("benchmark", ["run-test", name], { superuser: "try" }),
     },
 
     packages: {

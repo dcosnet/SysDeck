@@ -17,6 +17,7 @@
 //     absent; with no cockpit tree the panel says so and lists nothing
 //     (the catalog fills the moment a tree exists).
 import { useMemo } from 'react'
+import { TableCell } from '@/components/ui/table'
 import {
   ArrowRight,
   Activity,
@@ -42,8 +43,7 @@ import {
   PanelSkeleton,
   SourceBadge,
   StatCard,
-  StateBadge,
-} from '@/components/sysdeck/ui'
+  } from '@/components/sysdeck/ui'
 import { cn } from '@/lib/utils'
 
 // ── module identity helpers ──────────────────────────────────────────
@@ -115,21 +115,21 @@ export function CockpitModulesPanel() {
           empty="No cockpit modules detected."
           headers={['Module', 'Cockpit name', 'Package', 'Backend', 'API', 'Order']}
           renderRow={(m) => (
-            <tr
-              className="cursor-pointer"
-              onClick={() => gotoModule(m.name)}
-              title={`open ${m.label} detail`}
-            >
-              <td className="flex items-center gap-2 font-medium">
+            <>
+              <TableCell
+                className="flex cursor-pointer items-center gap-2 font-medium"
+                onClick={() => gotoModule(m.name)}
+                title={`open ${m.label} detail`}
+              >
                 {(() => {
                   const Icon = cockpitModuleIcon(m.name)
                   return <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
                 })()}
                 {m.label}
-              </td>
-              <td className="font-mono text-xs text-muted-foreground">{m.name}</td>
-              <td className="font-mono text-xs text-muted-foreground">{m.pkg ?? '—'}</td>
-              <td className="font-mono text-xs">
+              </TableCell>
+              <TableCell className="cursor-pointer font-mono text-xs text-muted-foreground">{m.name}</TableCell>
+              <TableCell className="cursor-pointer font-mono text-xs text-muted-foreground">{m.pkg ?? '—'}</TableCell>
+              <TableCell className="cursor-pointer font-mono text-xs">
                 {m.backend ? (
                   <span className={cn('flex items-center gap-1.5', m.backend.present ? 'text-emerald-400' : 'text-muted-foreground')}>
                     <span className={cn('h-1.5 w-1.5 rounded-full', m.backend.present ? 'bg-emerald-500 sd-live-dot' : 'bg-muted-foreground/40')} />
@@ -138,10 +138,10 @@ export function CockpitModulesPanel() {
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
-              </td>
-              <td className="font-mono text-xs text-muted-foreground">{m.apiVersion ?? '—'}</td>
-              <td className="font-mono text-xs tabular-nums text-muted-foreground">{m.order}</td>
-            </tr>
+              </TableCell>
+              <TableCell className="cursor-pointer font-mono text-xs text-muted-foreground">{m.apiVersion ?? '—'}</TableCell>
+              <TableCell className="cursor-pointer font-mono text-xs tabular-nums text-muted-foreground">{m.order}</TableCell>
+            </>
           )}
         />
       </PanelCard>
