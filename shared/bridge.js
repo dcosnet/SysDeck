@@ -506,7 +506,12 @@ export const bridge = {
     //     /metrics?sandbox=<id> + filesystem /run/vc/sbs/, /run/kata/
     //   - summary/version/check → kata-runtime version/env --json/check
     //   - pxeStatus → systemctl is-active dnsmasq + real /srv/tftp probes
-    //   - qcrowsList → filesystem /usr/share/sysdeck/kata/qcrows/
+    //   - qcrowsList → filesystem /usr/share/sysdeck/kata/qcrows/ — since
+    //     the cockpit-kata master spec v0.2 this is FORMAT-AWARE: each
+    //     archive is parsed in memory (metadata.toml + menu.toml), so
+    //     the panel shows image name/version/arch/kernel/hypervisors.
+    //   - qcrowsInspect/qcrowsVerify → single-image detail + in-memory
+    //     verification mirroring cockpit-kata's qcrows-verify.
     // Read-only queries do NOT pass { superuser: 'try' }.
     kata: {
         list:       () => bridgeCmd("kata", ["list"]),
@@ -516,7 +521,9 @@ export const bridge = {
         version:    () => bridgeCmd("kata", ["version"]),
         check:      () => bridgeCmd("kata", ["check"]),
         pxeStatus:  () => bridgeCmd("kata", ["pxe-status"]),
-        qcrowsList: () => bridgeCmd("kata", ["qcrows-list"]),
+        qcrowsList:   () => bridgeCmd("kata", ["qcrows-list"]),
+        qcrowsInspect: (filename) => bridgeCmd("kata", ["qcrows-inspect", filename]),
+        qcrowsVerify:  (filename) => bridgeCmd("kata", ["qcrows-verify", filename]),
     },
 
     // v0.0.39: Monitoring module — shared tabbed Prometheus + Grafana panel.

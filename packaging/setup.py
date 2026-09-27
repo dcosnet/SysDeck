@@ -24,7 +24,7 @@ import shutil
 import subprocess
 from setuptools import setup
 
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 PACKAGE = "sysdeck"
 
 # The repository root (setup.py lives in packaging/).

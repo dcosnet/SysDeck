@@ -1,3 +1,15 @@
+sysdeck (0.4.6-1) unstable; urgency=medium
+
+  * QCrows format-aware Kata bridge: qcrows-list parses metadata.toml +
+    menu.toml in memory; new qcrows-inspect / qcrows-verify subcommands
+    mirror cockpit-kata's master verification (kernel magic, config,
+    sha256 hash walk) without extracting to disk. Kata panel enriched
+    with image metadata + Verify/Inspect actions.
+  * integrity.score() returns None on PermissionError (root-only
+    /var/log/lynis.log no longer crashes unprivileged sessions).
+
+ -- Jeremy Anderson <info@dcos.net>  Sun, 27 Sep 2026 01:13:57 +0000
+
 sysdeck (0.4.5-1) unstable; urgency=medium
 
   * PRODUCTION-HARDENING RELEASE — full MoE QA pass (web designers,

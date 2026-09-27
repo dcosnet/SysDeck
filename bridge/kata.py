@@ -29,10 +29,25 @@ fabricated records:
   pxe-status          real PXE/TFTP status: systemctl is-active
                       dnsmasq + test -d /srv/tftp + ls
                       /srv/tftp/pxelinux.cfg/.
-  qcrows-list         list QCrows kernel bundles in
-                      /usr/share/sysdeck/kata/qcrows/. (qcrows-export
-                      and qcrows-initrd-regen are operator binaries the
-                      host runs directly — the bridge does not wrap them.)
+  qcrows-list         list QCrows images in /usr/share/sysdeck/kata/qcrows/.
+                      Format-aware per the cockpit-kata master spec
+                      (qcrows-spec.md v0.2.0): each .qcrows/.qcrows.gz/
+                      .tar.gz entry is opened IN MEMORY and its
+                      metadata.toml + menu.toml are parsed, surfacing
+                      {image, kernel, rootfs, hypervisors, menu} per
+                      bundle.  Legacy non-QCrows tarballs degrade
+                      gracefully to stat-only entries (qcrows: false).
+  qcrows-inspect <f>  detailed single-image view: full metadata, menu,
+                      member listing (name/size/mode), hash-file presence.
+  qcrows-verify <f>   in-memory verification mirroring cockpit-kata's
+                      qcrows-verify: required files, kernel binary
+                      magic (bzImage "HdrS" @0x202 / ELF magic), kernel
+                      config + required Kata options (warn), initrd
+                      (warn), metadata format_version + hypervisors,
+                      and a full sha256sum -c style hash walk.
+                      Returns {ok, passed, failed, warnings, checks[]}.
+                      (qcrows-export and qcrows-initrd-regen remain
+                      operator binaries the bridge does not wrap.)
 
 KEY DESIGN DECISIONS (Kata 3.x reality):
   - kata-runtime list/inspect were REMOVED in 3.x. Do not call them.
@@ -69,6 +84,8 @@ Usage:
     python3 /usr/lib/sysdeck/bridge/kata.py check
     python3 /usr/lib/sysdeck/bridge/kata.py pxe-status
     python3 /usr/lib/sysdeck/bridge/kata.py qcrows-list
+    python3 /usr/lib/sysdeck/bridge/kata.py qcrows-inspect <filename>
+    python3 /usr/lib/sysdeck/bridge/kata.py qcrows-verify <filename>
 """
 
 import json
@@ -572,17 +589,213 @@ def cmd_pxe_status(_args: list[str]) -> dict[str, Any]:
     }
 
 
+# ── QCrows format support (cockpit-kata master spec v0.2.0) ────────
+#
+# QCrows (cue-crows) is the in-house self-describing VM container image
+# format for Kata Containers, master-implemented in cockpit-kata
+# (qcrows-spec.md + qcrows-pack / qcrows-verify / qcrows-inspect).
+# SysDeck is a *consumer*: it reads the real archives from
+# /usr/share/sysdeck/kata/qcrows/ in memory (no extraction to disk —
+# nothing executable is ever materialized from an image here) and
+# mirrors the master tools' verification semantics.
+
+QCROWS_FORMAT_VERSION = "0.2.0"
+QCROWS_MAX_MEMBERS = 10_000          # tar-bomb guard (header count)
+QCROWS_MAX_TEXT_MEMBER_BYTES = 1 << 20  # 1 MiB cap on parsed text members
+
+# Required Kata kernel options (qcrows-verify warns when absent).
+QCROWS_REQUIRED_KATA_OPTS = (
+    "CONFIG_VSOCKETS", "CONFIG_VIRTIO", "CONFIG_VIRTIO_PCI",
+    "CONFIG_DEVTMPFS", "CONFIG_DEVTMPFS_MOUNT",
+)
+
+_QCROWS_REQUIRED_FILES = ("metadata.toml", "menu.toml", "hashes.sha256")
+
+
+def _qcrows_member_names(tf: Any) -> dict[str, Any]:
+    """Map normalized member name → TarInfo for a QCrows archive.
+
+    Members are stored "./"-prefixed by qcrows-pack; normalize both
+    spellings.  Raises ValueError on tar-bomb-sized header counts.
+    """
+    members = tf.getmembers()
+    if len(members) > QCROWS_MAX_MEMBERS:
+        raise ValueError(f"too many tar members ({len(members)})")
+    out: dict[str, Any] = {}
+    for m in members:
+        if not m.isfile():
+            continue
+        name = m.name
+        if name.startswith("./"):
+            name = name[2:]
+        out[name] = m
+    return out
+
+
+def _qcrows_read_member(tf: Any, info: Any) -> bytes:
+    """Read one member's bytes with the text-member size cap."""
+    if info.size > QCROWS_MAX_TEXT_MEMBER_BYTES:
+        raise ValueError(f"member {info.name!r} exceeds size cap")
+    fh = tf.extractfile(info)
+    if fh is None:
+        return b""
+    return fh.read()
+
+
+def _qcrows_parse_toml(text: str) -> dict[str, Any]:
+    """Parse the flat QCrows TOML shape into a nested dict.
+
+    Supports exactly what qcrows-pack emits: ``[ section ]`` headers
+    (dotted sections become nested dicts), ``key = "str"``,
+    ``key = true/false``, ``key = 123``, ``key = [ "a", "b" ]``.
+    Unknown lines and # comments are skipped.  Section-aware by
+    design — cockpit-kata's qcrows-inspect greps first-matches, which
+    mis-attributes kernel fields to initrd/rootfs rows; this parser
+    does not.
+    """
+    root: dict[str, Any] = {}
+    current: dict[str, Any] = root
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip().strip('"')
+            current = root
+            for part in section.split("."):
+                part = part.strip().strip('"')
+                current = current.setdefault(part, {})
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip().strip('"')
+        value = value.strip()
+        # Strip trailing comments outside quotes (qcrows-pack emits
+        # none, but hand-edited metadata may carry them).
+        if value.startswith('"'):
+            end = value.find('"', 1)
+            current[key] = value[1:end] if end > 0 else value[1:]
+        elif value.startswith("["):
+            try:
+                current[key] = json.loads(value.replace("'", '"'))
+            except ValueError:
+                current[key] = [
+                    v.strip().strip('"')
+                    for v in value.strip("[]").split(",") if v.strip()
+                ]
+        elif value in ("true", "false"):
+            current[key] = value == "true"
+        else:
+            try:
+                current[key] = int(value)
+            except ValueError:
+                current[key] = value
+    return root
+
+
+def _qcrows_kernel_magic_ok(blob: bytes) -> tuple[bool, str]:
+    """Classify a kernel binary by magic — the in-memory equivalent of
+    qcrows-verify's `file | grep (ELF|Linux.*boot)` check.
+
+    Returns (ok, kind) where kind is "elf" | "bzimage" | "unknown".
+    """
+    if blob[:4] == b"\x7fELF":
+        return True, "elf"
+    if len(blob) >= 0x206 and blob[0x202:0x206] == b"HdrS":
+        return True, "bzimage"
+    return False, "unknown"
+
+
+def _qcrows_image_info(path: Path) -> dict[str, Any]:
+    """Read one QCrows archive's self-description, in memory.
+
+    Returns {qcrows: bool, format_version, image, kernel, rootfs,
+    initrd, hypervisors, menu, members, error?}.  Non-QCrows tarballs
+    (no metadata.toml) return qcrows: false; unreadable archives
+    return qcrows: false with an error note — never a raise.
+    """
+    import tarfile
+    info: dict[str, Any] = {"qcrows": False}
+    try:
+        with tarfile.open(path, "r:*") as tf:
+            members = _qcrows_member_names(tf)
+            info["members"] = len(members)
+            if "metadata.toml" not in members:
+                info["error"] = "no metadata.toml (not a QCrows image)"
+                return info
+            meta_text = _qcrows_read_member(
+                tf, members["metadata.toml"],
+            ).decode("utf-8", errors="replace")
+            meta = _qcrows_parse_toml(meta_text)
+            info["qcrows"] = True
+            info["format_version"] = meta.get("qcrows", {}).get(
+                "format_version",
+            )
+            image = meta.get("image", {})
+            info["image"] = {
+                k: image.get(k)
+                for k in ("name", "version", "description", "arch",
+                          "os", "created_at")
+            }
+            info["hypervisors"] = image.get(
+                "compatibility", {},
+            ).get("hypervisors", [])
+            info["kernel"] = meta.get("kernel", {})
+            info["rootfs"] = meta.get("rootfs", {})
+            info["initrd"] = meta.get("initrd", {})
+            info["has_boot_params"] = "boot-params.conf" in members
+            info["has_kernel_config"] = "kernel/config" in members
+            kernel_fmt = "vmlinux" if (
+                info["kernel"].get("format") == "vmlinux"
+                or "kernel/vmlinux" in members
+            ) else "vmlinuz"
+            info["kernel_binary_present"] = (
+                f"kernel/{kernel_fmt}" in members
+            )
+            if "menu.toml" in members:
+                menu = _qcrows_parse_toml(_qcrows_read_member(
+                    tf, members["menu.toml"],
+                ).decode("utf-8", errors="replace"))
+                info["menu"] = {
+                    "label": menu.get("menu", {}).get("label"),
+                    "category": menu.get("menu", {}).get("category"),
+                }
+            else:
+                info["menu"] = {}
+    except (tarfile.TarError, ValueError, OSError) as exc:
+        info["qcrows"] = False
+        info["members"] = 0
+        info["error"] = _sanitize_output(str(exc), 200)
+    return info
+
+
+def _qcrows_resolve(args: list[str]) -> Path | None:
+    """Resolve a user-supplied bundle filename safely under QCROWS_DIR.
+
+    Filename validation + realpath containment — the same hardening
+    the qcrows-list path applies.  Returns None (and the caller
+    reports the error) on any traversal / invalid name.
+    """
+    if not args or not _validate_filename(args[0]):
+        return None
+    return _resolve_path_under_base(str(QCROWS_DIR / args[0]), QCROWS_DIR)
+
+
 # ── Subcommand: qcrows-list ────────────────────────────────────────
 #
-# QCrows kernel bundles are the kata kernel/module compilation
-# surface; the listing reads the real filesystem.
+# Format-aware per the cockpit-kata master spec: every archive in the
+# bundle dir is opened in memory and its self-description surfaced.
+# Legacy non-QCrows tarballs degrade to stat-only entries.
 
 
 def cmd_qcrows_list(_args: list[str]) -> list[dict[str, Any]]:
-    """List QCrows kernel bundles in /usr/share/sysdeck/kata/qcrows/.
+    """List QCrows images in /usr/share/sysdeck/kata/qcrows/.
 
-    Each entry: {filename, path, size_bytes, mtime}.
-    Returns [] if the directory doesn't exist (empty state, NOT mock).
+    Each entry: {filename, path, size_bytes, size_mb, mtime, qcrows,
+    format_version?, image?, kernel?, rootfs?, hypervisors?, menu?,
+    error?}.  Returns [] if the directory doesn't exist (empty state,
+    NOT mock).
     """
     if not QCROWS_DIR.is_dir():
         return []
@@ -591,32 +804,227 @@ def cmd_qcrows_list(_args: list[str]) -> list[dict[str, Any]]:
         for entry in sorted(QCROWS_DIR.iterdir()):
             if not entry.is_file():
                 continue
-            if not entry.name.endswith((".qcrows", ".tar.gz", ".tgz")):
+            if not entry.name.endswith((".qcrows", ".qcrows.gz", ".tar.gz", ".tgz")):
                 continue
             stat = entry.stat()
-            bundles.append({
+            record: dict[str, Any] = {
                 "filename": entry.name,
                 "path": str(entry),
                 "size_bytes": stat.st_size,
                 "size_mb": round(stat.st_size / (1024 * 1024), 2),
                 "mtime": stat.st_mtime,
-            })
+            }
+            record.update(_qcrows_image_info(entry))
+            bundles.append(record)
     except (PermissionError, OSError):
         pass
     return bundles
 
 
+# ── Subcommand: qcrows-inspect ─────────────────────────────────────
+
+
+def cmd_qcrows_inspect(args: list[str]) -> dict[str, Any]:
+    """Detailed view of one QCrows image in the bundle directory.
+
+    Returns the qcrows-list record plus the full member listing
+    (name, size, mode) and build provenance.  {error: ...} on an
+    invalid filename, traversal attempt, or unreadable archive.
+    """
+    resolved = _qcrows_resolve(args)
+    if resolved is None or not resolved.is_file():
+        return {"error": f"bundle not found under {QCROWS_DIR}: {args[0] if args else ''!r}"}
+    import tarfile
+    result = _qcrows_image_info(resolved)
+    result["filename"] = resolved.name
+    result["path"] = str(resolved)
+    try:
+        with tarfile.open(resolved, "r:*") as tf:
+            members = _qcrows_member_names(tf)
+            result["members_list"] = [
+                {"name": name, "size": m.size, "mode": oct(m.mode)}
+                for name, m in sorted(members.items())
+            ]
+            if "build.toml" in members:
+                build = _qcrows_parse_toml(_qcrows_read_member(
+                    tf, members["build.toml"],
+                ).decode("utf-8", errors="replace"))
+                result["build"] = build.get("build", {})
+    except (tarfile.TarError, ValueError, OSError) as exc:
+        result["error"] = _sanitize_output(str(exc), 200)
+    return result
+
+
+# ── Subcommand: qcrows-verify ──────────────────────────────────────
+#
+# In-memory mirror of cockpit-kata's qcrows-verify: nothing is
+# extracted to disk, no `file` subprocess is spawned (kernel magic is
+# checked on bytes), and the hash walk streams members.
+
+
+def cmd_qcrows_verify(args: list[str]) -> dict[str, Any]:
+    """Verify one QCrows image against the master spec's checks.
+
+    Checks (mirroring qcrows-verify):
+      1. required files (metadata.toml, menu.toml, hashes.sha256)
+      2. rootfs present (rootfs.tar.*)
+      3. kernel binary present + magic (bzImage/ELF)
+      4. kernel/config present + required Kata options (warn only)
+      5. initrd present (warn only)
+      6. metadata format_version + hypervisors declared
+      7. every hashes.sha256 entry matches the member bytes
+
+    Returns {ok, passed, failed, warnings, checks: [{name, passed,
+    detail}]} or {error: ...} for bad filenames / unreadable archives.
+    """
+    import hashlib
+    import tarfile
+
+    resolved = _qcrows_resolve(args)
+    if resolved is None or not resolved.is_file():
+        return {"error": f"bundle not found under {QCROWS_DIR}: {args[0] if args else ''!r}"}
+
+    checks: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    def check(name: str, passed: bool, detail: str) -> None:
+        checks.append({"name": name, "passed": passed, "detail": detail})
+
+    try:
+        with tarfile.open(resolved, "r:*") as tf:
+            members = _qcrows_member_names(tf)
+
+            # 1. required files
+            for req in _QCROWS_REQUIRED_FILES:
+                check(f"{req} present", req in members,
+                      "found" if req in members else "missing (required)")
+            # 2. rootfs
+            rootfs = next(
+                (n for n in members if n.startswith("rootfs.tar")), None,
+            )
+            check("rootfs found", rootfs is not None,
+                  rootfs or "no rootfs.tar.* member")
+            # 3. kernel binary + magic
+            kernel_member = next(
+                (n for n in ("kernel/vmlinuz", "kernel/vmlinux")
+                 if n in members), None,
+            )
+            magic_kind = "unknown"
+            if kernel_member:
+                # bzImage magic "HdrS" sits at 0x202 — read past it.
+                blob = tf.extractfile(members[kernel_member]).read(0x206 + 4)
+                ok_magic, magic_kind = _qcrows_kernel_magic_ok(blob)
+                check("kernel binary format valid", ok_magic,
+                      f"{kernel_member} ({magic_kind})")
+            else:
+                check("kernel binary found", False,
+                      "kernel/vmlinuz|vmlinux missing (required in v0.2+)")
+            # 4. kernel config + Kata options (config presence is a hard
+            # check; option shortfalls are WARNINGS only — mirroring
+            # qcrows-verify, which still exits 0 on them)
+            if "kernel/config" in members:
+                check("kernel/config found", True, "kernel/config")
+                cfg_text = _qcrows_read_member(
+                    tf, members["kernel/config"],
+                ).decode("utf-8", errors="replace")
+                missing = [
+                    opt for opt in QCROWS_REQUIRED_KATA_OPTS
+                    if f"{opt}=y" not in cfg_text
+                ]
+                if missing:
+                    warnings.append(
+                        "required Kata options missing: " + ", ".join(missing),
+                    )
+            else:
+                check("kernel/config found", False,
+                      "kernel/config missing (required in v0.2+)")
+            # 5. initrd (warn)
+            has_initrd = any(
+                n in members for n in (
+                    "initrd.img", "initrd.cpio.gz", "initrd.cpio.lz4",
+                    "initrd.cpio.xz", "initrd.cramfs",
+                )
+            )
+            if not has_initrd:
+                warnings.append(
+                    "no initrd found (one of initrd/cramfs is recommended)",
+                )
+            # 6. metadata fields
+            if "metadata.toml" in members:
+                meta = _qcrows_parse_toml(_qcrows_read_member(
+                    tf, members["metadata.toml"],
+                ).decode("utf-8", errors="replace"))
+                fmt_ver = meta.get("qcrows", {}).get("format_version")
+                check("metadata format_version", fmt_ver is not None,
+                      str(fmt_ver or "missing"))
+                hypers = meta.get("image", {}).get(
+                    "compatibility", {},
+                ).get("hypervisors", [])
+                check("hypervisor compatibility declared", bool(hypers),
+                      ", ".join(map(str, hypers)) or "not declared")
+            # 7. hash walk (sha256sum -c semantics, in memory)
+            if "hashes.sha256" in members:
+                hash_text = _qcrows_read_member(
+                    tf, members["hashes.sha256"],
+                ).decode("utf-8", errors="replace")
+                passed_n = 0
+                failed: list[str] = []
+                for line in hash_text.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    m = re.match(r"^([0-9a-f]{64})[ *]{2}(.+)$", line)
+                    if not m:
+                        failed.append(f"unparseable line: {line[:60]}")
+                        continue
+                    expect, rel = m.group(1), m.group(2).strip()
+                    rel = rel[2:] if rel.startswith("./") else rel
+                    if rel not in members:
+                        failed.append(f"{rel}: no such member")
+                        continue
+                    h = hashlib.sha256()
+                    fh = tf.extractfile(members[rel])
+                    for chunk in iter(
+                        lambda: fh.read(1024 * 1024), b"",
+                    ):
+                        h.update(chunk)
+                    if h.hexdigest() != expect:
+                        failed.append(f"{rel}: checksum mismatch")
+                    else:
+                        passed_n += 1
+                check("SHA-256 checksums", not failed,
+                      f"{passed_n} verified" if not failed else
+                      "; ".join(failed[:5]))
+            else:
+                check("SHA-256 checksums", False,
+                      "hashes.sha256 missing — cannot verify integrity")
+    except (tarfile.TarError, ValueError, OSError) as exc:
+        return {"error": _sanitize_output(str(exc), 200)}
+
+    passed = sum(1 for c in checks if c["passed"])
+    failed = len(checks) - passed
+    return {
+        "ok": failed == 0,
+        "passed": passed,
+        "failed": failed,
+        "warnings": warnings,
+        "checks": checks,
+    }
+
+
 # ── Dispatch table ─────────────────────────────────────────────────
 
 COMMANDS = {
-    "list":          cmd_list,
-    "inspect":       cmd_inspect,
-    "metrics":       cmd_metrics,
-    "summary":       cmd_summary,
-    "version":       cmd_version,
-    "check":         cmd_check,
-    "pxe-status":    cmd_pxe_status,
-    "qcrows-list":   cmd_qcrows_list,
+    "list":            cmd_list,
+    "inspect":         cmd_inspect,
+    "metrics":         cmd_metrics,
+    "summary":         cmd_summary,
+    "version":         cmd_version,
+    "check":           cmd_check,
+    "pxe-status":      cmd_pxe_status,
+    "qcrows-list":     cmd_qcrows_list,
+    "qcrows-inspect":  cmd_qcrows_inspect,
+    "qcrows-verify":   cmd_qcrows_verify,
 }
 
 

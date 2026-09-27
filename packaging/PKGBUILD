@@ -3,7 +3,7 @@
 # Upstream: https://dcos.net
 
 pkgname=sysdeck
-pkgver=0.4.5
+pkgver=0.4.6
 pkgrel=1
 pkgdesc="Unified operations surface for Linux infrastructure — the Cockpit plugin edition: 27 domain modules plus the Python bridge (the standalone web console ships in the master tarball)"
 arch=('any')

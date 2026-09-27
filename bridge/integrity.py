@@ -20,11 +20,17 @@ HARDENING_RE = re.compile(r"Hardening index\s*:\s*(\d+)")
 
 
 def score() -> int | None:
-    """Return the latest hardening index, or None if lynis hasn't run."""
+    """Return the latest hardening index, or None if lynis hasn't run.
+
+    Catches OSError (not just FileNotFoundError) — on hosts where lynis
+    ran as root, /var/log/lynis.log is root-only readable and an
+    unprivileged session gets PermissionError; that must degrade to
+    None (the honest "no score for us" state), never crash the bridge.
+    """
     try:
         with open("/var/log/lynis.log", encoding="utf-8") as f:
             log = f.read()
-    except FileNotFoundError:
+    except OSError:
         return None
     m = HARDENING_RE.search(log)
     return int(m.group(1)) if m else None

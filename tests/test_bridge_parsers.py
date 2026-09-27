@@ -834,8 +834,271 @@ class TestKataBridgeProduction(unittest.TestCase):
 
     def test_kata_bridge_dispatch_table_has_all_subcommands(self):
         expected = {"list", "inspect", "metrics", "summary", "version",
-                    "check", "pxe-status", "qcrows-list"}
+                    "check", "pxe-status", "qcrows-list",
+                    "qcrows-inspect", "qcrows-verify"}
         self.assertEqual(set(self.kata.COMMANDS.keys()), expected)
+
+
+# ── QCrows format-aware bridge tests (cockpit-kata master spec) ────
+#
+# The bridge must be a real QCrows CONSUMER: parse metadata.toml /
+# menu.toml from archives in memory, mirror the master qcrows-verify
+# checks, and reject tampered bundles.  These tests build synthetic
+# .qcrows archives with the same layout qcrows-pack produces.
+
+
+def _build_qcrows(dest, *, kernel_fmt="vmlinuz", tamper_rootfs=False,
+                  omit_metadata=False, kata_opts=True):
+    """Write a synthetic spec-v0.2 .qcrows archive at *dest*.
+
+    Mirrors qcrows-pack's layout: ./-prefixed members, metadata.toml,
+    menu.toml, hashes.sha256 (sha256sum format), rootfs.tar.gz, kernel/
+    binary+config, boot-params.conf.  The kernel blob carries a real
+    bzImage magic ("HdrS" @ 0x202).  Returns the archive path.
+    """
+    import hashlib
+    import io
+    import tarfile
+
+    kernel = bytearray(b"\x00" * 0x400)
+    kernel[0x202:0x206] = b"HdrS"
+    kernel[0x206:0x208] = (1).to_bytes(2, "little")  # boot sector setup
+    config_lines = ["# synthetic config"]
+    if kata_opts:
+        config_lines += [
+            "CONFIG_VSOCKETS=y", "CONFIG_VIRTIO=y",
+            "CONFIG_VIRTIO_PCI=y", "CONFIG_DEVTMPFS=y",
+            "CONFIG_DEVTMPFS_MOUNT=y",
+        ]
+    config = ("\n".join(config_lines) + "\n").encode()
+
+    metadata = f"""[ qcrows ]
+format_version = "0.2.0"
+
+[ image ]
+name = "synthetic-test"
+version = "1.0.0"
+description = "unit-test image"
+arch = "x86_64"
+os = "linux"
+created_at = "2026-09-26T00:00:00Z"
+
+[ image.compatibility ]
+hypervisors = [ "qemu", "cloud-hypervisor" ]
+kata_runtime_min = "2.5"
+
+[ kernel ]
+version = "6.6.32"
+included = true
+path = "kernel/{kernel_fmt}"
+format = "{kernel_fmt}"
+config_path = "kernel/config"
+size_mb = 0
+
+[ initrd ]
+included = false
+type = ""
+path = ""
+
+[ rootfs ]
+type = "tar-gzip"
+path = "rootfs.tar.gz"
+size_mb = 1
+
+[ boot_params ]
+included = true
+path = "boot-params.conf"
+""".encode()
+    menu = b"""[ menu ]
+label = "Synthetic Test"
+category = "custom"
+
+[ menu.actions ]
+import = true
+"""
+    rootfs_buf = io.BytesIO()
+    with tarfile.open(fileobj=rootfs_buf, mode="w:gz") as rtf:
+        info = tarfile.TarInfo("opt/ai-lsc/stack.json")
+        payload = b'{"tools": ["ollama"]}'
+        info.size = len(payload)
+        rtf.addfile(info, io.BytesIO(payload))
+    rootfs = rootfs_buf.getvalue()
+    # Tampering swaps the archived bytes AFTER the hashes are computed
+    # from the originals — that's what "integrity violation" means:
+    # hashes.sha256 no longer describes the shipped payload.
+    archived_rootfs = (
+        rootfs[:-1] + bytes([rootfs[-1] ^ 0xFF])
+        if tamper_rootfs else rootfs
+    )
+
+    members = [
+        ("rootfs.tar.gz", rootfs),
+        ("kernel/" + kernel_fmt, bytes(kernel)),
+        ("kernel/config", config),
+        ("boot-params.conf", b"console=ttyS0\n"),
+        ("menu.toml", menu),
+    ]
+    if not omit_metadata:
+        members.append(("metadata.toml", metadata))
+
+    hash_lines = []
+    for name, data in sorted(members):
+        hash_lines.append(
+            f"{hashlib.sha256(data).hexdigest()}  ./{name}",
+        )
+    members.append(("hashes.sha256", ("\n".join(hash_lines) + "\n").encode()))
+    # Swap in the tampered payload for the archive write only.
+    members = [
+        (name, archived_rootfs if name == "rootfs.tar.gz" else data)
+        for name, data in members
+    ]
+
+    with tarfile.open(dest, "w:gz") as tf:
+        for name, data in sorted(members, key=lambda x: x[0]):
+            info = tarfile.TarInfo("./" + name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return dest
+
+
+class TestQcrowsFormatBridge(unittest.TestCase):
+    """Verify the format-aware QCrows consumer in bridge/kata.py."""
+
+    def setUp(self):
+        import kata
+        self.kata = kata
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.qcdir = Path(self._tmp.name)
+        self._orig_dir = kata.QCROWS_DIR
+        kata.QCROWS_DIR = self.qcdir
+        self.addCleanup(setattr, kata, "QCROWS_DIR", self._orig_dir)
+
+    def test_list_parses_metadata_and_menu(self):
+        _build_qcrows(self.qcdir / "test.qcrows")
+        result = self.kata.cmd_qcrows_list([])
+        self.assertEqual(len(result), 1)
+        entry = result[0]
+        self.assertTrue(entry["qcrows"])
+        self.assertEqual(entry["format_version"], "0.2.0")
+        self.assertEqual(entry["image"]["name"], "synthetic-test")
+        self.assertEqual(entry["kernel"]["version"], "6.6.32")
+        self.assertEqual(entry["hypervisors"], ["qemu", "cloud-hypervisor"])
+        self.assertEqual(entry["menu"]["label"], "Synthetic Test")
+        self.assertTrue(entry["kernel_binary_present"])
+        self.assertTrue(entry["has_kernel_config"])
+
+    def test_list_degrades_legacy_tarball_gracefully(self):
+        import tarfile
+        with tarfile.open(self.qcdir / "legacy.tgz", "w:gz") as tf:
+            info = tarfile.TarInfo("readme")
+            info.size = 3
+            tf.addfile(info, __import__("io").BytesIO(b"abc"))
+        entry = self.kata.cmd_qcrows_list([])[0]
+        self.assertFalse(entry["qcrows"])
+        self.assertIn("error", entry)
+
+    def test_verify_passes_on_valid_image(self):
+        _build_qcrows(self.qcdir / "good.qcrows")
+        v = self.kata.cmd_qcrows_verify(["good.qcrows"])
+        self.assertTrue(v["ok"], v)
+        self.assertEqual(v["failed"], 0)
+        names = {c["name"] for c in v["checks"]}
+        self.assertIn("kernel binary format valid", names)
+        self.assertIn("SHA-256 checksums", names)
+
+    def test_verify_detects_tampered_payload(self):
+        _build_qcrows(self.qcdir / "bad.qcrows", tamper_rootfs=True)
+        v = self.kata.cmd_qcrows_verify(["bad.qcrows"])
+        self.assertFalse(v["ok"])
+        failed = [c["name"] for c in v["checks"] if not c["passed"]]
+        self.assertIn("SHA-256 checksums", failed)
+
+    def test_verify_fails_when_kernel_missing(self):
+        # v0.2 requires a kernel — a metadata-only archive must fail.
+        import hashlib
+        import io
+        import tarfile
+        metadata = b'[ qcrows ]\nformat_version = "0.2.0"\n'
+        members = [("metadata.toml", metadata), ("menu.toml", b"[ menu ]\n")]
+        hash_lines = [
+            f"{hashlib.sha256(d).hexdigest()}  ./{n}"
+            for n, d in members
+        ]
+        members.append((
+            "hashes.sha256",
+            ("\n".join(hash_lines) + "\n").encode(),
+        ))
+        with tarfile.open(self.qcdir / "nokernel.qcrows", "w:gz") as tf:
+            for name, data in members:
+                info = tarfile.TarInfo("./" + name)
+                info.size = len(data)
+                tf.addfile(info, io.BytesIO(data))
+        v = self.kata.cmd_qcrows_verify(["nokernel.qcrows"])
+        self.assertFalse(v["ok"])
+        failed = [c["name"] for c in v["checks"] if not c["passed"]]
+        self.assertIn("kernel binary found", failed)
+
+    def test_verify_warns_on_missing_kata_options_but_passes(self):
+        # Master semantics: option shortfalls are WARNINGS, not failures.
+        _build_qcrows(self.qcdir / "noopts.qcrows", kata_opts=False)
+        v = self.kata.cmd_qcrows_verify(["noopts.qcrows"])
+        self.assertTrue(v["ok"], v)
+        self.assertTrue(any("Kata options" in w for w in v["warnings"]))
+
+    def test_inspect_returns_member_listing(self):
+        _build_qcrows(self.qcdir / "img.qcrows")
+        r = self.kata.cmd_qcrows_inspect(["img.qcrows"])
+        self.assertTrue(r["qcrows"])
+        names = {m["name"] for m in r["members_list"]}
+        self.assertIn("kernel/vmlinuz", names)
+        self.assertIn("rootfs.tar.gz", names)
+
+    def test_verify_rejects_traversal_and_bad_names(self):
+        for bad in ["../evil", "/etc/passwd", "a" * 65, "x;rm -rf"]:
+            self.assertIn("error", self.kata.cmd_qcrows_verify([bad]))
+        self.assertIn("error", self.kata.cmd_qcrows_verify([]))
+        self.assertIn(
+            "error", self.kata.cmd_qcrows_inspect(["../evil"]),
+        )
+        self.assertIn(
+            "error", self.kata.cmd_qcrows_verify(["missing.qcrows"]),
+        )
+
+    def test_toml_parser_is_section_aware(self):
+        text = """[ kernel ]
+version = "6.6.32"
+included = true
+size_mb = 3
+
+[ rootfs ]
+type = "tar-gzip"
+size_mb = 42
+
+[ image.compatibility ]
+hypervisors = [ "qemu", "firecracker" ]
+"""
+        parsed = self.kata._qcrows_parse_toml(text)
+        self.assertEqual(parsed["kernel"]["version"], "6.6.32")
+        self.assertIs(parsed["kernel"]["included"], True)
+        self.assertEqual(parsed["kernel"]["size_mb"], 3)
+        self.assertEqual(parsed["rootfs"]["size_mb"], 42)
+        self.assertEqual(
+            parsed["image"]["compatibility"]["hypervisors"],
+            ["qemu", "firecracker"],
+        )
+
+    def test_kernel_magic_classification(self):
+        bz = bytearray(b"\x00" * 0x206)
+        bz[0x202:0x206] = b"HdrS"
+        ok, kind = self.kata._qcrows_kernel_magic_ok(bytes(bz))
+        self.assertTrue(ok)
+        self.assertEqual(kind, "bzimage")
+        ok, kind = self.kata._qcrows_kernel_magic_ok(b"\x7fELF" + b"\x00" * 8)
+        self.assertTrue(ok)
+        self.assertEqual(kind, "elf")
+        ok, kind = self.kata._qcrows_kernel_magic_ok(b"not a kernel")
+        self.assertFalse(ok)
 
 
 # ── v0.0.39 Monitoring module tests (Prometheus + Grafana) ──────────
@@ -1914,8 +2177,15 @@ class TestFirewallV047ManifestsAndMetainfo(unittest.TestCase):
         )
 
     def test_version_sync_all_surfaces_report_020(self):
-        # Every release surface must report v0.4.5 (production hardening).
-        v = "0.4.5"
+        # Every release surface must report the Makefile's VERSION —
+        # the single source of truth.  (v0.4.6: the hardcoded literal
+        # was replaced with the Makefile value so every future bump
+        # keeps this test green when the surfaces move together.)
+        import re as _re
+        makefile = (self.root / "Makefile").read_text()
+        m = _re.search(r"^VERSION\s*:=\s*(\S+)", makefile, _re.M)
+        self.assertIsNotNone(m, "Makefile VERSION not found")
+        v = m.group(1)
         files_to_check = [
             "Makefile",
             "bridge/__init__.py",

@@ -272,42 +272,80 @@ function renderQcrowsCard(qcrows) {
         return `
             <div class="suite-card">
                 <div class="suite-card-header">
-                    <h3 class="suite-card-title">QCrows Kernel Bundles (0)</h3>
+                    <h3 class="suite-card-title">QCrows VM Container Images (0)</h3>
                 </div>
                 <div class="suite-card-body">
                     <p class="suite-muted">
-                        No QCrows kernel bundles found at
+                        No QCrows images found at
                         <code>/usr/share/sysdeck/kata/qcrows/</code>.
                         This is the real empty state — not mock data.
                     </p>
                     <p class="suite-muted" style="margin-top:0.5rem;font-size:0.85rem">
-                        QCrows bundles are pre-built kata kernel + initrd +
-                        rootfs images. Build one with:
+                        QCrows (.qcrows, spec v0.2) is the self-describing
+                        VM container image format — rootfs + initrd + kernel
+                        + Cockpit menu metadata in one verifiable archive.
+                        Build one with:
                     </p>
-                    <pre class="suite-mono" style="margin-top:0.5rem;background:#1a1a1a;padding:8px;border-radius:4px;font-size:0.8rem">qcrows-export --kernel /path/to/vmlinuz --initrd /path/to/initrd \\
-  --rootfs /path/to/rootfs --name alpine-3.20-kata</pre>
+                    <pre class="suite-mono" style="margin-top:0.5rem;background:#1a1a1a;padding:8px;border-radius:4px;font-size:0.8rem">qcrows-pack --rootfs rootfs.tar.gz --kernel vmlinuz --kernel-config .config \\
+  --name alpine-3.20-kata -o alpine-3.20-kata.qcrows</pre>
+                    <p class="suite-muted" style="margin-top:0.5rem;font-size:0.85rem">
+                        ai-lsc can export the active tool stack directly as a
+                        .qcrows image (Container Stacks → Export → QCrows).
+                    </p>
                 </div>
             </div>
         `;
     }
     const totalSize = qcrows.reduce((sum, q) => sum + (q.size_bytes || 0), 0);
     const totalMb = (totalSize / (1024 * 1024)).toFixed(1);
-    const rows = qcrows.map((q) => `
-        <tr>
-            <td class="suite-table-mono">${escapeHtml(q.filename)}</td>
-            <td class="suite-muted">${q.size_mb} MB</td>
-            <td class="suite-table-mono suite-muted">${new Date(q.mtime * 1000).toISOString().split('T')[0]}</td>
-        </tr>
-    `).join('');
+    const rows = qcrows.map((q) => {
+        // Format-aware rows (spec v0.2 metadata); legacy non-QCrows
+        // tarballs degrade to the stat-only columns.
+        const isQcrows = q.qcrows === true;
+        const image = q.image || {};
+        const kernel = q.kernel || {};
+        const displayName = isQcrows
+            ? `${image.name || '?'} ${image.version || ''}`.trim()
+            : '(not a QCrows archive)';
+        const kernelCell = isQcrows
+            ? `${kernel.version || '?'} · ${kernel.format || '?'}${q.kernel_binary_present === false ? ' ⚠ missing' : ''}`
+            : '—';
+        const hyperCell = isQcrows && Array.isArray(q.hypervisors)
+            ? q.hypervisors.join(', ')
+            : '—';
+        return `
+            <tr>
+                <td>
+                    <div class="suite-table-mono">${escapeHtml(displayName)}</div>
+                    <div class="suite-muted" style="font-size:0.75rem">${escapeHtml(q.filename)}</div>
+                </td>
+                <td class="suite-muted">${q.size_mb} MB</td>
+                <td class="suite-table-mono suite-muted">${escapeHtml(kernelCell)}</td>
+                <td class="suite-table-mono suite-muted">${escapeHtml(image.arch || '—')}</td>
+                <td class="suite-table-mono suite-muted">${escapeHtml(hyperCell)}</td>
+                <td class="suite-table-mono suite-muted">${new Date(q.mtime * 1000).toISOString().split('T')[0]}</td>
+                <td>
+                    <button class="suite-btn suite-btn-ghost btn-qcrows-verify" data-filename="${escapeHtml(q.filename)}" ${isQcrows ? '' : 'disabled'}>Verify</button>
+                    <button class="suite-btn suite-btn-ghost btn-qcrows-inspect" data-filename="${escapeHtml(q.filename)}">Inspect</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
     return `
         <div class="suite-card">
             <div class="suite-card-header">
-                <h3 class="suite-card-title">QCrows Kernel Bundles (${qcrows.length}, ${totalMb} MB total)</h3>
+                <h3 class="suite-card-title">QCrows VM Container Images (${qcrows.length}, ${totalMb} MB total)</h3>
             </div>
             <table class="suite-table">
-                <thead><tr><th>Filename</th><th>Size</th><th>Modified</th></tr></thead>
+                <thead><tr><th>Image</th><th>Size</th><th>Kernel</th><th>Arch</th><th>Hypervisors</th><th>Modified</th><th>Actions</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            <p class="suite-muted" style="margin:0.5rem 1rem;font-size:0.8rem">
+                Verify runs the cockpit-kata master checks in memory (hashes,
+                kernel magic + config, metadata); Inspect shows the full
+                archive detail. Non-QCrows tarballs in the directory are
+                listed but not verifiable.
+            </p>
         </div>
     `;
 }
@@ -392,6 +430,46 @@ function wireEvents(panel, { bridge, EventBus }) {
     panel.querySelector('#btn-kata-metrics-close')?.addEventListener('click', () => {
         const card = panel.querySelector('#kata-metrics-card');
         if (card) card.style.display = 'none';
+    });
+
+    // QCrows image actions — Verify (in-memory master checks) and
+    // Inspect (full archive detail).  Output goes to the shared
+    // operation-output card; every bridge value is rendered as text.
+    panel.querySelectorAll('.btn-qcrows-verify').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const filename = btn.dataset.filename;
+            output(`Verifying ${filename}…`);
+            try {
+                const r = await bridge.kata.qcrowsVerify(filename);
+                if (r && r.error) {
+                    output(`Verify error: ${r.error}`, true);
+                    return;
+                }
+                const lines = r.checks.map((c) =>
+                    `  ${c.passed ? 'PASS' : 'FAIL'}: ${c.name} — ${c.detail}`,
+                );
+                const warns = (r.warnings || []).map((w) => `  WARN: ${w}`);
+                output([
+                    `${r.ok ? '✔ VERIFIED' : '✘ FAILED'} — ${filename} (${r.passed} passed, ${r.failed} failed)`,
+                    ...lines,
+                    ...warns,
+                ].join('\n'), !r.ok);
+            } catch (err) {
+                output(`Verify error: ${err.message || err}`, true);
+            }
+        });
+    });
+    panel.querySelectorAll('.btn-qcrows-inspect').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const filename = btn.dataset.filename;
+            output(`Inspecting ${filename}…`);
+            try {
+                const r = await bridge.kata.qcrowsInspect(filename);
+                output(JSON.stringify(r, null, 2), Boolean(r && r.error));
+            } catch (err) {
+                output(`Inspect error: ${err.message || err}`, true);
+            }
+        });
     });
 }
 

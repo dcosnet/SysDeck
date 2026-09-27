@@ -30,7 +30,7 @@
 # Distro support: Arch Linux, Debian/Ubuntu, Fedora/RHEL/CentOS.
 
 PACKAGE := sysdeck
-VERSION := 0.4.5
+VERSION := 0.4.6
 LIB_DIR := $(DESTDIR)/usr/lib/$(PACKAGE)
 PYTHON_DIR := $(LIB_DIR)/bridge
 SHARE_DIR := $(DESTDIR)/usr/share/$(PACKAGE)

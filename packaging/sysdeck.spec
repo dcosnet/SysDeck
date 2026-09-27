@@ -7,7 +7,7 @@
 #       Debian/Ubuntu users: see packaging/debian/
 
 Name:           sysdeck
-Version:        0.4.5
+Version:        0.4.6
 Release:        1%{?dist}
 Summary:        Unified operations surface for Linux infrastructure
 
@@ -92,6 +92,16 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sun Sep 27 2026 Jeremy Anderson <info@dcos.net> - 0.4.6-1
+- v0.4.6: QCrows format-aware Kata bridge. qcrows-list now parses
+  metadata.toml + menu.toml from .qcrows archives in memory (image
+  name/version/arch, kernel version/format, hypervisors, menu label);
+  new qcrows-inspect + qcrows-verify subcommands mirror cockpit-kata's
+  master checks (required files, kernel magic, config + Kata options,
+  full sha256sum hash walk) with nothing extracted to disk. Kata panel
+  shows the metadata and gains per-image Verify/Inspect actions.
+  integrity.score() degrades to None on PermissionError (root-only
+  lynis.log no longer crashes unprivileged sessions).
 * Thu Sep 17 2026 Jeremy Anderson <info@dcos.net> - 0.4.5-1
 - v0.4.5 production-hardening release: full MoE QA pass. Makefile
   web-dev splice fixed; reproducible dist + clean-tree release gate;

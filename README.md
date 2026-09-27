@@ -1,7 +1,7 @@
 # SysDeck
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.5-orange.svg)](#)
+[![Version](https://img.shields.io/badge/version-0.4.6-orange.svg)](#)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![Runtime](https://img.shields.io/badge/runtime-Bun-f9f1e0.svg)](https://bun.sh)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#)
@@ -10,7 +10,7 @@
 **A standalone Linux operations console — Unix-account login, real host state, no fabricated data. Cockpit is optional: the same module catalog loads there too.**
 
 Author: **Jeremy Anderson** · <info@dcos.net> · <https://dcos.net> · [github.com/dcosnet/SysDeck](https://github.com/dcosnet/SysDeck)
-Version: **0.4.5** · License: **MIT**
+Version: **0.4.6** · License: **MIT**
 
 ![SysDeck — the standalone console, Overview panel](docs/screenshots/overview.png)
 
